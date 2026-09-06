@@ -19,7 +19,9 @@ out = os.path.join(root, entry['out'])
 os.makedirs(os.path.dirname(out), exist_ok=True)
 raw_dir = os.path.join(root, 'textures/raw')
 os.makedirs(raw_dir, exist_ok=True)
-shutil.copy(src, os.path.join(raw_dir, name + '.png'))
+raw_copy = os.path.join(raw_dir, name + '.png')
+if os.path.abspath(src) != os.path.abspath(raw_copy):
+    shutil.copy(src, raw_copy)
 kind = entry.get('kind', 'tile')
 size = entry.get('size', 1024)
 
@@ -45,12 +47,25 @@ if kind == 'tile':
     img = make_seamless(img)
     img.save(out, quality=88, optimize=True)
 elif kind == 'sprite':
-    keyer = r'C:/Users/Charles/.codex/skills/.system/imagegen/scripts/remove_chroma_key.py'
-    tmp = os.path.join(raw_dir, name + '.keyed.png')
-    subprocess.run([sys.executable, keyer, '--input', src, '--out', tmp, '--auto-key', 'border',
-                    '--soft-matte', '--transparent-threshold', '12', '--opaque-threshold', '220',
-                    '--despill'], check=True)
-    img = Image.open(tmp).convert('RGBA')
+    raw = Image.open(src)
+    has_alpha = raw.mode in ('RGBA', 'LA')
+    transparent = 0
+    if has_alpha:
+        alpha = raw.getchannel('A')
+        transparent = sum(1 for v in alpha.get_flattened_data() if v == 0) / (raw.width * raw.height)
+    if has_alpha and transparent > 0.05:
+        # The generator already returned a cut-out with real alpha: use it, and firm up the soft
+        # halo so semi-transparent glow does not fringe the sprite in the scene.
+        img = raw.convert('RGBA')
+        alpha = img.getchannel('A').point(lambda v: int(255 * min(1.0, max(0.0, (v / 255 - 0.3) / 0.6))))
+        img.putalpha(alpha)
+    else:
+        keyer = r'C:/Users/Charles/.codex/skills/.system/imagegen/scripts/remove_chroma_key.py'
+        tmp = os.path.join(raw_dir, name + '.keyed.png')
+        subprocess.run([sys.executable, keyer, '--input', src, '--out', tmp, '--auto-key', 'border',
+                        '--soft-matte', '--transparent-threshold', '12', '--opaque-threshold', '220',
+                        '--despill'], check=True)
+        img = Image.open(tmp).convert('RGBA')
     bbox = img.getchannel('A').getbbox() or (0, 0, img.width, img.height)
     img = img.crop(bbox)
     side = max(img.size)
