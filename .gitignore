@@ -1,0 +1,5 @@
+tools/python/
+__pycache__/
+tools/*.log
+assets/RANGE.blend1
+node_modules/
