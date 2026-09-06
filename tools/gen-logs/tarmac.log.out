@@ -1,0 +1,13 @@
+codex-run: --spec or --prompt is required
+Usage:
+  codex-run.sh --dir <path> (--spec <file> | --prompt <text>)
+               [--sandbox read-only|workspace-write] [--effort low|medium|high]
+               [--timeout SECONDS] [--log <path>]
+
+Every run launches, under `timeout`, with stdin from /dev/null:
+  codex exec -C <dir> --skip-git-repo-check -s <sandbox>
+             -c model_reasoning_effort=<effort> --output-last-message <log>.final "<prompt>"
+and writes <log>.done with the exit code when it stops, so a caller polls for the marker
+instead of guessing from log stability.
+
+Exit codes: 0 done, 75 ChatGPT usage cap, 124 killed on the timeout, otherwise codex's own.

@@ -16,6 +16,7 @@ for e in d['textures-v2']:
     print(e['name'])
 EOF
 )
+names=$(printf '%s' "$names" | tr -d '\r')
 for name in $names; do
   prompt=$(python - "$ROOT" "$name" <<'EOF'
 import json,sys,os
@@ -25,6 +26,8 @@ e=[x for x in d['textures-v2'] if x['name']==name][0]
 print("Use your built-in image_gen tool to generate ONE image. Do not write any files yourself and do not call the CLI fallback. Prompt: "+e['prompt'].replace('\n',' ')+" After generating, print the absolute path of the saved PNG on its own line prefixed with 'SAVED: '.")
 EOF
 )
+  prompt=$(printf '%s' "$prompt" | tr -d '\r')
+  if [ -z "$prompt" ]; then echo "FAILED $name (no prompt)"; continue; fi
   log="$LOGDIR/$name.log"
   echo "=== $name $(date +%H:%M:%S)"
   bash "$RUN" --dir "$ROOT" --prompt "$prompt" --sandbox read-only --effort low --timeout 420 --log "$log" > "$log.out" 2>&1
