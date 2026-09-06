@@ -1,8 +1,0 @@
-exit=1
-status=usage-cap
-elapsed_seconds=8
-timeout=420
-dir=E:\claude-projects\range
-sandbox=read-only
-log=/e/claude-projects/range/tools/gen-logs/cloud_3.log
-final=/e/claude-projects/range/tools/gen-logs/cloud_3.log.final
