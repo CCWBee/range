@@ -82,9 +82,23 @@ why bank alone never becomes a pitch demand.
   at any speed. The old schedule let a taxi turn command 0.9 g, which lifted the inner main and
   rolled the aircraft past the attitude limit at both 5 and 20 m/s. Real nose wheel steering is
   limited with speed for exactly this reason.
+- **Azimuth is measured horizontally, not inside the tilted path frame.** Taking the sideways
+  error in the path frame divides it by the cosine of the flight path angle, so a descent inflates
+  a small cursor offset, the bank follows it, the aircraft descends faster and the same loop
+  tightens. An 8 degree offset spiralled into the ground from 400 m. Elevation is still the path
+  frame's, which is what the flight-path marker shows.
+- **The rolling law is reserved for large angle-off** (the blend runs from 29 to 52 degrees of
+  azimuth, not 14 to 26). The cursor circle only reaches about 20 degrees, so the whole of it now
+  belongs to the bank-to-turn law, which respects the bank ceiling and holds height. Before, most
+  of the cursor's range handed the demand to the law that rolls to put the target above the nose,
+  which is a 90 degree bank whatever the speed.
 - **A bank ceiling in the instructor.** The large-angle law rolled to put the target above the
   nose whatever the speed, so at 60 m/s it asked for 90 degrees of bank the wing could not hold.
-  The roll demand now fades once the bank is past what the current dynamic pressure supports.
+  The roll demand now fades once the bank is past what the current dynamic pressure supports, and
+  the ceiling is computed from the lift available at the instructor's own alpha cap of 0.30 rather
+  than at CLmax, because it will never pull past that cap to hold the turn. The fade applies to the
+  rolling term alone: fading the sum would also kill the term that rolls back out, leaving the
+  aircraft stuck at whatever bank it overshot to.
 - **Nose-lowering after touchdown.** Not in the spec: with the mains down and the nose wheel still
   off, the ground law commands a small nose-down rate so the nose wheel is placed rather than
   dropped.
@@ -102,7 +116,9 @@ why bank alone never becomes a pitch demand.
 | braking run from 60 m/s | 574 m |
 | landing, 3° approach at 82 m/s with the flare | touchdown 1.61 m/s at 64.6 m/s, roll-out 641 m |
 | full rudder taxi turn, 5 and 20 m/s | 3.5° of bank, no wheel lifts |
-| hard turn at 62 m/s, aim 20° off | 379 m traded for speed, alpha peaks 0.272, recovers to 143 m/s |
+| hard turn at 62 m/s, aim 20° off | 369 m traded for speed, alpha peaks 0.167, recovers to 153 m/s |
+| sustained level turn on the cursor, 60 s | 48° of bank at 95, 150 and 220 m/s, height held within 10 m |
+| full sortie flown headless under the instructor | take off, climb, run in, four bombs away, egress, circuit joined |
 
 ## Shared numbers (must match the Blender copy to 1e−6)
 

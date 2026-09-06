@@ -83,8 +83,19 @@ export class Instructor {
       t.normalize();
     }
     const tx = t.dot(frame.x), ty = t.dot(frame.y), tz = t.dot(frame.z);
-    const ex = Math.atan2(tx, -tz);
+    // Azimuth is measured horizontally, between where the aircraft is going and where the cursor
+    // points, and elevation as the difference of the two path angles. Taking both inside the
+    // tilted path frame instead divides the azimuth by the cosine of the descent angle, so a
+    // steepening dive inflates a small sideways error, the bank follows it, the aircraft descends
+    // faster and the loop closes on itself: a spiral out of an 8 degree cursor offset.
+    let ex = Math.atan2(tx, -tz);
     const ey = Math.atan2(ty, -tz);
+    const pathH = Math.hypot(frame.vhat.x, frame.vhat.z), aimH = Math.hypot(t.x, t.z);
+    if (pathH > 0.15 && aimH > 0.15) {
+      // Both directions have a usable heading, so use the honest horizontal angle between them.
+      const d = Math.atan2(t.x, -t.z) - Math.atan2(frame.vhat.x, -frame.vhat.z);
+      ex = Math.atan2(Math.sin(d), Math.cos(d));
+    }
     const theta = Math.acos(clamp(frame.vhat.dot(t), -1, 1));
     const bx = t.dot(right), by = t.dot(up);
     const phi = Math.atan2(-right.y, up.y);
@@ -107,7 +118,9 @@ export class Instructor {
     const latched = this.stallLatched;
 
     // Small-angle law: bank to turn, pitch to the elevation error, hold the path in the turn.
-    const nAvail = 1.14 * flight.qbar * WING_AREA / (flight.mass * G0);
+    // The bank ceiling is set by the lift available at the instructor's own alpha cap of 0.30, not
+    // at CLmax, because the instructor will never pull past that cap to hold the turn.
+    const nAvail = (0.05 + 3.4 * 0.30) * flight.qbar * WING_AREA / (flight.mass * G0);
     const phiMax = Math.max(0.35, 0.9 * Math.acos(clamp(1 / Math.max(nAvail, 1e-6), 0, 1)));
     let phiDes = theta < 0.02 || latched ? 0 : clamp(6 * ex, -phiMax, phiMax);
     const pSmall = 4 * (phiDes - phi);
@@ -116,16 +129,26 @@ export class Instructor {
     const dphi = Math.atan2(bx, by);
     const pLarge = 5 * dphi;
     const qLarge = 1.0 * theta * Math.max(0, Math.cos(dphi)) * clamp((0.30 - alpha) / 0.08, 0, 1);
-    let w = smoothstep(theta, 0.25, 0.45);
+    // Roll answers azimuth, pitch answers elevation, so the blend is on the sideways error alone.
+    // Blending on the total angle instead couples them: an aircraft descending with the cursor on
+    // the horizon sees a large total angle, hands the demand to the rolling law, banks past 80
+    // degrees and descends faster, which tightens the same loop. That is the aircraft falling out
+    // of the sky from an 8 degree cursor offset.
+    // The cursor circle only reaches about 20 degrees off the path, so the whole of it belongs to
+    // the bank-to-turn law, which respects the bank ceiling and holds height. The rolling law is
+    // for genuinely large angle-off, past 29 degrees, which the cursor reaches only through the
+    // keys or after a roll.
+    let w = smoothstep(Math.abs(ex), 0.5, 0.9);
     const pushCone = ey < 0 && Math.abs(ex) < 0.3;
     if (ey < 0) w *= smoothstep(Math.abs(ex), 0.25, 0.4); // push, never roll inverted
-    let pDem = clamp((1 - w) * pSmall + w * pLarge, -3.5, 3.5);
-    // Bank ceiling. The small-angle law respects phiMax through phiDes, but the large-angle law
-    // rolls to put the target above the nose whatever the speed, which at 60 m/s asks for 90
-    // degrees of bank the wing cannot hold and the aircraft mushes down. Fade the roll demand out
-    // once the bank is past what this speed supports, in the direction that would deepen it.
+    // Bank ceiling on the rolling law only. It rolls to put the target above the nose whatever the
+    // speed, which at 60 m/s asks for 90 degrees of bank the wing cannot hold. The bank-to-turn law
+    // is left alone: its demand is already bounded by phiDes and it is the term that rolls back
+    // out, so fading the sum would leave the aircraft stuck at whatever bank it overshot to.
     const overBank = Math.abs(phi) - phiMax;
-    if (overBank > 0 && Math.sign(pDem) === Math.sign(phi)) pDem *= Math.max(0, 1 - overBank / 0.35);
+    let pLargeLimited = pLarge;
+    if (overBank > 0 && Math.sign(pLarge) === Math.sign(phi)) pLargeLimited *= Math.max(0, 1 - overBank / 0.35);
+    let pDem = clamp((1 - w) * pSmall + w * pLargeLimited, -3.5, 3.5);
     let qDem = (1 - w) * qSmall + w * qLarge;
 
     // Keyboard on top, before the guard and the caps so they still win.

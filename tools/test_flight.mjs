@@ -349,6 +349,33 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   pass('hard turn at the stall', { maxBank: round(maxBank, 1), maxAlpha: round(maxAlpha, 3), heightLost: round(lost, 0), speed: round(f.velocity.length(), 1) });
 }
 
+{
+  // A sustained level turn on the cursor must hold its height. This is the behaviour that felt
+  // wrong: measuring the sideways error inside the tilted path frame inflated it as the aircraft
+  // descended, which deepened the bank, which steepened the descent.
+  const report = [];
+  for (const [V, gear] of [[95, true], [150, false], [220, false]]) {
+    const f = airborne({ V, gear, y: 400, throttle: 0.55 });
+    f.bombs = 0; f.mass = 14200;
+    const instructor = new Instructor();
+    const y0 = f.position.y;
+    let maxBank = 0, minY = Infinity;
+    for (let t = 0; t < 60; t += dt) {
+      const h = new THREE.Vector3(f.velocity.x, 0, f.velocity.z).normalize();
+      const direction = h.applyAxisAngle(new THREE.Vector3(0, 1, 0), -8 / DEG);
+      const cmd = instructor.update(dt, f, { direction, active: true },
+        { throttle: f.ias > V + 4 ? -1 : f.ias < V - 4 ? 1 : 0 });
+      f.step(dt, cmd);
+      maxBank = Math.max(maxBank, Math.abs(bank(f)));
+      minY = Math.min(minY, f.position.y);
+    }
+    assert(!f.crashed && Math.abs(f.position.y - y0) < 60 && y0 - minY < 60 && maxBank < 60,
+      `level turn at ${V}: bank ${maxBank} height ${y0} to ${f.position.y} low ${minY} ${f.crashReason}`);
+    report.push({ speed: V, maxBank: round(maxBank, 1), heightChange: round(f.position.y - y0, 0), lowest: round(minY, 0) });
+  }
+  pass('level turn holds height', report);
+}
+
 // --- 14. Shared numbers: terrain, pavement, noise range ------------------------------------
 {
   const samples = [[0, 0], [-1000, -4200], [900, -3000], [3000, -4000], [5500, -4000]].map(([x, z]) => [x, z, +terrainHeight(x, z).toFixed(6)]);
