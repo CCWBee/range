@@ -58,7 +58,10 @@ no pill labels, no decorative dots, no emoji icons.
 - A Cycles bake through the MCP socket blocks Blender's UI thread and the socket times out with
   no error. Model and screenshot through MCP, bake in `blender.exe -b`.
 - The exporter must read UVs per loop, not per vertex, or the baked atlas maps to nonsense.
-- The Claude-in-Chrome automation tab blocks `file://` and force-darkens pages; use the headless
-  tool for images and the Brave tab only for frame timings.
+- The Claude-in-Chrome automation tab blocks `file://` (serve over HTTP instead) and force-darkens
+  pages, so use the headless tool for images. It also freezes `requestAnimationFrame`, so
+  `metrics()` returns `fps: null` there and no rAF-based timing is trustworthy: measure with
+  `window.range.benchmark()`, which renders synchronously, and `stress(true)` before it for the
+  headroom number.
 - `frame-timings.json` at 6.94 ms every stage is the 144 Hz vsync interval, not GPU load. The
   headroom number is the stressed one (pixel ratio 2).
