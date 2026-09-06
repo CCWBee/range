@@ -23,7 +23,8 @@ Launch P and B in parallel (script in the session scratchpad,
 committed, launch R, then build-review-fix with `node tools/test_flight.mjs` as the check, then
 the visual gate. Resume handles (fill in as they appear):
 
-- streams P + B: scriptPath `<pending>`, runId `<pending>`
+- streams P + B: running since 14:20 on 6 Sep; runId `wf_40b62b60-2ef`; scriptPath as launched is the session scratchpad copy of `tools/workflows/range-streams-pb.workflow.js` (same content; resume with the repo copy and `resumeFromRunId: "wf_40b62b60-2ef"`)
+- textures: background loop started 14:20 (waits for the 14:23 cap reset, then `tools/gen_textures.sh`); outputs land in `textures/`, raw in `textures/raw/`
 - stream R: `<pending>`
 - build-review-fix: `<pending>`
 
