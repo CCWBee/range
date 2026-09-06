@@ -33,5 +33,77 @@
       "file": "textures/sky.png",
       "prompt": "Use case: stylized-concept\nAsset type: 2:1 equirectangular 360-degree sky panorama environment texture for the realistic 3D flight game RANGE.\nPrimary request: only sky. Realistic low North Sea stratocumulus cloud ceiling at cold dusk after rain, broad natural cloud masses with soft layered structure, physically credible diffuse illumination. Muted blue-grey with a narrow pale warm band along the horizon. Quiet, lonely, subdued atmosphere matching a wet North Sea airbase at dusk.\nProjection: true 360-degree longitude by 180-degree latitude equirectangular environment map, exactly 2:1 landscape aspect ratio. Horizon at precisely the vertical midpoint. Horizontally seamless longitude wrapping, left and right image edges must meet naturally. Cloud structure entirely in the upper hemisphere, shown with correct equirectangular projection stretching near zenith. Lower hemisphere uniform desaturated grey-blue suitable for atmospheric reflection, with a smooth subtle transition below the horizon.\nLighting: restrained physically plausible photographic sky illumination, cool grey cloud base, delicate warm distant horizon, no sun disc, no intense bright spot, no dramatic shafts or streaks. Broad natural stratocumulus forms, no brushstroke texture.\nConstraints: no land, sea, water, ground, buildings, aircraft, people, objects, stars, text, graphics, logos, borders, watermark or visible sun. No procedural-looking streaks, no sci-fi, no cartoon. Only an equirectangular sky texture."
     }
+  ],
+  "textures-v2": [
+    {
+      "name": "moor",
+      "kind": "tile",
+      "size": 1024,
+      "out": "textures/moor.jpg",
+      "prompt": "Use case: game material texture. Primary request: wet heather moorland ground on a North Sea coast after rain, seen straight down: mixed rough grass tussocks in muted olive and straw tones, patches of dark heather in brown and dull purple, small areas of dark peaty soil and pale dead grass, occasional small grey stones, all in cool dusk-neutral light. Technical composition: flat orthographic straight-down view of the surface filling every pixel, no perspective, no horizon. Opposite image edges match seamlessly horizontally and vertically for endless tiling. Even flat diffuse albedo illumination, no cast shadows, no baked directional light, no highlights, no reflections. Square 1:1 material texture only. Constraints: no objects, no text, no logo, no watermark, no border."
+    },
+    {
+      "name": "tarmac",
+      "kind": "tile",
+      "size": 1024,
+      "out": "textures/tarmac.jpg",
+      "prompt": "Use case: game material texture. Primary request: dark grey asphalt taxiway surface at a military airbase, damp after rain, seen straight down: fine aggregate grain, faint tyre-polished streaks, a few tiny cracks, subtle darker damp patches, no painted markings. Technical composition: flat orthographic straight-down view of the surface filling every pixel, no perspective, no horizon. Opposite image edges match seamlessly horizontally and vertically for endless tiling. Even flat diffuse albedo illumination, no cast shadows, no baked directional light, no highlights, no reflections. Square 1:1 material texture only. Constraints: no objects, no text, no logo, no watermark, no border."
+    },
+    {
+      "name": "corrugated",
+      "kind": "tile",
+      "size": 1024,
+      "out": "textures/corrugated.jpg",
+      "prompt": "Use case: game material texture. Primary request: weathered corrugated steel wall panel of an old military hangar, vertical corrugations, faded grey-green paint, thin rust streaks running down from horizontal rows of fasteners, some chalky paint wear, flat orthographic front view. Technical composition: flat orthographic straight-down view of the surface filling every pixel, no perspective, no horizon. Opposite image edges match seamlessly horizontally and vertically for endless tiling. Even flat diffuse albedo illumination, no cast shadows, no baked directional light, no highlights, no reflections. Square 1:1 material texture only. Constraints: no objects, no text, no logo, no watermark, no border."
+    },
+    {
+      "name": "grime",
+      "kind": "tile",
+      "size": 1024,
+      "out": "textures/grime.jpg",
+      "prompt": "Use case: game material mask texture. Primary request: greyscale grime and weathering mask: a mostly white field with soft grey vertical water streaks, dark soot smudges, dust accumulation patches and faint drip marks, like dirt on painted metal seen straight on. Pure greyscale, no colour. Technical composition: flat orthographic straight-down view of the surface filling every pixel, no perspective, no horizon. Opposite image edges match seamlessly horizontally and vertically for endless tiling. Even flat diffuse albedo illumination, no cast shadows, no baked directional light, no highlights, no reflections. Square 1:1 material texture only. Constraints: no objects, no text, no logo, no watermark, no border."
+    },
+    {
+      "name": "grass_tuft",
+      "kind": "sprite",
+      "size": 512,
+      "out": "textures/grass_tuft.png",
+      "prompt": "Use case: game sprite cut-out. Primary request: one single clump of rough wet coastal grass, blades in muted olive green and pale straw, slightly wind-bent, about as wide as it is tall. Composition: the subject centred and filling most of the frame, seen from the side at ground level, resting on the bottom edge, on a completely flat, uniform, pure magenta #ff00ff chroma-key background that fills every other pixel. No ground plane, no shadow on the ground, no sky, no other objects, no text, no watermark. Even soft diffuse dusk light, muted colours, photographic realism."
+    },
+    {
+      "name": "gorse",
+      "kind": "sprite",
+      "size": 512,
+      "out": "textures/gorse.png",
+      "prompt": "Use case: game sprite cut-out. Primary request: one low, dense gorse bush with dark green spiny foliage and a scattering of small yellow flowers, wider than it is tall, weather-beaten. Composition: the subject centred and filling most of the frame, seen from the side at ground level, resting on the bottom edge, on a completely flat, uniform, pure magenta #ff00ff chroma-key background that fills every other pixel. No ground plane, no shadow on the ground, no sky, no other objects, no text, no watermark. Even soft diffuse dusk light, muted colours, photographic realism."
+    },
+    {
+      "name": "tree_card",
+      "kind": "sprite",
+      "size": 512,
+      "out": "textures/tree_card.png",
+      "prompt": "Use case: game sprite cut-out. Primary request: a short dense row of wind-bent dark conifers, Scots pine and sitka spruce, forming a shelter belt, wide and low, dark green and grey-green, in dim cool dusk light. Composition: the subject centred and filling most of the frame, seen from the side at ground level, resting on the bottom edge, on a completely flat, uniform, pure magenta #ff00ff chroma-key background that fills every other pixel. No ground plane, no shadow on the ground, no sky, no other objects, no text, no watermark. Even soft diffuse dusk light, muted colours, photographic realism."
+    },
+    {
+      "name": "cloud_1",
+      "kind": "cloud",
+      "size": 512,
+      "out": "textures/cloud_1.png",
+      "prompt": "Use case: game particle sprite. Primary request: a single soft, ragged stratocumulus cloud puff, cool blue-grey with slightly paler upper edges, lit by dim diffuse overcast dusk light, centred on a completely black background that fills every other pixel. Wispy edges fading smoothly to black, no hard outline, no horizon, no ground, no other objects, no text, no watermark. Photographic realism, muted colours."
+    },
+    {
+      "name": "cloud_2",
+      "kind": "cloud",
+      "size": 512,
+      "out": "textures/cloud_2.png",
+      "prompt": "Use case: game particle sprite. Primary request: a single wide, flat-based stratocumulus cloud fragment with a lumpy top, cool grey with a faint warm tint on one side, dim diffuse overcast dusk light, centred on a completely black background that fills every other pixel. Soft edges fading smoothly to black, no hard outline, no horizon, no ground, no other objects, no text, no watermark. Photographic realism, muted colours."
+    },
+    {
+      "name": "cloud_3",
+      "kind": "cloud",
+      "size": 512,
+      "out": "textures/cloud_3.png",
+      "prompt": "Use case: game particle sprite. Primary request: a single tall, torn cloud wisp, thin and translucent, cool blue-grey, dim diffuse overcast dusk light, centred on a completely black background that fills every other pixel. Very soft edges fading smoothly to black, no hard outline, no horizon, no ground, no other objects, no text, no watermark. Photographic realism, muted colours."
+    }
   ]
 }
