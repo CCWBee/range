@@ -9,26 +9,24 @@ aircraft with separate moving parts, grounded scene with clutter and lights, mod
 
 ## Open threads
 
-- Spec review done (workflow `wf_1d71b4a6-5bd`; its 65 verifier agents died on the session usage
-  limit, so the 76 lens findings were judged by the session and folded into the spec by hand;
-  commit "Spec revision after the four-lens review").
-- Texture generation through Codex (`tools/gen_textures.sh`): first attempt at 10:36 hit the
-  Codex usage cap (reset 14:23 on 6 Sep) and a CRLF bug in the script, both fixed; rerun it.
-- Streams P (physics, control, tests) and B (Blender) launching next. R (renderer) follows them.
+- Stream P is done and committed (`ae20d2f`): rigid-body model, fly-by-wire, wheel contacts,
+  mouse-aim instructor, 20 assertions passing. Interface and measured numbers in
+  `docs/notes/stream-p.md`.
+- Stream B (Blender: run the rewritten model script, unwrap, bake the jet atlases, write the v2
+  exporter) is running as a background agent. The scenery library of spec 4.3 is NOT in it and
+  needs a second pass after it lands.
+- Stream R (renderer) is running as a background agent in parallel, coding to the spec 4.1 and 4.2
+  contract with a loader that also reads the old v1 library.
+- The old Codex workspace folder is now a mirror, refreshed with `python tools/sync_codex.py`, with
+  `CODEX-NOTE.md` there explaining the move and what changed. Re-run the sync after each milestone.
 
 ## Next action
 
-Launch P and B in parallel (script in the session scratchpad,
-`range-streams-pb.workflow.js`) with the texture loop in the background; when both streams have
-committed, launch R, then build-review-fix with `node tools/test_flight.mjs` as the check, then
-the visual gate. Resume handles (fill in as they appear):
+When B and R land: run the scenery pass (spec 4.3), then build-review-fix over the integrated tree
+with `node tools/test_flight.mjs && python tools/build.py` as the check, then the visual gate
+against the five concept frames, then measure fps in Brave with `window.range.metrics()` and
+`window.range.stress(true)`. Resume handles:
 
-- streams P + B: running since 14:20 on 6 Sep; runId `wf_40b62b60-2ef`; scriptPath as launched is the session scratchpad copy of `tools/workflows/range-streams-pb.workflow.js` (same content; resume with the repo copy and `resumeFromRunId: "wf_40b62b60-2ef"`)
-- textures: background loop started 14:20 (waits for the 14:23 cap reset, then `tools/gen_textures.sh`); outputs land in `textures/`, raw in `textures/raw/`
-- stream R: `<pending>`
-- build-review-fix: `<pending>`
-
-## Gotchas
-
-See `CLAUDE.md`. Blender is live on 127.0.0.1:9876 with `assets/RANGE.blend` open from the new
-path (re-pointed with `save_as_mainfile` on 6 September).
+- streams P + B first attempt: runId `wf_40b62b60-2ef` (all eight agents died on the Fable monthly
+  spend limit; the session model is now Opus 5 and subagents run on opus). Do not resume it, the
+  work has moved on; the scripts are in `tools/workflows/` for reference.
