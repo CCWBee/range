@@ -120,6 +120,12 @@ export class Instructor {
     const pushCone = ey < 0 && Math.abs(ex) < 0.3;
     if (ey < 0) w *= smoothstep(Math.abs(ex), 0.25, 0.4); // push, never roll inverted
     let pDem = clamp((1 - w) * pSmall + w * pLarge, -3.5, 3.5);
+    // Bank ceiling. The small-angle law respects phiMax through phiDes, but the large-angle law
+    // rolls to put the target above the nose whatever the speed, which at 60 m/s asks for 90
+    // degrees of bank the wing cannot hold and the aircraft mushes down. Fade the roll demand out
+    // once the bank is past what this speed supports, in the direction that would deepen it.
+    const overBank = Math.abs(phi) - phiMax;
+    if (overBank > 0 && Math.sign(pDem) === Math.sign(phi)) pDem *= Math.max(0, 1 - overBank / 0.35);
     let qDem = (1 - w) * qSmall + w * qLarge;
 
     // Keyboard on top, before the guard and the caps so they still win.

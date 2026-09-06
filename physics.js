@@ -132,7 +132,11 @@ export function pMax(V, bombs, gearPosition) {
 // ---------------------------------------------------------------------------------------------
 
 // Wheel contact points in body coordinates: nose, left main, right main (spec 2.6).
-const LEG_POINTS = [V3(0, -1.83, -4.35), V3(-1.15, -1.87, 1.2), V3(1.15, -1.87, 1.2)];
+// Main wheel track 3.87 m, the real aircraft's. A narrower track tips the aircraft over on tyre
+// side force alone: the roll moment acts 1.87 m above the contact, so a half-track of 1.15 m
+// tipped at 0.61 g lateral, below what the tyres saturate at, and full rudder on the taxiway
+// rolled it past the attitude limit. At 1.935 m it tips at 1.03 g, above tyre saturation.
+const LEG_POINTS = [V3(0, -1.83, -4.35), V3(-1.935, -1.87, 1.2), V3(1.935, -1.87, 1.2)];
 const LEG_K = [160000, 260000, 260000];
 const LEG_SHARE = [0.216, 0.392, 0.392];
 const TRAVEL = 0.35;
@@ -265,7 +269,12 @@ export class Flight {
     const aileronTarget = clamp(0.8 * (rollIn * pMax(speed, this.bombs, gp) - p) / qn, -0.35, 0.35);
     this.aileron += clamp(aileronTarget - this.aileron, -5 * dt, 5 * dt);
     this.rudderAngle = clamp(-yawIn * 0.52 * clamp(1 - speed / 250, 0.15, 1) - 1.5 * beta + 0.15 * r, -0.52, 0.52);
-    const steering = yawIn * clamp(0.6 * (1 - speed / 40), 0.05, 0.6);
+    // Nose wheel steering authority falls with the square of speed, so that full deflection asks
+    // for about a third of a g of lateral acceleration whatever the speed. A gentler schedule lets
+    // a taxi turn command 0.9 g, which lifts the inner main wheel and rolls the aircraft over: the
+    // roll moment acts 1.87 m above the contact and its restoring arm shrinks as the bank grows.
+    // The real aircraft limits steering angle with speed for the same reason.
+    const steering = yawIn * clamp(19 / (Math.max(speed, 5.6) ** 2), 0.02, 0.6);
     const de = this.elevon, da = this.aileron, dr = this.rudderAngle;
 
     // Aerodynamic coefficients (spec 2.4).

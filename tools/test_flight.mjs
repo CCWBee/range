@@ -317,6 +317,38 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   pass('instructor manual', { headingChange: round(change, 1), bank: round(bank(f), 1), regime: ins.state.regime });
 }
 
+// --- 13b. Ground handling: a full rudder taxi turn must not roll the aircraft over ----------
+{
+  const report = [];
+  for (const V of [5, 20]) {
+    const f = new Flight();
+    f.velocity.set(0, 0, -V);
+    let maxBank = 0;
+    for (let t = 0; t < 8; t += dt) {
+      f.step(dt, { yaw: 1, throttle: 0.15 });
+      maxBank = Math.max(maxBank, Math.abs(bank(f)));
+      if (f.crashed) break;
+    }
+    // Off the pavement at speed the aircraft is allowed to crash on 'terrain'; what it must never
+    // do is lift a main wheel and roll over on tyre side force alone.
+    assert(maxBank < 10 && f.crashReason !== 'attitude', `taxi ${V} m/s: bank ${maxBank} ${f.crashReason}`);
+    report.push({ speed: V, maxBank: round(maxBank, 2), steering: round(f.surfaces.steering, 3) });
+  }
+  pass('taxi turn', report);
+}
+{
+  // Turning hard at the stall: the instructor must trade height for speed and recover, never
+  // hold a bank the wing cannot support until the aircraft mushes into the ground.
+  const f = airborne({ V: 62, throttle: 1 });
+  let maxBank = 0, maxAlpha = 0;
+  const y0 = f.position.y;
+  fly(f, 10, aimAt(20, 0), {}, f => { maxBank = Math.max(maxBank, Math.abs(bank(f))); maxAlpha = Math.max(maxAlpha, f.alpha); });
+  const lost = y0 - f.position.y;
+  assert(!f.crashed && maxAlpha <= 0.32 && lost < 400 && f.ias > f.stallSpeed,
+    `low speed turn: bank ${maxBank} alpha ${maxAlpha} lost ${lost} ias ${f.ias} ${f.crashReason}`);
+  pass('hard turn at the stall', { maxBank: round(maxBank, 1), maxAlpha: round(maxAlpha, 3), heightLost: round(lost, 0), speed: round(f.velocity.length(), 1) });
+}
+
 // --- 14. Shared numbers: terrain, pavement, noise range ------------------------------------
 {
   const samples = [[0, 0], [-1000, -4200], [900, -3000], [3000, -4000], [5500, -4000]].map(([x, z]) => [x, z, +terrainHeight(x, z).toFixed(6)]);

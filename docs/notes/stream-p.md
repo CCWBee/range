@@ -73,6 +73,18 @@ why bank alone never becomes a pitch demand.
   above the horizontal. That commands a climbing path: the aircraft ballooned from 8 m back up to
   15 m, ran out of speed and fell out. Holding the path level lets the speed decay onto the runway,
   which is what a flare is. The test now does that and touches down at 1.6 m/s.
+- **Main wheel track widened to the real 3.87 m** (mains at x = ±1.935, not ±1.15 as spec 2.6
+  said). At the narrower track the aircraft tipped at 0.61 g of lateral acceleration, below what
+  the tyres saturate at, so it rolled over on the taxiway. Stream B must place the main gear
+  meshes to match.
+- **Nose wheel steering authority now falls with the square of speed**, `clamp(19/V², 0.02, 0.6)`
+  rather than `clamp(0.6(1 − V/40), 0.05, 0.6)`, so full deflection asks for about a third of a g
+  at any speed. The old schedule let a taxi turn command 0.9 g, which lifted the inner main and
+  rolled the aircraft past the attitude limit at both 5 and 20 m/s. Real nose wheel steering is
+  limited with speed for exactly this reason.
+- **A bank ceiling in the instructor.** The large-angle law rolled to put the target above the
+  nose whatever the speed, so at 60 m/s it asked for 90 degrees of bank the wing could not hold.
+  The roll demand now fades once the bank is past what the current dynamic pressure supports.
 - **Nose-lowering after touchdown.** Not in the spec: with the mains down and the nose wheel still
   off, the ground law commands a small nose-down rate so the nose wheel is placed rather than
   dropped.
@@ -89,6 +101,8 @@ why bank alone never becomes a pitch demand.
 | parked settle | pitch −0.33°, creep 7 mm over 30 s |
 | braking run from 60 m/s | 574 m |
 | landing, 3° approach at 82 m/s with the flare | touchdown 1.61 m/s at 64.6 m/s, roll-out 641 m |
+| full rudder taxi turn, 5 and 20 m/s | 3.5° of bank, no wheel lifts |
+| hard turn at 62 m/s, aim 20° off | 379 m traded for speed, alpha peaks 0.272, recovers to 143 m/s |
 
 ## Shared numbers (must match the Blender copy to 1e−6)
 
