@@ -4,15 +4,125 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RANGE</title><meta name="description" content="One Typhoon, a wet coastal airbase and the last light of the day. A self-contained flight demo.">
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#141b20;color:#eceded;font-family:Arial,Helvetica,sans-serif}canvas{display:block;width:100%;height:100%}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:2px solid #d7e5ed;outline-offset:5px}#veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(9,17,22,.6),transparent 58%)}#intro{position:absolute;top:12%;left:6%;width:min(380px,85vw)}h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0 0 24px;line-height:1}#intro p{font-size:16px;line-height:1.65;color:#c1cbd0;max-width:310px}#start{display:block;margin-top:30px;border:1px solid #9eabb2;background:rgba(22,32,40,.7);padding:14px 24px;letter-spacing:.13em;font-size:14px}#start:hover{background:#62727c}#intro small{display:block;margin-top:22px;font-size:12px;line-height:1.8;color:#a7b5bd}.hidden{display:none!important}#hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 1px 3px #0008;font-variant-numeric:tabular-nums}#brand{position:absolute;top:28px;left:34px;font-size:18px;letter-spacing:.3em}#location{position:absolute;top:32px;right:32px;font-size:12px;letter-spacing:.13em;color:#c7d1d6}#telemetry{position:absolute;bottom:34px;left:34px;display:flex;gap:32px}#telemetry div{min-width:70px}#telemetry label{display:block;font-size:11px;letter-spacing:.18em;margin-bottom:8px;color:#adbdc7}#telemetry b{font-size:26px;font-weight:400}#telemetry span{font-size:11px;margin-left:5px;color:#bdc7ce}#systems{position:absolute;bottom:36px;right:34px;font-size:12px;line-height:1.9;text-align:right;letter-spacing:.05em}#hint{position:absolute;bottom:117px;left:34px;font-size:14px;color:#e3ddd0;max-width:620px;line-height:1.6}#aim{position:absolute;left:50%;top:44%;width:18px;height:18px;transform:translate(-50%,-50%);border:1px solid #d9e6e680;border-radius:50%;opacity:.7}#aim:after{content:'';position:absolute;width:2px;height:2px;background:#e9eeee;left:7px;top:7px}#bombAim{position:absolute;width:22px;height:22px;border:1px solid #efc487;transform:translate(-50%,-50%) rotate(45deg);display:none}#objective{position:absolute;top:77px;left:34px;font-size:12px;letter-spacing:.06em;color:#c7d1d6}#help{position:absolute;top:80px;right:30px;width:300px;padding:22px;background:#101b24ed;font-size:14px;line-height:1.8}#help p{margin:0 0 14px;color:#aebdc6}#help dl{display:grid;grid-template-columns:120px 1fr;margin:0;gap:6px}#help dd{margin:0}#help dt{color:#f1d4a6}#buttons{position:absolute;top:60px;right:32px;display:flex;gap:14px}#buttons button{border:0;background:transparent;font-size:12px;padding:6px;color:#c4cfd6}#status{position:absolute;top:29%;left:50%;transform:translateX(-50%);text-align:center;font-size:28px;letter-spacing:.08em;line-height:1.6;pointer-events:none}#status small{display:block;font-size:14px;letter-spacing:.02em}#loading{position:absolute;bottom:30px;left:6%;font-size:14px}#error{position:absolute;inset:20%;background:#18232b;padding:30px;line-height:1.6}#fps{color:#b7c5c8}@media(max-width:700px){#telemetry{gap:12px;left:18px;bottom:22px}#telemetry b{font-size:21px}#telemetry div{min-width:52px}#systems{right:18px;bottom:22px;font-size:10px}#brand,#objective{left:18px}#hint{left:18px;bottom:100px;width:80%;font-size:12px}#location{font-size:10px;right:18px}#help{right:18px}#buttons{right:18px}}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#141b20;color:#eceded;font-family:Arial,Helvetica,sans-serif}
+canvas{display:block;width:100%;height:100%;cursor:none}
+canvas.unlocked{cursor:crosshair}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #d7e5ed;outline-offset:5px}
+.hidden{display:none!important}
+#veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(9,17,22,.6),transparent 58%)}
+#intro{position:absolute;top:12%;left:6%;width:min(380px,85vw)}
+h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0 0 24px;line-height:1}
+#intro p{font-size:16px;line-height:1.65;color:#c1cbd0;max-width:310px}
+#start{display:block;margin-top:30px;border:1px solid #9eabb2;background:rgba(22,32,40,.7);padding:14px 24px;letter-spacing:.13em;font-size:14px}
+#start:hover{background:#62727c}
+#intro small{display:block;margin-top:22px;font-size:12px;line-height:1.8;color:#a7b5bd}
+#hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 1px 3px #0008;font-variant-numeric:tabular-nums}
+#brand{position:absolute;top:28px;left:34px;font-size:18px;letter-spacing:.3em}
+#location{position:absolute;top:32px;right:32px;font-size:12px;letter-spacing:.13em;color:#c7d1d6}
+#objective{position:absolute;top:77px;left:34px;font-size:12px;letter-spacing:.06em;color:#c7d1d6}
+#telemetry{position:absolute;bottom:34px;left:34px;display:flex;gap:32px}
+#telemetry div{min-width:70px}
+#telemetry label{display:block;font-size:11px;letter-spacing:.18em;margin-bottom:8px;color:#adbdc7}
+#telemetry b{font-size:26px;font-weight:400}
+#telemetry span{font-size:11px;margin-left:5px;color:#bdc7ce}
+#flightstate{position:absolute;bottom:116px;left:34px;display:flex;gap:26px;font-size:12px;letter-spacing:.1em;color:#c2ccd2}
+#flightstate i{font-style:normal;color:#8f9ea7;margin-right:7px}
+#systems{position:absolute;bottom:36px;right:34px;font-size:12px;line-height:1.9;text-align:right;letter-spacing:.05em}
+#instructor{color:#d8cbb0}
+#hint{position:absolute;bottom:157px;left:34px;font-size:14px;color:#e3ddd0;max-width:620px;line-height:1.6}
+#markers{position:absolute;inset:0;pointer-events:none}
+#help{position:absolute;top:80px;right:30px;width:320px;padding:22px;background:#101b24ed;font-size:14px;line-height:1.8}
+#help p{margin:0 0 14px;color:#aebdc6}
+#help dl{display:grid;grid-template-columns:128px 1fr;margin:0;gap:6px}
+#help dd{margin:0}
+#help dt{color:#f1d4a6}
+#buttons{position:absolute;top:60px;right:32px;display:flex;gap:14px}
+#buttons button{border:0;background:transparent;font-size:12px;padding:6px;color:#c4cfd6}
+#status{position:absolute;top:29%;left:50%;transform:translateX(-50%);text-align:center;font-size:28px;letter-spacing:.08em;line-height:1.6;pointer-events:none}
+#status small{display:block;font-size:14px;letter-spacing:.02em;color:#bcc7cd}
+#loading{position:absolute;bottom:30px;left:6%;font-size:14px}
+#error{position:absolute;inset:20%;background:#18232b;padding:30px;line-height:1.6}
+#fps{color:#b7c5c8}
+@media(max-width:700px){
+#telemetry{gap:12px;left:18px;bottom:22px}#telemetry b{font-size:21px}#telemetry div{min-width:52px}
+#systems{right:18px;bottom:22px;font-size:10px}#brand,#objective{left:18px}
+#flightstate{left:18px;bottom:96px;gap:14px;font-size:10px}
+#hint{left:18px;bottom:132px;width:80%;font-size:12px}
+#location{font-size:10px;right:18px}#help{right:18px}#buttons{right:18px}}
 </style></head>
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
 <div id="veil"></div>
-<div id="intro"><h1>RANGE</h1><p>North Sea. Last light.<br>One aircraft. A short sortie.<br>Bring it home.</p><button id="start" disabled>ENTER AIRCRAFT</button><small>Keyboard flight controls · Third-person view<br>Headphones recommended</small></div>
-<div id="hud" class="hidden"><div id="brand">RANGE</div><div id="location">NORTH SEA · 19:42</div><div id="objective">RUNWAY 36 · DEPARTURE</div><div id="aim"></div><div id="bombAim"></div><div id="telemetry"><div><label>AIRSPEED</label><b id="speed">0</b><span>KT</span></div><div><label>ALTITUDE</label><b id="alt">0</b><span>FT</span></div><div><label>THROTTLE</label><b id="throttle">0</b><span>%</span></div><div><label>HEADING</label><b id="heading">000</b></div></div><div id="systems"><div id="gear">GEAR DOWN</div><div id="weapons">GUN 150 · BOMBS 4</div><div id="fps"></div></div><div id="hint">Hold Shift to advance the throttle. Reheat engages above 100%.</div></div>
-<div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">CONTROLS · H</button><button id="pauseButton">PAUSE · ESC</button></div>
-<div id="help" class="hidden"><p>Build speed before rotating. Bank, then pull gently to turn. Keep the nose low when slow.</p><dl><dt>Shift / Ctrl</dt><dd>Throttle up / down</dd><dt>↑ / ↓</dt><dd>Nose down / up</dd><dt>← / →</dt><dd>Roll left / right</dd><dt>Q / E</dt><dd>Rudder / steering</dd><dt>G</dt><dd>Landing gear</dd><dt>Space</dt><dd>Gun</dd><dt>B</dt><dd>Drop bomb</dd><dt>X</dt><dd>Airbrake / wheel brake</dd><dt>C</dt><dd>Chase camera</dd><dt>R</dt><dd>Restart sortie</dd><dt>H / Esc</dt><dd>Controls / pause</dd></dl></div>
+<div id="intro"><h1>RANGE</h1><p>North Sea. Last light.<br>One aircraft. A short sortie.<br>Bring it home.</p><button id="start" disabled>ENTER AIRCRAFT</button><small>Fly towards the mouse · Third-person view<br>Headphones recommended</small></div>
+<div id="hud" class="hidden">
+<div id="brand">RANGE</div>
+<div id="location">NORTH SEA · 19:42</div>
+<div id="objective">RUNWAY 36 · DEPARTURE</div>
+<svg id="markers" aria-hidden="true">
+ <g id="fpm" fill="none" stroke="#e6ecee" stroke-width="1" opacity="0.9">
+  <circle cx="0" cy="0" r="7"></circle>
+  <line x1="-15" y1="0" x2="-7" y2="0"></line>
+  <line x1="7" y1="0" x2="15" y2="0"></line>
+  <line x1="0" y1="-7" x2="0" y2="-13"></line>
+ </g>
+ <g id="nose" fill="none" stroke="#e6ecee" stroke-width="1" opacity="0.75">
+  <line x1="-5" y1="0" x2="5" y2="0"></line>
+  <line x1="0" y1="-5" x2="0" y2="5"></line>
+ </g>
+ <g id="reticle" fill="none" stroke="#eef3f4" stroke-width="1">
+  <circle cx="0" cy="0" r="13"></circle>
+  <rect x="-1" y="-1" width="2" height="2" fill="#eef3f4" stroke="none"></rect>
+ </g>
+ <g id="pipper" fill="none" stroke="#e6ecee" stroke-width="1" opacity="0.6">
+  <circle cx="0" cy="0" r="4"></circle>
+ </g>
+ <g id="bombAim" fill="none" stroke="#efc487" stroke-width="1">
+  <path d="M0,-9 L9,0 L0,9 L-9,0 Z"></path>
+ </g>
+</svg>
+<div id="telemetry">
+ <div><label>AIRSPEED</label><b id="speed">0</b><span>KT</span></div>
+ <div><label>ALTITUDE</label><b id="alt">0</b><span>FT</span></div>
+ <div><label>THROTTLE</label><b id="throttle">0</b><span>%</span></div>
+ <div><label>HEADING</label><b id="heading">000</b></div>
+</div>
+<div id="flightstate">
+ <div><i>G</i><b id="load">1.0</b></div>
+ <div><i>AOA</i><b id="aoa">0</b><span>&deg;</span></div>
+ <div><i>V/S</i><b id="vs">0</b><span>FPM</span></div>
+ <div><i>MACH</i><b id="mach">0.00</b></div>
+</div>
+<div id="systems">
+ <div id="gear">GEAR DOWN</div>
+ <div id="weapons">GUN 150 · BOMBS 4</div>
+ <div id="instructor">INSTRUCTOR ON</div>
+ <div id="fps"></div>
+</div>
+<div id="hint">Click to take the controls. The aircraft flies towards the circle.</div>
+</div>
+<div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">CONTROLS · H</button><button id="pauseButton">PAUSE · P</button></div>
+<div id="help" class="hidden">
+<p>Fly towards the circle. The aircraft turns its flight path to it, and the instructor keeps you off the stall.</p>
+<dl>
+<dt>Mouse</dt><dd>Aim</dd>
+<dt>Left mouse, Space</dt><dd>Gun</dd>
+<dt>B</dt><dd>Drop bomb</dd>
+<dt>W / S</dt><dd>Throttle up / down</dd>
+<dt>Shift / Ctrl</dt><dd>Throttle up / down</dd>
+<dt>A / D</dt><dd>Roll left / right</dd>
+<dt>Q / E</dt><dd>Rudder, nose wheel steering</dd>
+<dt>&uarr; / &darr;</dt><dd>Pitch nudge, down pulls</dd>
+<dt>&larr; / &rarr;</dt><dd>Roll, in manual mode</dd>
+<dt>G</dt><dd>Landing gear</dd>
+<dt>X</dt><dd>Airbrake, wheel brakes</dd>
+<dt>I</dt><dd>Instructor on or off</dd>
+<dt>C</dt><dd>Camera</dd>
+<dt>R</dt><dd>Restart sortie</dd>
+<dt>H</dt><dd>This panel</dd>
+<dt>P, Esc</dt><dd>Pause</dd>
+</dl></div>
 <div id="status"></div><div id="loading">Preparing aircraft and airfield…</div><div id="error" class="hidden"></div>
-<script type="module" src="game.js"></script>
+<script type="module" src="src/main.js"></script>
 </body></html>

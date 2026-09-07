@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { Flight, bombStep, qMax, terrainHeight, onPavement, fbm2, coast } from '../physics.js';
 import { Instructor, aimFromAngles } from '../control.js';
 import * as THREE from '../vendor/three.module.js';
+import { Input } from '../src/input.js';
+import { ChaseCamera } from '../src/camera.js';
 
 const dt = 1 / 120;
 const DEG = 180 / Math.PI;
@@ -388,3 +390,32 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   pass('shared numbers', { terrain: samples, coastAt0: round(coast(0), 1), fbm2Range: [round(lo), round(hi)] });
 }
 console.log('ALL PASS');
+
+// The instructor must also work with the actual camera and persistent mouse target.
+// Synthetic aimFromAngles tests alone cannot detect camera feedback causing a dive.
+{
+  globalThis.window = Object.assign(new EventTarget(), {innerWidth:1920, innerHeight:1080});
+  globalThis.document = new EventTarget();
+  for (const offset of [0, 280]) {
+    const canvas = new EventTarget(); document.pointerLockElement = canvas;
+    const input = new Input(canvas), f = airborne(), instructor = new Instructor(), chase = new ChaseCamera(16/9);
+    chase.update(1/60, f, null, true, true); input.pendingMouse.x = offset;
+    let lowest = f.position.y;
+    for (let i=0;i<1800;i++) {
+      const aim = input.aim(chase.camera);
+      for (let k=0;k<2;k++) f.step(dt, instructor.update(dt,f,aim,{}));
+      chase.update(1/60,f,aim,true); lowest=Math.min(lowest,f.position.y);
+    }
+    assert(!f.crashed && lowest>950, 'Camera ray must not feed a dive into the instructor');
+    assert(Math.abs(input.cursor.x)<20, 'The aircraft must catch the selected world aim');
+    if(offset) assert(heading(f)>8 && heading(f)<25, 'Mouse right must produce a bounded right turn');
+    pass('camera and mouse '+offset, {altitude:round(f.position.y),lowest:round(lowest),cursor:round(input.cursor.x),heading:round(heading(f))});
+    input.keys.add('KeyD'); input.keys.add('KeyW');
+    const keys=input.commands(), cmd=instructor.update(dt,f,input.aim(chase.camera),keys);
+    assert(cmd.roll===1 && cmd.throttle===1,'Keyboard must retain roll and throttle authority');
+    const stable=input.worldAim.clone();chase.toggle();chase.update(1/60,f,input.aim(chase.camera),true);
+    assert(stable.distanceTo(input.aim(chase.camera).direction)<1e-10,'Camera toggle must preserve the world target');
+  }
+  delete globalThis.window;delete globalThis.document;
+  pass('keyboard priority and camera toggle',{});
+}
