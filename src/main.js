@@ -189,7 +189,7 @@ function loop(now) {
 const POSES = {
   ramp: [0, null, 85, 0, 0],
   takeoff: [0, 12, -800, 0.12, 92],
-  cloud: [1600, 1050, -2600, 0.035, 200],
+  cloud: [1600, 1000, -2600, 0.035, 200],
   bomb: [-980, 270, -3300, -0.12, 155],
   landing: [0, 32, 590, 0.055, 84],
 };
@@ -208,6 +208,10 @@ function stage(name) {
   flight.gearPosition = flight.gear ? 1 : 0;
   flight.airborneTime = name === 'ramp' ? 0 : 30;
   flight.landed = false;
+  // A pose placed in the air must clear the ground flags before the first step. The model extends
+  // the gear whenever it reads onGround at the top of a step, so a pose left with the parked
+  // onGround true would re-extend the retracted gear on its own on the cloud and bomb frames.
+  if (name !== 'ramp') { flight.onGround = false; flight.grounded = false; }
 
   if (name === 'ramp') {
     // Thirty steps at 120 Hz with the brakes on: the oleos settle, the legs report real loads and
@@ -252,6 +256,9 @@ function stage(name) {
   chase.update(0.016, flight, null, true, true);
   world.update(0.016, flight, camera, elapsed);
   hud.update(flight, camera, input, instructor, effects, { paused: true });
+  // A staged frame is a presentation still, so clear the pause overlay that the interactive pause
+  // would show. The normal pause text returns as soon as the viewer clicks to take the controls.
+  hud.setStatus('');
   frame(0.001, false);
   return name;
 }

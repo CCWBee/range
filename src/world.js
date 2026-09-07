@@ -770,6 +770,15 @@ void main(){
       return [1400 + Math.cos(angle) * radius, 900 + r() * 200,
         -2600 + Math.sin(angle) * radius, 600 + r() * 800, 260 + r() * 200];
     }, 0x5a6a78, 0.72);
+    // A denser, closer knot of cloud around the cloud-break pose (1600, 1050, -2600), so the frame
+    // reads as the aircraft punching up through the deck with cloud wrapping it, not clear air over
+    // a distant layer. Sprites sit both below the pose (the deck it climbs out of) and beside it.
+    makeBank(30, (i, r) => {
+      const angle = r() * Math.PI * 2;
+      const radius = 120 + r() * 900;
+      return [1600 + Math.cos(angle) * radius, 840 + r() * 320,
+        -2600 + Math.sin(angle) * radius - 300, 420 + r() * 520, 200 + r() * 180];
+    }, 0x6b7a88, 0.9);
   }
 
   // The far shore's town, forty lamps sitting three metres above the ground.
