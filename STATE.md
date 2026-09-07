@@ -9,24 +9,24 @@ aircraft with separate moving parts, grounded scene with clutter and lights, mod
 
 ## Open threads
 
-- Stream P is done and committed (`ae20d2f`): rigid-body model, fly-by-wire, wheel contacts,
-  mouse-aim instructor, 20 assertions passing. Interface and measured numbers in
-  `docs/notes/stream-p.md`.
-- Stream B (Blender: run the rewritten model script, unwrap, bake the jet atlases, write the v2
-  exporter) is running as a background agent. The scenery library of spec 4.3 is NOT in it and
-  needs a second pass after it lands.
-- Stream R (renderer) is running as a background agent in parallel, coding to the spec 4.1 and 4.2
-  contract with a loader that also reads the old v1 library.
-- The old Codex workspace folder is now a mirror, refreshed with `python tools/sync_codex.py`, with
-  `CODEX-NOTE.md` there explaining the move and what changed. Re-run the sync after each milestone.
+- All three streams are in and committed. Physics and instructor: 29 assertions pass
+  (`node tools/test_flight.mjs`). Blender assets: 50 assets, version 2 binary library, terrain
+  matches the physics to 1e-6. Renderer: 10 src modules, single-file bundle 12.8 MB, no network
+  assets. Notes in `docs/notes/stream-p.md`, `stream-b.md`, `stream-r.md`.
+- Five staged frames render clean (no pause overlay, gear correct per stage) and read against the
+  concepts: skinned Typhoon with roundels and nav lights, lit airfield, reheat plumes, wheel spray,
+  a cloud deck at the break, range pads with a falling bomb, a lit threshold on landing.
+- Triangles 260k to 411k per stage, far under budget. Real fps NOT measured this build: headless is
+  software-rendered, and the Brave extension was disconnected. This is the one outstanding check.
 
 ## Next action
 
-When B and R land: run the scenery pass (spec 4.3), then build-review-fix over the integrated tree
-with `node tools/test_flight.mjs && python tools/build.py` as the check, then the visual gate
-against the five concept frames, then measure fps in Brave with `window.range.metrics()` and
-`window.range.stress(true)`. Resume handles:
+Measure fps in Brave: reconnect the Claude-in-Chrome extension (restart Chrome if needed), open
+`http://127.0.0.1:8099/dist/index.html` (serve with `python -m http.server 8099` in the project),
+and run `window.range.stage('cloud'); window.range.benchmark(240)` then
+`window.range.stress(true); window.range.benchmark(240)` for the headroom number. Optionally a
+build-review-fix pass over the integrated tree; and place the remaining spec 4.3 scenery counts
+(PAPI, approach bars) if a closer look wants them. The old Codex folder mirror is refreshed with
+`python tools/sync_codex.py`.
 
-- streams P + B first attempt: runId `wf_40b62b60-2ef` (all eight agents died on the Fable monthly
-  spend limit; the session model is now Opus 5 and subagents run on opus). Do not resume it, the
-  work has moved on; the scripts are in `tools/workflows/` for reference.
+## Gotchas
