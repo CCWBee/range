@@ -124,21 +124,21 @@ export class Instructor {
     const phiMax = Math.max(0.35, 0.9 * Math.acos(clamp(1 / Math.max(nAvail, 1e-6), 0, 1)));
     let phiDes = theta < 0.02 || latched ? 0 : clamp(6 * ex, -phiMax, phiMax);
     const pSmall = 4 * (phiDes - phi);
-    const qSmall = 1.2 * ey * Math.cos(phi) + Math.min(0.4, (G0 / V) * Math.tan(phi) * Math.sin(phi));
+    const pitchGain = 1.2 + (flight.gearPosition < .1 ? 1.2 * smoothstep(Math.abs(ey), .08, .3) : 0);
+    const qSmall = pitchGain * ey * Math.cos(phi) + Math.min(0.4, (G0 / V) * Math.tan(phi) * Math.sin(phi));
     // Large-angle law: roll the target above the nose, then pull.
     const dphi = Math.atan2(bx, by);
     const pLarge = 5 * dphi;
-    const qLarge = 1.0 * theta * Math.max(0, Math.cos(dphi)) * clamp((0.30 - alpha) / 0.08, 0, 1);
+    const qLarge = 1.8 * theta * Math.max(0, Math.cos(dphi)) * clamp((0.30 - alpha) / 0.06, 0, 1);
     // Roll answers azimuth, pitch answers elevation, so the blend is on the sideways error alone.
     // Blending on the total angle instead couples them: an aircraft descending with the cursor on
     // the horizon sees a large total angle, hands the demand to the rolling law, banks past 80
     // degrees and descends faster, which tightens the same loop. That is the aircraft falling out
     // of the sky from an 8 degree cursor offset.
-    // The cursor circle only reaches about 20 degrees off the path, so the whole of it belongs to
-    // the bank-to-turn law, which respects the bank ceiling and holds height. The rolling law is
-    // for genuinely large angle-off, past 29 degrees, which the cursor reaches only through the
-    // keys or after a roll.
+    // Small corrections retain the height-holding law. A deliberate large upward request can
+    // command a hard pull too; unrestricted mouse aim now reaches the full sphere.
     let w = smoothstep(Math.abs(ex), 0.5, 0.9);
+    if (ey > 0) w = Math.max(w, smoothstep(ey, .65, 1.15));
     const pushCone = ey < 0 && Math.abs(ex) < 0.3;
     if (ey < 0) w *= smoothstep(Math.abs(ex), 0.25, 0.4); // push, never roll inverted
     // Bank ceiling on the rolling law only. It rolls to put the target above the nose whatever the

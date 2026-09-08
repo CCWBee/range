@@ -10,14 +10,16 @@ import * as THREE from '../vendor/three.module.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const HELD = new Set([
-  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'Space',
+  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'KeyC', 'KeyB', 'Space',
   'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
 ]);
 
 // One-shot keys and the action each fires.
 const ACTIONS = {
-  KeyB: 'bomb', KeyG: 'gear', KeyC: 'camera', KeyR: 'restart',
+  Digit2: 'bomb', Digit3: 'bomb', KeyG: 'gear', KeyV: 'camera', KeyR: 'restart',
+  Digit5: 'missile', Slash: 'missile', KeyL: 'laser', NumLock: 'laser', Delete: 'laser',
+  End: 'target', Digit6: 'target', KeyT: 'target',
   KeyH: 'help', KeyI: 'instructor', KeyP: 'pause',
 };
 
@@ -35,6 +37,8 @@ export class Input {
     this.ray = new THREE.Raycaster();
     this.worldAim = null;
     this.pendingMouse = new THREE.Vector2();
+    this.look = new THREE.Vector2();
+    this.returningLook = false;
     this.aimState = { direction: null, active: false };
     this.attach();
   }
@@ -44,6 +48,7 @@ export class Input {
   fire(name, value) { if (this.handlers[name]) this.handlers[name](value); }
 
   get locked() { return document.pointerLockElement === this.canvas; }
+  get freeLook() { return this.keys.has('KeyC'); }
 
   // Only ever called from a user gesture on the canvas, never from start() or stage().
   requestLock() {
@@ -79,6 +84,13 @@ export class Input {
     window.addEventListener('mouseup', (event) => { if (event.button === 0) this.gunHeld = false; });
     document.addEventListener('mousemove', (event) => {
       if (!this.locked) return;
+      if (this.freeLook) {
+        this.look.x = THREE.MathUtils.clamp(this.look.x + (event.movementX || 0) * .004, -2.9, 2.9);
+        this.look.y = THREE.MathUtils.clamp(this.look.y + (event.movementY || 0) * .004, -1.1, 1.1);
+        this.returningLook = true;
+        return;
+      }
+      if (this.returningLook) return;
       this.pendingMouse.x += (event.movementX || 0) * this.sensitivity;
       this.pendingMouse.y += (event.movementY || 0) * this.sensitivity;
     });
@@ -89,10 +101,11 @@ export class Input {
     document.addEventListener('pointerlockerror', () => { this.setPaused(true); });
 
     window.addEventListener('keydown', (event) => {
-      if (HELD.has(event.code) || event.code === 'Tab') event.preventDefault();
+      if (HELD.has(event.code) || ACTIONS[event.code] || event.code === 'Tab' || event.altKey) event.preventDefault();
       if (HELD.has(event.code)) this.keys.add(event.code);
       if (event.repeat) return;
       if (!this.running) { if (event.code === 'Enter') this.fire('start'); return; }
+      if (event.altKey && event.code === 'KeyX') { this.fire('seeker'); return; }
       // Escape is the browser leaving the pointer lock. It is not bound here, and pausing
       // happens through pointerlockchange so the two can never disagree.
       const action = ACTIONS[event.code];
@@ -106,29 +119,29 @@ export class Input {
     });
   }
 
-  // The cursor lives within a circle of 0.36 of the window height, about 20 degrees off the
-  // camera axis at the rim, which is the intended maximum aim.
+  // Only the displayed marker is bounded. The saved direction can turn through the full sphere.
   clampCursor() {
-    const radius = 0.36 * window.innerHeight;
-    const length = this.cursor.length();
-    if (length > radius) this.cursor.multiplyScalar(radius / length);
+    const scale = Math.max(1, Math.abs(this.cursor.x) / Math.max(1, window.innerWidth / 2 - 38),
+      Math.abs(this.cursor.y) / Math.max(1, window.innerHeight / 2 - 120));
+    this.aimOffscreen = scale > 1 || this.aimBehind;
+    this.cursor.divideScalar(scale);
   }
 
-  centreCursor() { this.cursor.set(0, 0); this.worldAim = null; this.pendingMouse.set(0, 0); }
+  centreCursor() { this.cursor.set(0, 0); this.worldAim = null; this.pendingMouse.set(0, 0); this.look.set(0,0); this.returningLook=false; }
 
   // The flight demands the keyboard contributes. Throttle is a rate; brake and airbrake are held.
-  commands() {
+  commands(flight = null) {
     const k = this.keys;
     const down = (...codes) => codes.some((code) => k.has(code));
     const manualRoll = this.manual ? (down('ArrowRight') ? 1 : 0) - (down('ArrowLeft') ? 1 : 0) : 0;
     return {
-      throttle: (down('KeyW', 'ShiftLeft', 'ShiftRight') ? 1 : 0) - (down('KeyS', 'ControlLeft', 'ControlRight') ? 1 : 0),
+      throttle: (down('ShiftLeft', 'ShiftRight') ? 1 : 0) - (down('ControlLeft', 'ControlRight') ? 1 : 0),
       // Arrow down pulls, as it did before.
-      pitch: (down('ArrowDown') ? 1 : 0) - (down('ArrowUp') ? 1 : 0),
+      pitch: (down('KeyS', 'ArrowDown') ? 1 : 0) - (down('KeyW', 'ArrowUp') ? 1 : 0),
       roll: Math.max(-1, Math.min(1, (down('KeyD') ? 1 : 0) - (down('KeyA') ? 1 : 0) + manualRoll)),
       yaw: (down('KeyE') ? 1 : 0) - (down('KeyQ') ? 1 : 0),
-      brake: down('KeyX'),
-      airbrake: down('KeyX'),
+      brake: down('KeyB') || (down('ControlLeft', 'ControlRight') && !!flight && flight.throttle <= .001 && flight.gearPosition > .95),
+      airbrake: down('KeyB'),
     };
   }
 
@@ -143,18 +156,26 @@ export class Input {
       return this.aimState;
     }
     camera.updateMatrixWorld();
-    if (this.worldAim) {
-      const projected = camera.position.clone().addScaledVector(this.worldAim, 10000).project(camera);
-      this.cursor.set(projected.x * window.innerWidth / 2, -projected.y * window.innerHeight / 2);
-    }
-    // A mouse movement selects a world direction. Camera movement must never select a new one:
-    // the reticle comes back towards the centre as the aircraft catches up with the aim.
-    if (!this.worldAim || this.pendingMouse.lengthSq() > 0) {
-      this.cursor.add(this.pendingMouse); this.clampCursor();
-      this.ray.setFromCamera({x:this.cursor.x / (window.innerWidth / 2), y:-this.cursor.y / (window.innerHeight / 2)}, camera);
-      this.worldAim = this.ray.ray.direction.clone().normalize();
+    if (!this.worldAim) this.worldAim = camera.getWorldDirection(V3());
+    // Rotate a world direction, rather than clamping a ray to a disc on the screen. The mouse
+    // can ask for a reversal or a loop, including targets behind the current camera.
+    if (this.pendingMouse.lengthSq() > 0) {
+      const radiansPerPixel = 2 * Math.tan(camera.fov * Math.PI / 360) / window.innerHeight;
+      const cameraUp = V3(0, 1, 0).applyQuaternion(camera.quaternion);
+      const cameraRight = V3(1, 0, 0).applyQuaternion(camera.quaternion);
+      this.worldAim.applyAxisAngle(cameraUp, -this.pendingMouse.x * radiansPerPixel);
+      this.worldAim.applyAxisAngle(cameraRight, -this.pendingMouse.y * radiansPerPixel).normalize();
       this.pendingMouse.set(0, 0);
     }
+    const local = this.worldAim.clone().applyQuaternion(camera.quaternion.clone().invert());
+    this.aimBehind = local.z >= 0;
+    const focal = window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360));
+    this.cursor.set(local.x, -local.y).multiplyScalar(focal / Math.max(.01, Math.abs(local.z)));
+    if (this.aimBehind) {
+      if (this.cursor.lengthSq() < 1) this.cursor.set(window.innerWidth, 0);
+      else this.cursor.setLength(Math.max(window.innerWidth, window.innerHeight) * 2);
+    }
+    this.clampCursor();
     this.aimState.direction = this.worldAim;
     this.aimState.active = true;
     return this.aimState;

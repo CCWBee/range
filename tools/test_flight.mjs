@@ -410,7 +410,7 @@ console.log('ALL PASS');
     assert(Math.abs(input.cursor.x)<20, 'The aircraft must catch the selected world aim');
     if(offset) assert(heading(f)>8 && heading(f)<25, 'Mouse right must produce a bounded right turn');
     pass('camera and mouse '+offset, {altitude:round(f.position.y),lowest:round(lowest),cursor:round(input.cursor.x),heading:round(heading(f))});
-    input.keys.add('KeyD'); input.keys.add('KeyW');
+    input.keys.add('KeyD'); input.keys.add('ShiftLeft');
     const keys=input.commands(), cmd=instructor.update(dt,f,input.aim(chase.camera),keys);
     assert(cmd.roll===1 && cmd.throttle===1,'Keyboard must retain roll and throttle authority');
     const stable=input.worldAim.clone();chase.toggle();chase.update(1/60,f,input.aim(chase.camera),true);
@@ -419,3 +419,5 @@ console.log('ALL PASS');
   delete globalThis.window;delete globalThis.document;
   pass('keyboard priority and camera toggle',{});
 }
+
+await import('./test_engagement.mjs');

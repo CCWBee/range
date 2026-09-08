@@ -45,6 +45,18 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 #loading{position:absolute;bottom:30px;left:6%;font-size:14px}
 #error{position:absolute;inset:20%;background:#18232b;padding:30px;line-height:1.6}
 #fps{color:#b7c5c8}
+.target-mark{fill:#ec8874;stroke:#ec8874;stroke-width:2}
+.target-mark text{stroke:none;font-size:11px;letter-spacing:.10em}
+.target-mark .target-distance{font-size:10px;letter-spacing:.03em}
+#weaponState{color:#d8cbb0;letter-spacing:.13em;font-size:11px;margin-bottom:4px}
+#weaponState.locked{color:#f09676}
+#laserState{color:#9faeb6;font-size:10px}
+#hud{background:linear-gradient(0deg,rgba(7,14,19,.43),transparent 22%,transparent 87%,rgba(7,14,19,.21))}
+#brand{font-size:15px;letter-spacing:.22em}
+#telemetry{gap:38px}#telemetry b{font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;font-size:30px;font-weight:300}
+#telemetry label{font-size:10px;color:#b2c0c7;letter-spacing:.12em}
+#systems{max-width:380px;font-size:11px;line-height:2}
+#help{width:370px;max-height:calc(100vh - 120px);overflow:auto;background:rgba(12,22,29,.97)}
 @media(max-width:700px){
 #telemetry{gap:12px;left:18px;bottom:22px}#telemetry b{font-size:21px}#telemetry div{min-width:52px}
 #systems{right:18px;bottom:22px;font-size:10px}#brand,#objective{left:18px}
@@ -81,6 +93,9 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
  <g id="bombAim" fill="none" stroke="#efc487" stroke-width="1">
   <path d="M0,-9 L9,0 L0,9 L-9,0 Z"></path>
  </g>
+ <g id="seekerEnvelope" visibility="hidden" fill="none" stroke="#e5dfcd" stroke-width="1" opacity=".35"><circle r="100"/></g>
+ <g id="seekerHead" visibility="hidden" fill="none" stroke="#e5dfcd" stroke-width="1.5"><circle r="19"/><path d="M-25,0 H-20 M20,0 H25 M0,-25 V-20 M0,20 V25"/></g>
+ <g id="laserMark" visibility="hidden" fill="none" stroke="#e8c78b" stroke-width="1.5"><path d="M-14,-6 V-14 H-6 M6,-14 H14 V-6 M14,6 V14 H6 M-6,14 H-14 V6"/><text y="-23" fill="#e8c78b" stroke="none" text-anchor="middle" font-size="10">LTD</text></g>
 </svg>
 <div id="telemetry">
  <div><label>AIRSPEED</label><b id="speed">0</b><span>KT</span></div>
@@ -95,9 +110,11 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
  <div><i>MACH</i><b id="mach">0.00</b></div>
 </div>
 <div id="systems">
+ <div id="weaponState">WEAPONS READY</div>
  <div id="gear">GEAR DOWN</div>
  <div id="weapons">GUN 150 · BOMBS 4</div>
  <div id="instructor">INSTRUCTOR ON</div>
+ <div id="laserState">LTD · OFF</div>
  <div id="fps"></div>
 </div>
 <div id="hint">Click to take the controls. The aircraft flies towards the circle.</div>
@@ -106,19 +123,25 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 <div id="help" class="hidden">
 <p>Fly towards the circle. The aircraft turns its flight path to it, and the instructor keeps you off the stall.</p>
 <dl>
-<dt>Mouse</dt><dd>Aim</dd>
+<dt>Mouse</dt><dd>Aim through 360 degrees</dd>
 <dt>Left mouse, Space</dt><dd>Gun</dd>
-<dt>B</dt><dd>Drop bomb</dd>
-<dt>W / S</dt><dd>Throttle up / down</dd>
+<dt>2 / 3</dt><dd>Release Paveway</dd>
+<dt>W / S</dt><dd>Pitch down / pull up</dd>
 <dt>Shift / Ctrl</dt><dd>Throttle up / down</dd>
+<dt>Ctrl at idle</dt><dd>Wheel brakes with gear down</dd>
 <dt>A / D</dt><dd>Roll left / right</dd>
 <dt>Q / E</dt><dd>Rudder, nose wheel steering</dd>
 <dt>&uarr; / &darr;</dt><dd>Pitch nudge, down pulls</dd>
 <dt>&larr; / &rarr;</dt><dd>Roll, in manual mode</dd>
 <dt>G</dt><dd>Landing gear</dd>
-<dt>X</dt><dd>Airbrake, wheel brakes</dd>
+<dt>B</dt><dd>Airbrake, wheel brakes</dd>
+<dt>End / 6 / T</dt><dd>Select target near aim</dd>
+<dt>L / Num Lock / Delete</dt><dd>Laser on / off</dd>
+<dt>Alt + X</dt><dd>Sidewinder seeker on / off</dd>
+<dt>5 or /</dt><dd>Launch locked Sidewinder</dd>
 <dt>I</dt><dd>Instructor on or off</dd>
-<dt>C</dt><dd>Camera</dd>
+<dt>Hold C</dt><dd>Free look</dd>
+<dt>V</dt><dd>Chase distance</dd>
 <dt>R</dt><dd>Restart sortie</dd>
 <dt>H</dt><dd>This panel</dd>
 <dt>P, Esc</dt><dd>Pause</dd>

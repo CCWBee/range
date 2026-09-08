@@ -13,6 +13,7 @@ import { Input } from './input.js';
 import { Hud } from './hud.js';
 import { Audio } from './audio.js';
 import { Post } from './post.js';
+import { Engagement } from './engagement.js';
 
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -49,6 +50,8 @@ const world = new World(renderer, library);
 const chase = new ChaseCamera(innerWidth / innerHeight);
 const aircraft = new Aircraft(library, world.scene, world.quadGeometry);
 const effects = new Effects(library, world.scene, world.quadGeometry, audio);
+const engagement = new Engagement(library,world.scene,effects,aircraft,audio);
+effects.world=world;
 const post = new Post(renderer, world.quadGeometry);
 
 const scene = world.scene;
@@ -82,6 +85,7 @@ function reset() {
   instructor.mode = instructor.mode === 'manual' ? 'manual' : 'assist';
   instructor.stallLatched = false;
   effects.reset();
+  engagement.reset();
   aircraft.resetStores();
   input.centreCursor();
   input.setPaused(false);
@@ -93,6 +97,8 @@ function reset() {
 function setPauseUi(paused) {
   $('pauseButton').textContent = paused ? 'RESUME · CLICK' : 'PAUSE · P';
   if (!running) return;
+  audio.update(flight,paused);
+  if(paused)audio.seeker(false,false,false);
   hud.setStatus(paused && !flight.crashed ? 'PAUSED<small>Click the view to take the controls back.</small>' : '');
   if (flight.crashed) hud.crashShown = false;
 }
@@ -102,6 +108,10 @@ input.on('start', start);
 input.on('bomb', () => { if (input.locked && !input.paused) effects.dropBomb(flight, aircraft); });
 input.on('gear', () => { if (!flight.onGround && !flight.crashed) flight.gear = !flight.gear; });
 input.on('camera', () => chase.toggle());
+input.on('seeker',()=>{if(input.locked&&!input.paused)engagement.toggleSeeker();});
+input.on('missile',()=>{if(input.locked&&!input.paused)engagement.launch(flight);});
+input.on('target',()=>{if(input.locked&&!input.paused)engagement.select(flight,input.aimState);});
+input.on('laser',()=>{if(input.locked&&!input.paused)engagement.designate(flight,input.aimState);});
 input.on('restart', reset);
 input.on('help', () => hud.toggleHelp());
 input.on('instructor', () => {
@@ -130,11 +140,12 @@ function frame(dt, stepSim) {
   const aim = input.aim(camera);
   if (stepSim) {
     accumulator += dt;
-    const keys = input.commands();
     let guard = 0;
     while (accumulator >= STEP && guard < 40) {
+      const keys = input.commands(flight);
       const cmd = instructor.update(STEP, flight, aim, keys);
       flight.step(STEP, cmd);
+      engagement.update(STEP,flight,aim);
       accumulator -= STEP;
       guard++;
     }
@@ -149,7 +160,7 @@ function frame(dt, stepSim) {
   }
   elapsed += dt;
 
-  chase.update(dt, flight, aim, running);
+  chase.update(dt, flight, aim, running, false, input);
   aircraft.update(dt, flight, camera, elapsed);
   world.update(dt, flight, camera, elapsed);
 
@@ -246,6 +257,8 @@ function stage(name) {
   }
   if (name === 'bomb') {
     // A bomb already released and falling ahead of the aircraft.
+    aircraft.update(0.016, flight, camera, elapsed);
+    aircraft.root.updateMatrixWorld(true);
     effects.dropBomb(flight, aircraft);
     const bomb = effects.bombs[effects.bombs.length - 1];
     if (bomb) for (let i = 0; i < 110; i++) bombStep(bomb, 1 / 60);
@@ -355,7 +368,7 @@ requestAnimationFrame(loop);
 // Assigned last, once every await has settled, so a headless --eval that runs the moment the page
 // loads either finds the whole object or none of it.
 window.range = {
-  flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud,
+  flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement,
   targets: effects.targets, bombs: effects.bombs,
   start, reset, stage, metrics, renderOnce, benchmark, stress, setAim,
   dropBomb: () => effects.dropBomb(flight, aircraft),

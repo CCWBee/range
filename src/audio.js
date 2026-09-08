@@ -41,12 +41,21 @@ export class Audio {
     this.noiseGain.gain.value = 0.03;
     source.connect(this.noiseGain).connect(this.master);
     source.start();
+    this.seekerTone=context.createOscillator();this.seekerTone.type='sine';
+    this.seekerGain=context.createGain();this.seekerGain.gain.value=0;
+    this.seekerTone.connect(this.seekerGain).connect(this.master);this.seekerTone.start();
   }
 
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.5, this.context.currentTime, 0.05);
     return this.muted;
+  }
+
+  seeker(enabled,locked,acquiring){
+    if(!this.context)return;const t=this.context.currentTime;
+    this.seekerTone.frequency.setTargetAtTime(locked?870:acquiring?620:380,t,.06);
+    this.seekerGain.gain.setTargetAtTime(enabled?(locked?.019:(Math.sin(t*14)>0?.007:0)):0,t,.03);
   }
 
   update(flight, paused) {

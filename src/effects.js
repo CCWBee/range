@@ -7,6 +7,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { bombStep, terrainHeight, groundHeight } from '../physics.js';
 import { NOISE_GLSL } from './world.js';
+import { guidedBombStep } from './engagement.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = THREE.MathUtils.clamp;
@@ -59,7 +60,7 @@ class SpritePool {
     const n = Math.min(this.live.length, this.count);
     for (let i = 0; i < n; i++) {
       const p = this.live[i];
-      this.matrix.makeScale(p.size, p.size, 1);
+      this.matrix.makeScale(p.size * (p.width || 1), p.size, 1);
       this.matrix.setPosition(p.position.x, p.position.y, p.position.z);
       this.mesh.setMatrixAt(i, this.matrix);
       this.alpha[i] = p.alpha;
@@ -87,14 +88,15 @@ export class Effects {
     this.buildTargets();
     this.buildTracers();
     this.buildCraters();
-    this.smoke = new SpritePool(scene, quadGeometry, 120, `
+    this.smoke = new SpritePool(scene, quadGeometry, 280, `
 varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
 void main(){
  float d=length(uvp-.5)*2.;
  float n=fbm(uvp*8.);
- float a=smoothstep(1.,.1,d)*(.4+n*.6)*vAlpha;
- gl_FragColor=vec4(tint+n*.05,a);
-}`, { tint: 0x14171a });
+ float a=smoothstep(.96,.18,d+n*.25)*smoothstep(.22,.6,n)*vAlpha;
+ vec3 shade=mix(vec3(.025,.033,.041),vec3(.23,.25,.26),uvp.y*.65+n*.4);
+ gl_FragColor=vec4(shade,a);
+}`, { tint: 0x30383d });
     this.spray = new SpritePool(scene, quadGeometry, 96, `
 varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
 void main(){
@@ -102,7 +104,24 @@ void main(){
  float n=fbm(uvp*6.+.5);
  gl_FragColor=vec4(tint*(.8+n*.5),smoothstep(1.,.05,d)*(.35+n*.65)*vAlpha);
 }`, { tint: 0x9aa6ab });
-    this.blastMaterial = new THREE.MeshBasicMaterial({ color: 0xff8a25, transparent: true, depthWrite: false });
+    this.fire = new SpritePool(scene,quadGeometry,128,`
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
+void main(){vec2 q=(uvp-.5)*2.;float n=fbm(uvp*11.+vAlpha*1.5);
+ float edge=1.-length(q);float a=smoothstep(.03,.45,edge)*smoothstep(.25,.63,n)*vAlpha;
+ vec3 c=mix(vec3(1.7,.17,.012),vec3(7.,3.1,.6),smoothstep(.43,.74,n)*vAlpha);
+ gl_FragColor=vec4(c,a);}`,{additive:true});
+    this.sparks = new SpritePool(scene,quadGeometry,400,`
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;
+void main(){vec2 q=abs(uvp-.5)*2.;float a=pow(max(0.,1.-q.x),2.)*max(0.,1.-q.y)*vAlpha;
+ gl_FragColor=vec4(vec3(5.,1.6,.23),a);}`,{additive:true});
+    this.dust = new SpritePool(scene,quadGeometry,160,`
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
+void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
+ gl_FragColor=vec4(mix(vec3(.09,.08,.065),vec3(.28,.27,.23),uvp.y+n*.2),smoothstep(1.,.1,d+n*.18)*vAlpha);}`);
+    // Keep the light count fixed so detonations never recompile scene materials.
+    this.blastLights=Array.from({length:2},()=>{const l=new THREE.PointLight(0xff963d,0,150,2);scene.add(l);return l;});
+    this.debris=[];
+    this.smokeShadow=this.buildSmokeShadow();
   }
 
   buildTargets() {
@@ -159,24 +178,41 @@ void main(){
     this.craterMesh.instanceMatrix.needsUpdate = true;
   }
 
+  buildSmokeShadow(){
+    const g=this.quadGeometry.clone();g.rotateX(-Math.PI/2);
+    const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,
+      vertexShader:'varying vec2 uvp;void main(){uvp=position.xz+.5;gl_Position=projectionMatrix*modelViewMatrix*instanceMatrix*vec4(position,1.);}',
+      fragmentShader:'varying vec2 uvp;void main(){float a=pow(max(0.,1.-length((uvp-.5)*2.)),1.7);gl_FragColor=vec4(.015,.02,.027,a*.26);}'});
+    const mesh=new THREE.InstancedMesh(g,material,12);mesh.count=0;mesh.frustumCulled=false;this.scene.add(mesh);return mesh;
+  }
+
+  sparksAt(position,inherited=V3(),count=26){
+    for(let i=0;i<count;i++)this.sparks.spawn({position:position.clone(),velocity:V3((Math.random()-.5)*45,8+Math.random()*30,(Math.random()-.5)*45).addScaledVector(inherited,.15),size:1.3+Math.random()*2,width:.08,alpha:1,life:.4+Math.random()*1.4});
+  }
+
   explosion(position, strength = 1) {
-    const material = this.blastMaterial.clone();
-    const mesh = this.library.has('blast')
-      ? this.library.asset('blast', material)
-      : new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), material);
-    mesh.position.copy(position);
-    mesh.position.y = Math.max(1, mesh.position.y);
-    this.scene.add(mesh);
-    this.blasts.push({ mesh, material, age: 0, strength });
+    const ground=groundHeight(position.x,position.z),surface=position.y-ground<12;
+    this.blasts.push({position:position.clone(),age:0,strength});
     this.hitFlash = 0.18;
     if (this.audio) this.audio.burst();
-    for (let i = 0; i < 6; i++) {
+    this.sparksAt(position,V3(),Math.round(45*strength));
+    for(let i=0;i<16;i++){
+      const a=Math.random()*Math.PI*2,r=Math.random()*8*strength;
+      this.fire.spawn({position:position.clone().add(V3(Math.cos(a)*r,Math.random()*7,Math.sin(a)*r)),velocity:V3(Math.cos(a)*7,8+Math.random()*18,Math.sin(a)*7),size:(8+Math.random()*10)*strength,alpha:1,life:.3+Math.random()*.6});
+      if(surface)this.dust.spawn({position:V3(position.x,ground+.4,position.z),velocity:V3(Math.cos(a)*(15+Math.random()*25),1+Math.random()*5,Math.sin(a)*(15+Math.random()*25)),size:5+Math.random()*8,width:1.6,alpha:.55,life:3+Math.random()*3});
+    }
+    for (let i = 0; i < 18; i++) {
       this.smoke.spawn({
-        position: position.clone().add(V3((Math.random() - 0.5) * 8, i * 3 + 2, (Math.random() - 0.5) * 8)),
-        velocity: V3((Math.random() - 0.5) * 3, 4 + Math.random() * 4, (Math.random() - 0.5) * 3),
-        size: 9 + i * 2, alpha: 0.6, life: 6 + i,
+        position: position.clone().add(V3((Math.random() - 0.5) * 10, Math.random() * 9 + 2, (Math.random() - 0.5) * 10)),
+        velocity: V3((Math.random() - 0.5) * 12, 10 + Math.random() * 17, (Math.random() - 0.5) * 12),
+        size: 7 + Math.random()*14, alpha: .65+Math.random()*.2, life: 7+Math.random()*8,
       });
     }
+    if(surface && this.library.has('debris'))for(let i=0;i<12 && this.debris.length<72;i++){
+      const mesh=this.library.asset('debris');mesh.position.copy(position);mesh.scale.setScalar(.4+Math.random());mesh.traverse(o=>{if(o.isMesh)o.castShadow=true;});this.scene.add(mesh);
+      this.debris.push({mesh,velocity:V3((Math.random()-.5)*35,12+Math.random()*30,(Math.random()-.5)*35),spin:V3(Math.random()*7,Math.random()*6,Math.random()*8),life:6});
+    }
+    if(this.world?.blastImpulse)this.world.blastImpulse.value.set(position.x,position.z,0,80*strength);
     for (const target of this.targets) {
       if (!target.destroyed && target.position.distanceTo(position) < 33 * strength) this.destroyTarget(target);
     }
@@ -212,6 +248,7 @@ void main(){
     this.bombs.push({
       mesh, position: mesh.position,
       velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
+      guided: true, age: 0,
     });
     return true;
   }
@@ -234,7 +271,7 @@ void main(){
     // Bombs: the mesh points along its velocity, so a fin-stabilised bomb noses over as it falls.
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
-      if (bombStep(bomb, dt)) {
+      if (guidedBombStep(bomb, this.engagement?.laser, dt)) {
         this.explosion(bomb.position, 1.2);
         this.addCrater(bomb.position, 16);
         this.scene.remove(bomb.mesh);
@@ -270,6 +307,11 @@ void main(){
           break;
         }
       }
+      if(!hit && this.engagement)for(const target of this.engagement.airTargets){
+        if(target.destroyed)continue;
+        line.closestPointToPoint(target.position,true,closest);
+        if(closest.distanceTo(target.position)<5.2){this.engagement.hitAir(target,1,closest);hit=true;break;}
+      }
       const ground = groundHeight(shot.position.x, shot.position.z);
       if (!hit && shot.position.y < ground) {
         this.spray.spawn({
@@ -289,20 +331,20 @@ void main(){
     this.tracerMesh.count = tracerCount;
     this.tracerMesh.instanceMatrix.needsUpdate = true;
 
-    // Explosions.
+    // The flash illuminates nearby surfaces briefly; smoke and debris remain after it dies.
+    for(const light of this.blastLights)light.intensity=0;
     for (let i = this.blasts.length - 1; i >= 0; i--) {
       const blast = this.blasts[i];
       blast.age += dt;
-      const size = (2 + Math.sin(Math.min(1, blast.age / 1.4) * Math.PI * 0.6) * 20) * blast.strength;
-      blast.mesh.scale.set(size, size * 0.7, size);
-      blast.material.color.setRGB(lerp(5, 0.15, blast.age / 3), lerp(1.8, 0.08, blast.age / 3), lerp(0.35, 0.025, blast.age / 3));
-      blast.material.opacity = clamp(1 - blast.age / 3, 0, 1);
-      if (blast.age > 3) {
-        this.scene.remove(blast.mesh);
-        blast.material.dispose();
-        this.blasts.splice(i, 1);
-      }
+      const light=this.blastLights[i%2];
+      light.position.copy(blast.position).add(V3(0,3,0));
+      light.intensity=Math.max(light.intensity,22000*blast.strength*Math.exp(-blast.age*10));
+      if(blast.age>1.5)this.blasts.splice(i,1);
     }
+    for(let i=this.debris.length-1;i>=0;i--){const p=this.debris[i];p.life-=dt;p.velocity.y-=9.81*dt;p.mesh.position.addScaledVector(p.velocity,dt);p.mesh.rotation.x+=p.spin.x*dt;p.mesh.rotation.y+=p.spin.y*dt;
+      const ground=groundHeight(p.mesh.position.x,p.mesh.position.z);
+      if(p.mesh.position.y<ground+.1){p.mesh.position.y=ground+.1;p.velocity.y=Math.abs(p.velocity.y)*.22;p.velocity.multiplyScalar(.65);}
+      if(p.life<=0){this.scene.remove(p.mesh);this.debris.splice(i,1);}}
 
     // Wheel spray and tyre smoke.
     const groundSpeed = Math.hypot(flight.velocity.x, flight.velocity.z);
@@ -352,6 +394,8 @@ void main(){
           position: target.position.clone().add(V3(0, 3, 0)),
           velocity: V3(1.4, 5.5, 0.7), size: 7, alpha: 0.45, life: 9,
         });
+        this.fire.spawn({position:target.position.clone().add(V3((Math.random()-.5)*4,1,0)),velocity:V3(0,3,0),size:3,alpha:.65,life:.6});
+        this.sparksAt(target.position,V3(),2);
       }
     }
 
@@ -366,6 +410,12 @@ void main(){
     };
     this.smoke.update(dt, step);
     this.spray.update(dt, step);
+    this.dust.update(dt,step);
+    this.fire.update(dt,(p,d)=>{p.life-=d;p.position.addScaledVector(p.velocity,d);p.size+=d*7;p.alpha*=Math.exp(-d*3.8);return p.life>0;});
+    this.sparks.update(dt,(p,d)=>{p.life-=d;p.velocity.y-=9.81*d;p.velocity.multiplyScalar(Math.exp(-d*.35));p.position.addScaledVector(p.velocity,d);p.alpha=Math.min(1,p.life*2);return p.life>0&&p.position.y>groundHeight(p.position.x,p.position.z);});
+    let shadows=0;const shadowMatrix=new THREE.Matrix4();
+    for(const target of this.targets){if(!target.destroyed)continue;shadowMatrix.makeScale(26,1,32);shadowMatrix.setPosition(target.position.x+5,groundHeight(target.position.x,target.position.z)+.08,target.position.z+7);this.smokeShadow.setMatrixAt(shadows++,shadowMatrix);}
+    this.smokeShadow.count=shadows;this.smokeShadow.instanceMatrix.needsUpdate=true;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
   }
 
@@ -373,8 +423,10 @@ void main(){
     for (const bomb of this.bombs) this.scene.remove(bomb.mesh);
     this.bombs.length = 0;
     this.shots.length = 0;
-    for (const blast of this.blasts) { this.scene.remove(blast.mesh); blast.material.dispose(); }
     this.blasts.length = 0;
+    for(const p of this.debris)this.scene.remove(p.mesh);this.debris.length=0;
+    for(const l of this.blastLights)l.intensity=0;
+    this.fire.clear();this.dust.clear();this.sparks.clear();this.smokeShadow.count=0;
     this.smoke.clear();
     this.spray.clear();
     this.tracerMesh.count = 0;

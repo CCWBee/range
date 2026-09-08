@@ -19,6 +19,7 @@ export class ChaseCamera {
     this.localOffset = V3(0, 6.5, 24);
     this.localVelocity = V3();
     this.lookDirection = V3(0, 0, -1);
+    this.viewForward = V3(0, 0, -1);
     this.noisePhase = 0;
     this.scratch = { desired: V3(), local: V3(), look: V3(), up: V3() };
   }
@@ -26,7 +27,7 @@ export class ChaseCamera {
   toggle() { this.mode = 1 - this.mode; }
 
   // running false holds the pre-start pose: a low three-quarter view of the parked aircraft.
-  update(dt, flight, aim, running, snap = false) {
+  update(dt, flight, aim, running, snap = false, input = null) {
     const camera = this.camera;
     const { forward, up } = flight.basis();
     const speed = flight.velocity.length();
@@ -39,6 +40,20 @@ export class ChaseCamera {
     if (this.smoothForward.lengthSq() < 1e-6) this.smoothForward.copy(forward);
     this.smoothForward.normalize();
     const fs = this.smoothForward;
+    let viewTarget = fs.clone();
+    if (aim?.direction && !input?.freeLook && !input?.returningLook) {
+      const angle = fs.angleTo(aim.direction);
+      const weight = lerp(.15, .88, THREE.MathUtils.smoothstep(angle, .25, 1.1));
+      const orbit = new THREE.Quaternion().setFromUnitVectors(fs, aim.direction);
+      orbit.slerp(new THREE.Quaternion(), 1 - weight);
+      viewTarget.applyQuaternion(orbit);
+    }
+    if (snap) this.viewForward.copy(viewTarget);
+    else {
+      const rotation = new THREE.Quaternion().setFromUnitVectors(this.viewForward, viewTarget);
+      rotation.slerp(new THREE.Quaternion(), Math.exp(-dt * 7));
+      this.viewForward.applyQuaternion(rotation).normalize();
+    }
 
     if (!running) {
       camera.position.copy(flight.position).add(V3(13, 4.2, 21));
@@ -53,7 +68,7 @@ export class ChaseCamera {
 
     const distance = (this.mode ? 38 : 24) + 4 * clamp(speed / 300, 0, 1);
     const height = this.mode ? 8 : 4.8;
-    s.desired.copy(fs).multiplyScalar(-distance).addScaledVector(WORLD_UP, height);
+    s.desired.copy(this.viewForward).multiplyScalar(-distance).addScaledVector(WORLD_UP, height);
     // Load factor pulls the camera down and back, 0.35 m per g beyond one.
     const pull = clamp(flight.load - 1, -3, 8) * 0.35;
     s.desired.addScaledVector(WORLD_UP, -pull).addScaledVector(fs, -pull);
@@ -82,12 +97,9 @@ export class ChaseCamera {
     const floor = groundHeight(camera.position.x, camera.position.z) + 2.7;
     if (camera.position.y < floor) camera.position.y = floor;
 
-    // Look ahead along the path, drawn 15 per cent of the way toward the aim.
-    this.lookDirection.copy(fs);
-    if (aim && aim.direction) {
-      const blend = this.lookDirection.clone().lerp(aim.direction, 0.15);
-      if (blend.lengthSq() > 1e-6) this.lookDirection.copy(blend.normalize());
-    }
+    // The view follows large mouse requests around the aircraft, while the aircraft still has
+    // to turn under its own lift. Small corrections keep the familiar view down the flight path.
+    this.lookDirection.copy(this.viewForward);
     // Keep the optical axis on the requested direction. Looking at a point ahead of the
     // aircraft from an elevated camera introduces a permanent downward aiming error.
     s.look.copy(camera.position).addScaledVector(this.lookDirection, 1000);
@@ -95,6 +107,22 @@ export class ChaseCamera {
     if (s.up.lengthSq() < 1e-6) s.up.copy(WORLD_UP);
     camera.up.copy(s.up).normalize();
     camera.lookAt(s.look);
+
+    // C orbits the view without changing the instructor's saved world direction.
+    if (input) {
+      if (!input.freeLook) input.look.multiplyScalar(Math.exp(-dt * 9));
+      if (input.look.length() < .002) { input.look.set(0,0); input.returningLook=false; }
+      if (input.look.lengthSq() > 0) {
+        const orbit = camera.position.clone().sub(flight.position);
+        orbit.applyAxisAngle(WORLD_UP, -input.look.x);
+        const right = WORLD_UP.clone().cross(orbit).normalize();
+        orbit.applyAxisAngle(right, input.look.y);
+        camera.position.copy(flight.position).add(orbit);
+        camera.position.y=Math.max(camera.position.y,groundHeight(camera.position.x,camera.position.z)+2.7);
+        camera.up.copy(WORLD_UP);
+        camera.lookAt(flight.position.clone().addScaledVector(fs,3));
+      }
+    }
 
     const fov = lerp(50, 58, clamp(speed / 300, 0, 1));
     camera.fov = snap ? fov : lerp(camera.fov, fov, 1 - Math.exp(-dt * 2));

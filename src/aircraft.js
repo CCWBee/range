@@ -12,7 +12,7 @@ const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = THREE.MathUtils.clamp;
 
 // Body positions for the parts the library does not place for us.
-const PYLONS = [[-2.2, -0.67, 0.3], [2.2, -0.67, 0.3], [-2.2, -0.67, 2.2], [2.2, -0.67, 2.2]];
+const PYLONS = [[-1.85, -0.80, 0.45], [1.85, -0.80, 0.45], [-2.85, -0.57, 1.25], [2.85, -0.57, 1.25]];
 const WINGTIPS = [[-5.35, -0.05, 3.6], [5.35, -0.05, 3.6]];
 
 const FLAME_FRAGMENT = `
@@ -149,6 +149,12 @@ export class Aircraft {
       this.root.add(bomb);
       this.stores.push(bomb);
     }
+    this.addPart('jet_detail');
+    this.missileStores=[];
+    if(this.library.has('sidewinder'))for(const side of [-1,1]){
+      const missile=this.library.asset('sidewinder');missile.position.set(side*3.68,-.49,1.15);
+      missile.traverse(o=>{if(o.isMesh)o.castShadow=true;});this.root.add(missile);this.missileStores.push(missile);
+    }
   }
 
   buildFlames() {
@@ -162,10 +168,20 @@ export class Aircraft {
     const geometry = this.library.geometries.flame;
     if (!geometry) return;
     for (const x of [-0.55, 0.55]) {
-      const flame = this.library.asset('flame', this.flameMaterial);
+      // Each nozzle has its own object space, including the animated plume length.
+      const material = this.flameMaterial.clone();
+      const flame = this.library.asset('flame', material);
+      flame.userData.material = material;
       flame.position.set(x, -0.1, 8.7);
       flame.scale.set(1, 1, 5);
-      flame.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+      flame.traverse((o) => {
+        if (!o.isMesh) return;
+        o.frustumCulled = false;
+        o.onBeforeRender = (_renderer, _scene, camera) => {
+          material.uniforms.eyeLocal.value.copy(camera.position);
+          o.worldToLocal(material.uniforms.eyeLocal.value);
+        };
+      });
       this.root.add(flame);
       this.flames.push(flame);
     }
@@ -237,7 +253,7 @@ export class Aircraft {
         .replace('#include <dithering_fragment>', '#include <dithering_fragment>\ngl_FragColor.a*=pow(max(0.,1.-length(uvp-.5)*2.),1.6);');
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec2 uvp;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nuvp=position.xy+.5;');
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nuvp=position.xz+.5;');
     };
     const geometry = new THREE.PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
@@ -313,6 +329,8 @@ export class Aircraft {
     }
     for (const flame of this.flames || []) {
       flame.visible = power > 0.01;
+      flame.userData.material.uniforms.time.value = elapsed;
+      flame.userData.material.uniforms.power.value = power;
       const length = 1.1 + power * 2.0 + Math.sin(elapsed * 77) * 0.08;
       flame.scale.z = length;
       flame.position.z = 6.2 + length / 2;
@@ -350,4 +368,6 @@ export class Aircraft {
   }
 
   resetStores() { for (const store of this.stores) store.visible = true; }
+  releaseMissile(index){const store=this.missileStores[index];if(!store)return this.root.localToWorld(V3(0,-1,0));store.visible=false;return store.getWorldPosition(V3());}
+  resetMissiles(){for(const store of this.missileStores||[])store.visible=true;}
 }

@@ -5,6 +5,7 @@
 // Every element is an instrument with a job. Nothing here is a badge, a pill or a decorative dot.
 import * as THREE from '../vendor/three.module.js';
 import { bombStep } from '../physics.js';
+import { clearSight, guidedBombStep } from './engagement.js';
 
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -34,6 +35,7 @@ export class Hud {
     };
     this.crashShown = false;
     this.scratch = V3();
+    this.targetMarks=new Map();
   }
 
   show() { this.el.hud.classList.remove('hidden'); }
@@ -79,13 +81,15 @@ export class Hud {
 
     el.gear.textContent = flight.gearPosition > 0.01 && flight.gearPosition < 0.99
       ? 'GEAR IN TRANSIT' : flight.gear ? 'GEAR DOWN' : 'GEAR UP';
-    el.weapons.textContent = `GUN ${flight.rounds} · BOMBS ${flight.bombs}`;
+    const engagement=effects.engagement;
+    el.weapons.textContent = `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · AIM-9 ${engagement?.remaining ?? 0}`;
     el.instructor.textContent = instructor.mode === 'manual' ? 'INSTRUCTOR OFF'
       : instructor.state.stallGuard > 0.05 ? 'STALL GUARD' : 'INSTRUCTOR ON';
 
     this.updateObjective(flight, effects);
     this.updateHint(flight, input, effects, options);
     this.updateMarkers(flight, camera, input, effects);
+    if(engagement)this.updateEngagement(flight,camera,input,engagement);
 
     if (flight.crashed && !this.crashShown) {
       this.crashShown = true;
@@ -126,10 +130,10 @@ export class Hud {
       hint = 'Press R to fly the sortie again.';
     } else if (flight.landed && flight.onGround) {
       hint = speed > 4
-        ? 'Down. Hold X for the brakes and S to bring the engines back to idle.'
+        ? 'Down. Hold Ctrl to idle, then keep holding it for the wheel brakes.'
         : 'Sortie complete, aircraft recovered. Press R to fly it again.';
     } else if (flight.onGround && !flight.landed) {
-      if (speed < 3) hint = 'Line up on 36. Hold W to advance the throttle; reheat lights past 100 per cent.';
+      if (speed < 3) hint = 'Line up on 36. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
       else if (knots < 130) hint = 'Accelerating. Keep the nose wheel straight with Q and E.';
       else if (knots < 145) hint = 'Rotate at 140 knots: raise the circle above the centre and hold it there.';
       else hint = 'Airborne shortly. Press G once the wheels are clear.';
@@ -138,14 +142,14 @@ export class Hud {
     } else if (flight.stall || flight.alpha > 0.28) {
       hint = 'High angle of attack. Lower the circle and let the speed build.';
     } else if (rangeDistance < 2600 && flight.bombs > 0) {
-      hint = 'Range ahead. Space or the left mouse button fires the gun; B releases a bomb on the diamond.';
+      hint = 'Range ahead. End selects a target; L designates it. Press 2 to release a Paveway.';
     } else if (rangeDistance < 2600) {
       hint = 'Bombs gone. Turn back to the airfield on 180.';
     } else if (effects && (effects.rangeHit > 0 || flight.bombs === 0)) {
       const height = flight.position.y;
       if (!flight.gear && height < 700) hint = 'Gear down at 180 knots with G, then hold the threshold in the circle.';
       else if (flight.gear && height < 60) hint = 'Flare: bring the circle to the horizon and let the speed decay onto the runway.';
-      else hint = 'Return to runway 36. Descend on the approach bars, X slows you down.';
+      else hint = 'Return to runway 36. Descend on the approach bars, B slows you down.';
     } else if (flight.position.x > 900) {
       hint = 'Following the coast. Bank with the mouse or hold A and D.';
     } else {
@@ -155,6 +159,8 @@ export class Hud {
       hint = 'Leaving the coastal box. Turn back towards the airfield.';
     }
     this.el.hint.textContent = hint;
+    if(effects.engagement?.noticeTime>0)this.el.hint.textContent=effects.engagement.notice;
+    else if(input.freeLook)this.el.hint.textContent='FREE LOOK · release C to return to the flight view';
   }
 
   updateMarkers(flight, camera, input, effects) {
@@ -166,7 +172,8 @@ export class Hud {
 
     // The reticle sits at the cursor, and the instructor steers the flight-path marker to it.
     const cursor = input.cursorScreen();
-    this.place(el.reticle, { x: cursor.x, y: cursor.y }, input.locked);
+    this.place(el.reticle, { x: cursor.x, y: cursor.y }, input.locked&&!input.freeLook&&!input.returningLook);
+    el.reticle.setAttribute('stroke-dasharray', input.aimOffscreen ? '4 3' : 'none');
 
     // The nose cross is the projected body forward.
     const { forward } = flight.basis();
@@ -188,18 +195,45 @@ export class Hud {
     const pipper = this.project(gunPoint, camera);
     this.place(el.pipper, pipper, !!pipper && !flight.onGround);
 
-    // The impact diamond runs the same bombStep the release uses, so it never lies.
+    // Prediction uses the same guidance and ballistics as a released store.
     let diamond = null;
     if (!flight.onGround && flight.bombs > 0 && flight.position.y < 1600 && !flight.crashed) {
       const predicted = {
         position: flight.position.clone().addScaledVector(flight.basis().up, -0.7),
         velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
+        guided: true, age: 0,
       };
-      for (let i = 0; i < 2400; i++) if (bombStep(predicted, 1 / 60)) break;
+      for (let i = 0; i < 2400; i++) if (guidedBombStep(predicted, effects.engagement?.laser, 1 / 60)) break;
       diamond = this.project(predicted.position, camera);
     }
     this.place(el.bombAim, diamond, !!diamond);
   }
 
   setFps(text) { this.el.fps.textContent = text; }
+
+  updateEngagement(flight,camera,input,e){
+    const svg=this.el.markers,ns='http://www.w3.org/2000/svg';
+    for(const t of [...e.effects.targets,...e.airTargets]){
+      let g=this.targetMarks.get(t);
+      if(!g){
+        g=document.createElementNS(ns,'g');g.setAttribute('class','target-mark');
+        g.innerHTML='<path d="M-8,-14 H8"/><text y="-23" text-anchor="middle"></text><text y="1" text-anchor="middle" class="target-distance"></text>';
+        svg.appendChild(g);this.targetMarks.set(t,g);
+      }
+      const distance=flight.position.distanceTo(t.position),p=this.project(t.position.clone().add(V3(0,t.kind==='air'?5:7,0)),camera);
+      const visible=!t.destroyed&&distance<7500&&p&&p.x>25&&p.x<innerWidth-25&&p.y>110&&p.y<innerHeight-180&&clearSight(flight.position,t.position.clone().add(V3(0,2,0)));
+      this.place(g,p,!!visible);
+      if(visible){g.children[0].setAttribute('d',`M-${8*t.hp/t.maxHp},-14 H${8*t.hp/t.maxHp}`);g.children[1].textContent=t.name;g.children[2].textContent=`${(distance/1000).toFixed(2)} KM`;g.setAttribute('opacity',t===e.selected?'1':'.64');}
+    }
+    const s=e.seeker,nose=this.project(flight.position.clone().addScaledVector(flight.basis().forward,1000),camera);
+    this.place($('seekerEnvelope'),nose,!!nose&&s.enabled&&!input.freeLook);
+    const head=this.project(flight.position.clone().addScaledVector(s.direction,1000),camera);
+    this.place($('seekerHead'),head,!!head&&s.enabled&&!input.freeLook);
+    $('seekerHead').setAttribute('stroke',s.locked?'#f09676':'#e5dfcd');
+    $('seekerEnvelope').querySelector('circle').setAttribute('r',Math.tan(18*Math.PI/180)/Math.tan(camera.fov*Math.PI/360)*innerHeight/2);
+    const laser=this.project(e.laser.point,camera);this.place($('laserMark'),laser,!!laser&&e.laser.active);
+    $('weaponState').textContent=s.enabled?(s.warm<1?'SEEKER WARMING':s.locked?'HEAT LOCK':s.target?'ACQUIRING':'SEEKER SEARCH'):e.laser.active?'LASER ON':'WEAPONS READY';
+    $('weaponState').classList.toggle('locked',s.locked);
+    $('laserState').textContent=e.laser.active?'LTD · ON':'LTD · OFF';
+  }
 }

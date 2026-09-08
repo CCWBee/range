@@ -182,6 +182,8 @@ export class World {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.FogExp2(0x7e8b91, 0.000105);
     this.time = 0;
+    this.blastImpulse={value:new THREE.Vector4(0,0,100,0)};
+    this.windTime={value:0};
     this.animated = [];
     this.billboards = [];
     this.quadGeometry = this.geometryOf('quad') || new THREE.PlaneGeometry(1, 1);
@@ -242,9 +244,9 @@ void main(){vec3 d=normalize(direction);
   // ------------------------------------------------------------------------- lighting and shadows
 
   buildLighting() {
-    this.scene.add(new THREE.HemisphereLight(0xb9c6d3, 0x2f3630, 1.65));
+    this.scene.add(new THREE.HemisphereLight(0xb9c6d3, 0x41453b, 1.9));
     const make = (footprint, height, distance, bias, normalBias) => {
-      const light = new THREE.DirectionalLight(0xd8d8ce, 0.07);
+      const light = new THREE.DirectionalLight(0xe5ddd0, 0.42);
       light.castShadow = true;
       light.shadow.mapSize.set(2048, 2048);
       // The shadow camera is sized by ground footprint: a square of side W seen from 11 degrees
@@ -258,7 +260,7 @@ void main(){vec3 d=normalize(direction);
       camera.near = 1; camera.far = distance * 2 + footprint;
       light.shadow.bias = bias;
       light.shadow.normalBias = normalBias;
-      light.shadow.radius = 3;
+      light.shadow.radius = 4;
       light.userData.distance = distance;
       this.scene.add(light);
       this.scene.add(light.target);
@@ -337,6 +339,10 @@ void main(){
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    // Without UVs the base moor texture sampled a single texel across the whole landscape.
+    const terrainUv=new Float32Array(nx*nz*2);
+    for(let i=0;i<nx*nz;i++){terrainUv[i*2]=positions[i*3]/60;terrainUv[i*2+1]=positions[i*3+2]/60;}
+    geometry.setAttribute('uv',new THREE.BufferAttribute(terrainUv,2));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -417,7 +423,7 @@ void main(){
       };
       return material;
     };
-    this.concreteMaterial = surface(concrete, concreteNormal, concrete ? 0x6b7278 : 0x5c6268, true);
+    this.concreteMaterial = surface(concrete, concreteNormal, concrete ? 0x929da6 : 0x5c6268, true);
     this.tarmacMaterial = surface(tarmac || concrete, concreteNormal, tarmac ? 0x8b9095 : 0x40464a, false);
 
     const surfaces = [
@@ -667,6 +673,15 @@ void main(){
         map, color: map ? tint : new THREE.Color(tint).multiplyScalar(0.6),
         alphaTest: 0.42, transparent: false, side: THREE.DoubleSide, roughness: 0.95, metalness: 0,
       });
+      material.onBeforeCompile=(shader)=>{
+        shader.uniforms.windTime=this.windTime;shader.uniforms.blastImpulse=this.blastImpulse;
+        shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nuniform float windTime;uniform vec4 blastImpulse;')
+          .replace('#include <begin_vertex>',`#include <begin_vertex>
+ vec2 centre=instanceMatrix[3].xz;float tip=position.y*position.y;
+ transformed.x+=sin(windTime*1.8+centre.x*.04+centre.y*.02)*.12*tip;
+ float dist=length(centre-blastImpulse.xy);float wave=exp(-pow((dist-blastImpulse.z*55.)/12.,2.))*exp(-blastImpulse.z*.5)*step(dist,blastImpulse.w*2.);
+ transformed.xz+=normalize(centre-blastImpulse.xy+vec2(.001))*wave*.8*tip;`);
+      };
       const matrix = new THREE.Matrix4();
       const quaternion = new THREE.Quaternion();
       const scale = V3();
@@ -808,6 +823,7 @@ void main(){
 
   update(dt, flight, camera, elapsed) {
     this.time = elapsed;
+    this.windTime.value=elapsed;this.blastImpulse.value.z+=dt;
     this.oceanMaterial.uniforms.time.value = elapsed;
     for (const material of this.cloudMaterials) material.uniforms.time.value = elapsed;
     this.sky.position.copy(camera.position);
