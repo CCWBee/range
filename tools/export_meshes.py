@@ -22,6 +22,8 @@ def material(m):
          'roughness': float(m.get('roughness', bs.inputs['Roughness'].default_value if bs else .6))}
     if m.name == 'airframe':
         d.update(colour=[.92,.96,1], metallic=.35, roughness=.42, map='airframe', normalMap='airframe_normal', grimeMap='grime', uvScale=2)
+    if m.name == 'raf_airframe':
+        d.update(colour=[1,1,1], metallic=.22, roughness=.48, map='raf_typhoon_skin', bumpMap='raf_typhoon_bump', bumpScale=.018, uvScale=1)
     if m.name == 'hangar': d.update(colour=[.65,.72,.72], map='corrugated', uvScale=1)
     manifest['materials'][m.name] = d
     return m.name
@@ -52,7 +54,7 @@ for coll in scene.collection.children:
                 world = o.matrix_world @ me.vertices[vi].co
                 pos = world - point
                 norm = (normal_matrix @ (me.vertices[vi].normal if me.polygons[tri.polygon_index].use_smooth else tri.normal)).normalized()
-                if coll.name in ('sky','quad','flame','blast') and uv_layer:
+                if (o.get('preserve_uv', False) or coll.name in ('sky','quad','flame','blast')) and uv_layer:
                     uv = tuple(uv_layer.data[li].uv)
                 elif coll.name in ('pavement','runway','taxiway','apron','runway_markings','markings'):
                     uv = (world.x,world.z)

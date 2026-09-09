@@ -62,6 +62,24 @@ export class Aircraft {
   }
 
   // A part with a hinge becomes a group at the pivot point; without one it is added at the origin.
+  setSkin(name) {
+    const stems = { grey: 'raf_typhoon_skin', heritage: 'raf_typhoon_heritage' };
+    const texture = stems[name] && this.library.texture(stems[name]);
+    const material = this.library.materials.raf_airframe;
+    if (!texture || !material?.map) return false;
+    this.skinMaps ||= { grey: material.map };
+    if (!this.skinMaps[name]) {
+      const map = this.skinMaps.grey.clone();
+      map.image = texture.image;
+      map.needsUpdate = true;
+      this.skinMaps[name] = map;
+    }
+    material.map = this.skinMaps[name];
+    material.needsUpdate = true;
+    this.skinName = name;
+    return true;
+  }
+
   addPart(name, parent = this.root) {
     if (!this.library.has(name)) return null;
     const group = this.library.asset(name);
@@ -223,7 +241,7 @@ export class Aircraft {
 
   buildCondensation() {
     const material = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, blending: THREE.NormalBlending,
+      transparent: true, depthWrite: false, blending: THREE.NormalBlending, side: THREE.DoubleSide,
       uniforms: { opacity: { value: 0 } },
       vertexShader: 'varying vec2 uvp;void main(){uvp=position.xy+.5;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
       fragmentShader: 'varying vec2 uvp;uniform float opacity;void main(){float d=length(uvp-.5)*2.;gl_FragColor=vec4(vec3(.92,.95,.97),pow(max(0.,1.-d),1.8)*opacity);}',
@@ -233,7 +251,10 @@ export class Aircraft {
     for (const [x, y, z, s] of [[-2.6, 0.15, 2.2, 3.4], [2.6, 0.15, 2.2, 3.4], [0, 1.1, -1.6, 2.2]]) {
       const mesh = new THREE.Mesh(this.quadGeometry, material);
       mesh.position.set(x, y, z);
+      // The exported quad is XY. Lay it over the wing in XZ, with its length aft.
+      mesh.rotation.x = -Math.PI / 2;
       mesh.scale.setScalar(s);
+      mesh.userData.base = s;
       mesh.frustumCulled = false;
       this.root.add(mesh);
       this.condensation.push(mesh);
@@ -318,7 +339,7 @@ export class Aircraft {
     }
 
     // Reheat, driven by the lit fraction rather than the raw throttle.
-    const power = flight.reheat;
+    const power = flight.crashed ? 0 : flight.reheat;
     if (this.flameMaterial) {
       this.flameMaterial.uniforms.time.value = elapsed;
       this.flameMaterial.uniforms.power.value = power;
@@ -345,9 +366,13 @@ export class Aircraft {
     if (this.landingLight) this.landingLight.intensity = gp * 70;
 
     // Condensation over the wing roots and the canopy when the aircraft is pulling hard and fast.
-    this.condensationMaterial.uniforms.opacity.value = flight.condensation * 0.6;
+    this.condensationMaterial.uniforms.opacity.value = flight.crashed ? 0 : flight.condensation * 0.6;
     const spread = 1 + clamp(flight.qbar / 30000, 0, 1) * 0.8;
-    for (const mesh of this.condensation) mesh.scale.setScalar(mesh.userData.base || (mesh.userData.base = mesh.scale.x) * spread);
+    const airflow = flight.velocity.clone().applyQuaternion(flight.attitude.clone().invert()).normalize();
+    for (const mesh of this.condensation) {
+      mesh.rotation.set(-Math.PI / 2 + Math.atan2(airflow.y, -airflow.z), 0, 0);
+      mesh.scale.set(mesh.userData.base * spread, mesh.userData.base * (1.3 + spread * .6), 1);
+    }
 
     // Contact shadow, fading out as the aircraft climbs away from the ground.
     const ground = groundHeight(flight.position.x, flight.position.z);

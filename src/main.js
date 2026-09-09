@@ -75,6 +75,7 @@ function start() {
   $('intro').classList.add('hidden');
   $('veil').classList.add('hidden');
   $('buttons').classList.remove('hidden');
+  $('buttons').prepend($('skinControl'));
   hud.show();
   audio.start();
   chase.update(1 / 60, flight, null, true, true);
@@ -123,6 +124,7 @@ $('start').onclick = start;
 $('helpToggle').onclick = () => hud.toggleHelp();
 $('pauseButton').onclick = () => { input.setPaused(true); input.exitLock(); };
 $('sound').onclick = () => { $('sound').textContent = audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON'; };
+$('skinChoice').onchange = (event) => aircraft.setSkin(event.target.value);
 
 window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
@@ -145,6 +147,8 @@ function frame(dt, stepSim) {
       const keys = input.commands(flight);
       const cmd = instructor.update(STEP, flight, aim, keys);
       flight.step(STEP, cmd);
+      // Releasing direct pitch resumes mouse steering along the newly chosen flight path.
+      if (Math.abs(keys.pitch) > .05 && input.worldAim) input.worldAim.copy(flight.velocity).normalize();
       engagement.update(STEP,flight,aim);
       accumulator -= STEP;
       guard++;
@@ -161,8 +165,16 @@ function frame(dt, stepSim) {
   elapsed += dt;
 
   chase.update(dt, flight, aim, running, false, input);
+  camera.updateMatrixWorld(true);
+  input.projectAim(camera);
+  audio.setGun(stepSim && input.gunFiring() && flight.rounds > 0 && !flight.crashed,flight,camera);
   aircraft.update(dt, flight, camera, elapsed);
   world.update(dt, flight, camera, elapsed);
+
+  if (running) {
+    hud.updateMarkers(flight, camera, input, effects);
+    hud.updateEngagement(flight, camera, input, engagement);
+  }
 
   hudTimer += dt;
   if (running && hudTimer > 0.1) {
@@ -183,7 +195,7 @@ function loop(now) {
   const dt = Math.min(raw, 0.06);
   // The simulation runs only while the pointer is locked to the canvas, which is what makes the
   // pause state and the lock state impossible to disagree.
-  const stepSim = running && !input.paused && input.locked && !flight.crashed;
+  const stepSim = running && !input.paused && input.locked;
   frame(dt, stepSim);
   if (running && hudTimer < 0.02 && frameTimes.length > 8) {
     const window90 = frameTimes.slice(-90);

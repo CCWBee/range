@@ -1,5 +1,59 @@
 # STATE
 
+## 9 September 2026 skin and publishing update
+
+The RAF FBX is integrated with its supplied 2048px grey atlas and bump map. The heritage
+skin is selectable and now includes the upper fuselage and canards. Its generated source is
+1254px; the generator did not deliver a genuine upscale. Both variants share the original UVs.
+The updated heritage skin was inspected on the model in a Blender render.
+
+GitHub Pages creation returned HTTP 422: the current plan does not support Pages for this
+private repository. The prepared workflow deploys only when repository variable PAGES_ENABLED
+is true. Visibility remains private pending the user's decision. The earlier status notes below
+are retained as history; browser visual, listening and hardware FPS checks remain outstanding.
+
+## 9 September 2026 update
+
+Canonical project: `E:\claude-projects\range`, based on `8299af9`. The existing remote is
+`https://github.com/CCWBee/range.git`. This refinement remains uncommitted and unpushed.
+
+Jersey elevation and 795 OpenStreetMap main-road sections are bundled offline. The airport centre
+and runway bearing follow the NATS EGJJ chart; the longer runway and military buildings remain
+adapted for gameplay. Blender now contains the terrain and 354 disjoint pavement cells. The
+previous scene is preserved under `_archive/RANGE-before-jersey-20260909-085410.blend`.
+
+Controls now use I for help, U for the instructor and held Z for smooth zoom. World markers and
+the steering circle project after the camera update on every frame. Direct pitch takes priority;
+roll tuning is unchanged. Missiles use a moving-target proximity check, and destroyed aircraft
+retain momentum with continued fire and smoke. Gun audio uses one loop per sustained burst.
+
+Both `node tools/test_flight.mjs` and `node tools/test_engagement.mjs` passed with exit code 0.
+`python tools/build.py` passed with exit code 0: 13,817,117 bytes, `networkAssets: 0`.
+The ramp and help panel rendered before the final airport/roads export. Browser access then
+became unavailable. Final in-flight visual checks, flicker verification, audio listening and
+hardware FPS measurement remain open. No trustworthy FPS claim applies to this build.
+The replacement aircraft reference has not been supplied, so the current jet remains in use.
+
+The subsequent settlement pass adds 10,184 building footprints and 43 piers, breakwaters and
+groynes from OpenStreetMap. Heights are estimated where absent, so these are simplified buildings,
+not photogrammetry. Blender merges them into 88 spatial chunks; the library has 142 assets.
+The harbour geometry was inspected in a Blender render. The browser result and frame rate remain
+unverified. The offline bundle is approximately 30.4 MB after this addition. Source footprints and
+licence attribution are in `assets/settlement.json`; conversion scripts are `tools/build_settlement.py`
+and `tools/model_settlement.py`. These additions also remain uncommitted and unpushed.
+
+The coastline smoothing pass doubles the terrain grid to 513 by 513 samples at 39.0625 m
+spacing. Bilinear source sampling and one light separable smoothing pass reduce stepped coast
+edges and slopes. Rendering and collision use the same elevation data; Blender terrain has
+smooth normals, and settlement geometry was rebuilt against the updated ground. The harbour
+geometry was checked in `_archive/jersey-harbour-smoothed.png` in the original Codex folder.
+`node tools/test_flight.mjs` passed all flight and engagement checks with exit code 0.
+`python tools/build.py` passed with exit code 0: 32,763,940 bytes, `networkAssets: 0`.
+Browser control remains unavailable, so final in-game appearance and hardware FPS remain
+unverified. These changes remain uncommitted and unpushed.
+
+The notes below describe the earlier build and are retained as history.
+
 ## Where it stands
 
 6 September 2026. Baseline `9daab90` is the demo as the Codex session left it: flying, 144 fps at

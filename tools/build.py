@@ -14,7 +14,10 @@ three=three[:exports.start()]+'\nreturn {'+','.join(fields)+'};'
 manifest=json.loads((root/'assets/meshes.json').read_text())
 assert manifest['version']==2,'Release requires articulated Blender library'
 textures={}
-for stem in ['concrete','concrete_normal','sky','moor','tarmac','corrugated','grime','grass_tuft','gorse','tree_card','cloud_1','cloud_2','cloud_3','airframe','airframe_normal']:
+texture_stems=set(['concrete','concrete_normal','sky','moor','tarmac','corrugated','grime','grass_tuft','gorse','tree_card','cloud_1','cloud_2','cloud_3','airframe','airframe_normal','raf_typhoon_heritage'])
+for material in manifest['materials'].values():
+    texture_stems.update(material[key] for key in ('map','normalMap','bumpMap','ormMap','grimeMap') if key in material)
+for stem in sorted(texture_stems):
     path=next((root/'textures'/f'{stem}.{ext}' for ext in ['jpg','png'] if (root/'textures'/f'{stem}.{ext}').exists()),None)
     assert path, f'Missing texture {stem}'
     data=path.read_bytes();mime='image/jpeg' if path.suffix=='.jpg' else 'image/png'

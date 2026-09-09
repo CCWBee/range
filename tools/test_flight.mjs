@@ -6,6 +6,7 @@ import { Instructor, aimFromAngles } from '../control.js';
 import * as THREE from '../vendor/three.module.js';
 import { Input } from '../src/input.js';
 import { ChaseCamera } from '../src/camera.js';
+import { JERSEY } from '../src/jersey.js';
 
 const dt = 1 / 120;
 const DEG = 180 / Math.PI;
@@ -64,9 +65,9 @@ const takeoffInput = f => ({ throttle: 1, pitch: f.velocity.length() > 74 ? (f.b
   let impactTime = 0; for (; impactTime < 20; impactTime += dt) if (bombStep(b, dt)) break;
   assert(impactTime > 7 && impactTime < 9 && b.position.z < -900, 'Bomb must fall ballistically and retain forward velocity');
   const dive = Math.atan2(-b.velocity.y, -b.velocity.z) * DEG;
-  const water = { position: new THREE.Vector3(3000, 50, -4000), velocity: new THREE.Vector3(0, 0, 0) };
+  const water = { position: new THREE.Vector3(16000, 50, -4000), velocity: new THREE.Vector3(0, 0, 0) };
   let waterTime = 0; for (; waterTime < 20; waterTime += dt) if (bombStep(water, dt)) break;
-  assert(Math.abs(water.position.y + 7) < 0.5, 'A bomb over water impacts at sea level');
+  assert(Math.abs(water.position.y - JERSEY.seaLevel) < 0.5, 'A bomb over water impacts at sea level');
   pass('ballistic bomb', { impactTime: round(impactTime, 2), downrange: round(-b.position.z, 0), diveAngle: round(dive, 1), waterImpactY: round(water.position.y, 2) });
 }
 

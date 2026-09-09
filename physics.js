@@ -5,6 +5,7 @@
 // heading 000 is -Z; body +X right wing, +Y up, -Z nose. Aero signs: p roll right wing down,
 // q pitch nose up, r yaw nose right; q = omega.x, r = -omega.y, p = -omega.z.
 import * as THREE from './vendor/three.module.js';
+import { JERSEY } from './src/jersey.js';
 
 const clamp = THREE.MathUtils.clamp;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -92,7 +93,7 @@ export function coast(z) {
   return 1600 + 350 * Math.sin(0.0008 * z) + 180 * Math.sin(0.0018 * z);
 }
 
-function naturalHeight(x, z) {
+function legacyNaturalHeight(x, z) {
   const d = x - coast(z);
   if (d <= -250) {
     const ax = Math.abs(x);
@@ -104,12 +105,20 @@ function naturalHeight(x, z) {
   return -7 + clamp(0.012 * (d - 1800), 0, 8);
 }
 
+function naturalHeight(x,z) {
+  const u=(x-JERSEY.originX)/JERSEY.spacing,v=(z-JERSEY.originZ)/JERSEY.spacing;
+  if(u<0||v<0||u>=JERSEY.nx-1||v>=JERSEY.nz-1)return JERSEY.seaLevel-12;
+  const i=Math.floor(u),j=Math.floor(v),a=j*JERSEY.nx+i,fx=u-i,fz=v-j,h=JERSEY.heights;
+  return (h[a]*(1-fx)+h[a+1]*fx)*(1-fz)+(h[a+JERSEY.nx]*(1-fx)+h[a+JERSEY.nx+1]*fx)*fz;
+}
+
 // Ground height in metres: 0 on pavement, blended over 60 m outside it to the terrain formula.
 export function terrainHeight(x, z) {
   const dist = pavementDistance(x, z);
   if (dist === 0) return 0;
-  const h = naturalHeight(x, z);
-  return dist >= 60 ? h : h * smoothstep(dist, 0, 60);
+  const airfieldDistance = Math.hypot(Math.max(-850-x,0,x-600),Math.max(-2900-z,0,z-1700));
+  const h = -0.34 + (naturalHeight(x,z)+0.34)*smoothstep(airfieldDistance,0,600);
+  return dist >= 400 ? h : h * smoothstep(dist, 0, 400);
 }
 
 export function speedOfSound(h) {
@@ -198,6 +207,8 @@ export class Flight {
   setThrottle(value) { this.throttle = clamp(value, 0, 1.12); }
 
   crash(reason) {
+    if (this.crashed) return;
+    this.wreckVelocity = this.velocity.clone();
     this.crashed = true; this.crashReason = reason;
     this.velocity.set(0, 0, 0); this.omega.set(0, 0, 0);
   }
@@ -397,7 +408,7 @@ export class Flight {
 
     // Crashes that do not need a wheel.
     if (airframeLoad > 12 || airframeLoad < -5) this.crash('airframe');
-    else if (this.position.y < -7 && this.position.x > coast(this.position.z)) this.crash('water');
+    else if (this.position.y < JERSEY.seaLevel && terrainHeight(this.position.x,this.position.z) < JERSEY.seaLevel) this.crash('water');
     else {
       for (const tip of [NOSE_TIP, ...WINGTIPS]) {
         const pw = tip.clone().applyQuaternion(this.attitude).add(this.position);
@@ -436,6 +447,6 @@ export function bombStep(bomb, dt) {
   bomb.position.addScaledVector(bomb.velocity, dt);
   const { x, z } = bomb.position;
   let ground = terrainHeight(x, z);
-  if (x > coast(z)) ground = Math.max(ground, -7);
+  ground = Math.max(ground, JERSEY.seaLevel);
   return bomb.position.y <= ground;
 }

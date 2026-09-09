@@ -10,6 +10,10 @@ canvas{display:block;width:100%;height:100%;cursor:none}
 canvas.unlocked{cursor:crosshair}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible{outline:2px solid #d7e5ed;outline-offset:5px}
+select:focus-visible{outline:2px solid #d7e5ed;outline-offset:3px}
+#skinControl{display:flex;align-items:center;gap:8px;font-size:12px;color:#c4cfd6;margin-top:18px}
+#skinChoice{font:inherit;color:#eceded;background:#18232b;border:1px solid #64727a;padding:5px 8px}
+#buttons #skinControl{margin:0}
 .hidden{display:none!important}
 #veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(9,17,22,.6),transparent 58%)}
 #intro{position:absolute;top:12%;left:6%;width:min(380px,85vw)}
@@ -56,7 +60,8 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 #telemetry{gap:38px}#telemetry b{font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;font-size:30px;font-weight:300}
 #telemetry label{font-size:10px;color:#b2c0c7;letter-spacing:.12em}
 #systems{max-width:380px;font-size:11px;line-height:2}
-#help{width:370px;max-height:calc(100vh - 120px);overflow:auto;background:rgba(12,22,29,.97)}
+#help{width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 120px);overflow:auto;background:rgba(12,22,29,.97);font-size:12px;line-height:1.4;padding:18px;scrollbar-width:thin}
+#help dl{grid-template-columns:140px 1fr;gap:5px}
 @media(max-width:700px){
 #telemetry{gap:12px;left:18px;bottom:22px}#telemetry b{font-size:21px}#telemetry div{min-width:52px}
 #systems{right:18px;bottom:22px;font-size:10px}#brand,#objective{left:18px}
@@ -67,11 +72,11 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
 <div id="veil"></div>
-<div id="intro"><h1>RANGE</h1><p>North Sea. Last light.<br>One aircraft. A short sortie.<br>Bring it home.</p><button id="start" disabled>ENTER AIRCRAFT</button><small>Fly towards the mouse · Third-person view<br>Headphones recommended</small></div>
+<div id="intro"><h1>RANGE</h1><p>Jersey. Clearing skies.<br>One aircraft. A short sortie.<br>Bring it home.</p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><small>Fly towards the mouse · Third-person view<br>Headphones recommended</small></div>
 <div id="hud" class="hidden">
 <div id="brand">RANGE</div>
-<div id="location">NORTH SEA · 19:42</div>
-<div id="objective">RUNWAY 36 · DEPARTURE</div>
+<div id="location">JERSEY · CHANNEL ISLANDS</div>
+<div id="objective">RUNWAY 08 · DEPARTURE</div>
 <svg id="markers" aria-hidden="true">
  <g id="fpm" fill="none" stroke="#e6ecee" stroke-width="1" opacity="0.9">
   <circle cx="0" cy="0" r="7"></circle>
@@ -119,7 +124,7 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 </div>
 <div id="hint">Click to take the controls. The aircraft flies towards the circle.</div>
 </div>
-<div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">CONTROLS · H</button><button id="pauseButton">PAUSE · P</button></div>
+<div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">I to show controls</button><button id="pauseButton">PAUSE · P</button></div>
 <div id="help" class="hidden">
 <p>Fly towards the circle. The aircraft turns its flight path to it, and the instructor keeps you off the stall.</p>
 <dl>
@@ -139,13 +144,14 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 <dt>L / Num Lock / Delete</dt><dd>Laser on / off</dd>
 <dt>Alt + X</dt><dd>Sidewinder seeker on / off</dd>
 <dt>5 or /</dt><dd>Launch locked Sidewinder</dd>
-<dt>I</dt><dd>Instructor on or off</dd>
+<dt>U</dt><dd>Instructor on or off</dd>
+<dt>Hold Z</dt><dd>Zoom</dd>
 <dt>Hold C</dt><dd>Free look</dd>
 <dt>V</dt><dd>Chase distance</dd>
 <dt>R</dt><dd>Restart sortie</dd>
-<dt>H</dt><dd>This panel</dd>
+<dt>I / H</dt><dd>Show / hide controls</dd>
 <dt>P, Esc</dt><dd>Pause</dd>
-</dl></div>
+</dl><details><summary>Map credits</summary><p>Mapzen Terrain Tiles. Europe terrain produced using Copernicus data and information funded by the European Union (EU-DEM). SRTM and GMTED2010 courtesy of USGS; ETOPO1 NOAA. Roads, buildings and harbour geometry © OpenStreetMap contributors, ODbL 1.0 (openstreetmap.org/copyright). Building heights are estimated where not supplied. Horizontal scale 85%. Jersey Airport location and runway bearing follow the NATS aerodrome chart; runway length and airfield buildings are adapted for gameplay.</p></details></div>
 <div id="status"></div><div id="loading">Preparing aircraft and airfield…</div><div id="error" class="hidden"></div>
 <script type="module" src="src/main.js"></script>
 </body></html>

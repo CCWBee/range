@@ -10,7 +10,7 @@ import * as THREE from '../vendor/three.module.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const HELD = new Set([
-  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'KeyC', 'KeyB', 'Space',
+  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'KeyC', 'KeyZ', 'KeyB', 'Space',
   'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
 ]);
@@ -20,7 +20,7 @@ const ACTIONS = {
   Digit2: 'bomb', Digit3: 'bomb', KeyG: 'gear', KeyV: 'camera', KeyR: 'restart',
   Digit5: 'missile', Slash: 'missile', KeyL: 'laser', NumLock: 'laser', Delete: 'laser',
   End: 'target', Digit6: 'target', KeyT: 'target',
-  KeyH: 'help', KeyI: 'instructor', KeyP: 'pause',
+  KeyH: 'help', KeyI: 'help', KeyU: 'instructor', KeyP: 'pause',
 };
 
 export class Input {
@@ -167,6 +167,15 @@ export class Input {
       this.worldAim.applyAxisAngle(cameraRight, -this.pendingMouse.y * radiansPerPixel).normalize();
       this.pendingMouse.set(0, 0);
     }
+    this.projectAim(camera);
+    this.aimState.direction = this.worldAim;
+    this.aimState.active = true;
+    return this.aimState;
+  }
+
+  // Display the saved steering direction using this frame's final camera, including zoom.
+  projectAim(camera) {
+    if (!this.worldAim) return;
     const local = this.worldAim.clone().applyQuaternion(camera.quaternion.clone().invert());
     this.aimBehind = local.z >= 0;
     const focal = window.innerHeight / (2 * Math.tan(camera.fov * Math.PI / 360));
@@ -176,9 +185,6 @@ export class Input {
       else this.cursor.setLength(Math.max(window.innerWidth, window.innerHeight) * 2);
     }
     this.clampCursor();
-    this.aimState.direction = this.worldAim;
-    this.aimState.active = true;
-    return this.aimState;
   }
 
   // Where the reticle sits on screen, in pixels from the top left.

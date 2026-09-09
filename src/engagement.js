@@ -7,6 +7,15 @@ const V3=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const clamp=THREE.MathUtils.clamp;
 const DEG=Math.PI/180;
 
+// Closest approach of two moving points during one simulation step. The fuse is independent
+// of seeker lock: a seeker losing the target beside the nose must not disable the warhead.
+export function proximityPass(a0, a1, b0, b1, radius = 18) {
+  const relative = a0.clone().sub(b0);
+  const travel = a1.clone().sub(a0).sub(b1.clone().sub(b0));
+  const time = clamp(-relative.dot(travel) / Math.max(1e-12, travel.lengthSq()), 0, 1);
+  return relative.addScaledVector(travel, time).lengthSq() <= radius * radius ? time : null;
+}
+
 export function clearSight(a,b) {
   const p=V3();
   for(let i=1;i<28;i++) {p.lerpVectors(a,b,i/28);if(p.y<groundHeight(p.x,p.z)+.5)return false;}
@@ -114,15 +123,23 @@ export class Engagement {
     if(target.destroyed)return;
     target.hp-=damage;
     this.effects.sparksAt(point,target.velocity,10);
-    if(target.hp<=0){target.destroyed=true;target.engine=0;target.fall.copy(target.velocity);target.age=0;this.effects.explosion(target.position,.7);this.message('AIR TARGET DESTROYED');}
+    if(target.hp<=0){target.destroyed=true;target.engine=0;target.fall.copy(target.velocity);target.age=0;target.impacted=false;this.effects.explosion(target.position,1,target.velocity);this.message('AIR TARGET DESTROYED');}
   }
   update(dt,flight,aim){
     this.elapsed+=dt;this.noticeTime=Math.max(0,this.noticeTime-dt);
     for(const target of this.airTargets) {
+      target.previousPosition = target.position.clone();
       if(target.destroyed){
-        target.age+=dt;target.fall.y-=9.81*dt;target.position.addScaledVector(target.fall,dt);target.mesh.rotateZ(dt*.65);
-        if(target.mesh.visible && target.position.y<=groundHeight(target.position.x,target.position.z)+2){target.mesh.visible=false;this.effects.explosion(target.position,1.1);this.effects.addCrater(target.position,13);}
-        if(target.mesh.visible&&Math.random()<dt*20)this.effects.smoke.spawn({position:target.position.clone(),velocity:V3(2,5,0),size:6,alpha:.65,life:7});
+        target.age+=dt;
+        if (!target.impacted) {
+          target.fall.y-=9.81*dt;target.fall.multiplyScalar(Math.exp(-dt*.04));
+          target.position.addScaledVector(target.fall,dt);target.mesh.rotateZ(dt*.65);target.mesh.rotateX(dt*.24);
+          if(target.position.y<=groundHeight(target.position.x,target.position.z)+2){
+            target.position.y=groundHeight(target.position.x,target.position.z)+2;target.impacted=true;
+            this.effects.explosion(target.position,1.1);this.effects.addCrater(target.position,13);target.fall.set(0,0,0);
+          }
+        }
+        this.effects.burningTrail(target,target.fall,dt);
         continue;
       }
       const phase=this.elapsed*.095,old=target.position.clone();
@@ -148,14 +165,18 @@ export class Engagement {
     }
     if(this.laser.active && (!clearSight(flight.position,this.laser.point)||flight.position.distanceTo(this.laser.point)>7000)) {this.laser.active=false;this.message('LASER MASKED');}
     for(let i=this.missiles.length-1;i>=0;i--){
-      const m=this.missiles[i],before=m.position.clone(),targetBefore=m.target?.position.clone();
+      const m=this.missiles[i],before=m.position.clone();
       const expired=missileStep(m,m.target,dt);
       m.mesh.quaternion.setFromUnitVectors(V3(0,0,-1),m.velocity.clone().normalize());
       m.trail+=dt;
       if(m.age<3&&m.trail>.035){m.trail=0;this.effects.spray.spawn({position:m.position.clone(),velocity:V3(1,1,0),size:1.1,alpha:.5,life:2.7});}
-      const closest=targetBefore?new THREE.Line3(before,m.position).closestPointToPoint(targetBefore,true,V3()):null;
-      const hit=closest&&m.target&&!m.target.destroyed&&closest.distanceTo(targetBefore)<11;
-      if(hit)this.hitAir(m.target,10,m.position);
+      let hit = null;
+      if (m.age > .2) for (const target of this.airTargets) {
+        if (target.destroyed) continue;
+        const time = proximityPass(before, m.position, target.previousPosition || target.position, target.position);
+        if (time !== null) { hit = target; m.position.lerpVectors(before, m.position.clone(), time); break; }
+      }
+      if(hit)this.hitAir(hit,10,m.position);
       if(expired||hit){if(hit)this.effects.explosion(m.position,.65);this.scene.remove(m.mesh);this.missiles.splice(i,1);}
     }
     this.audio?.seeker?.(s.enabled,s.locked,!!s.target);

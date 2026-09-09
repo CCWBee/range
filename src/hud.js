@@ -6,6 +6,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { bombStep } from '../physics.js';
 import { clearSight, guidedBombStep } from './engagement.js';
+import { JERSEY } from './jersey.js';
 
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -40,7 +41,10 @@ export class Hud {
 
   show() { this.el.hud.classList.remove('hidden'); }
 
-  toggleHelp() { this.el.help.classList.toggle('hidden'); }
+  toggleHelp() {
+    const hidden = this.el.help.classList.toggle('hidden');
+    $('helpToggle').textContent = hidden ? 'I to show controls' : 'I to hide controls';
+  }
 
   setStatus(html) { this.el.status.innerHTML = html || ''; }
 
@@ -56,8 +60,12 @@ export class Hud {
 
   // Project a world point to screen pixels. Returns null when it is behind the camera.
   project(worldPoint, camera) {
+    // A caller may have orbited or zoomed since the last render. Projection must use that pose.
+    camera.updateWorldMatrix(true, false);
     this.scratch.copy(worldPoint).project(camera);
-    if (this.scratch.z > 1) return null;
+    if (!Number.isFinite(this.scratch.x) || !Number.isFinite(this.scratch.y)
+      || this.scratch.z > 1 || this.scratch.z < -1
+      || Math.abs(this.scratch.x) > 1 || Math.abs(this.scratch.y) > 1) return null;
     return {
       x: (this.scratch.x * 0.5 + 0.5) * window.innerWidth,
       y: (-this.scratch.y * 0.5 + 0.5) * window.innerHeight,
@@ -72,7 +80,7 @@ export class Hud {
     el.speed.textContent = Math.round(flight.ias * 1.94384);
     el.alt.textContent = Math.max(0, Math.round((flight.position.y - 1.645) * 3.28084));
     el.throttle.textContent = Math.round(flight.throttle * 100);
-    const heading = (Math.atan2(forward.x, -forward.z) * 180 / Math.PI + 360) % 360;
+    const heading = (Math.atan2(forward.x, -forward.z) * 180 / Math.PI + JERSEY.bearing + 360) % 360;
     el.heading.textContent = Math.round(heading % 360).toString().padStart(3, '0');
     el.load.textContent = flight.load.toFixed(1);
     el.aoa.textContent = Math.round(flight.alpha * 180 / Math.PI);
@@ -88,8 +96,6 @@ export class Hud {
 
     this.updateObjective(flight, effects);
     this.updateHint(flight, input, effects, options);
-    this.updateMarkers(flight, camera, input, effects);
-    if(engagement)this.updateEngagement(flight,camera,input,engagement);
 
     if (flight.crashed && !this.crashShown) {
       this.crashShown = true;
@@ -109,7 +115,7 @@ export class Hud {
     const targets = effects ? effects.targets.length : 0;
     const hits = effects ? effects.rangeHit : 0;
     this.el.objective.textContent = flight.grounded && !flight.landed
-      ? 'RUNWAY 36 · DEPARTURE'
+      ? 'RUNWAY 08 · DEPARTURE'
       : `AIRFIELD ${airfield.toFixed(1)} KM / ${bearing(AIRFIELD_CENTRE)}° · `
         + `RANGE ${range.toFixed(1)} KM / ${bearing(RANGE_CENTRE)}° · ${hits} / ${targets}`;
   }
@@ -133,7 +139,7 @@ export class Hud {
         ? 'Down. Hold Ctrl to idle, then keep holding it for the wheel brakes.'
         : 'Sortie complete, aircraft recovered. Press R to fly it again.';
     } else if (flight.onGround && !flight.landed) {
-      if (speed < 3) hint = 'Line up on 36. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
+      if (speed < 3) hint = 'Line up on 08. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
       else if (knots < 130) hint = 'Accelerating. Keep the nose wheel straight with Q and E.';
       else if (knots < 145) hint = 'Rotate at 140 knots: raise the circle above the centre and hold it there.';
       else hint = 'Airborne shortly. Press G once the wheels are clear.';
@@ -149,7 +155,7 @@ export class Hud {
       const height = flight.position.y;
       if (!flight.gear && height < 700) hint = 'Gear down at 180 knots with G, then hold the threshold in the circle.';
       else if (flight.gear && height < 60) hint = 'Flare: bring the circle to the horizon and let the speed decay onto the runway.';
-      else hint = 'Return to runway 36. Descend on the approach bars, B slows you down.';
+      else hint = 'Return to runway 08. Descend on the approach bars, B slows you down.';
     } else if (flight.position.x > 900) {
       hint = 'Following the coast. Bank with the mouse or hold A and D.';
     } else {
@@ -198,13 +204,17 @@ export class Hud {
     // Prediction uses the same guidance and ballistics as a released store.
     let diamond = null;
     if (!flight.onGround && flight.bombs > 0 && flight.position.y < 1600 && !flight.crashed) {
+      if (!this.bombPrediction || performance.now() - this.bombPredictionTime > 100) {
       const predicted = {
         position: flight.position.clone().addScaledVector(flight.basis().up, -0.7),
         velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
         guided: true, age: 0,
       };
       for (let i = 0; i < 2400; i++) if (guidedBombStep(predicted, effects.engagement?.laser, 1 / 60)) break;
-      diamond = this.project(predicted.position, camera);
+      this.bombPrediction = predicted.position;
+      this.bombPredictionTime = performance.now();
+      }
+      diamond = this.project(this.bombPrediction, camera);
     }
     this.place(el.bombAim, diamond, !!diamond);
   }
@@ -220,7 +230,10 @@ export class Hud {
         g.innerHTML='<path d="M-8,-14 H8"/><text y="-23" text-anchor="middle"></text><text y="1" text-anchor="middle" class="target-distance"></text>';
         svg.appendChild(g);this.targetMarks.set(t,g);
       }
-      const distance=flight.position.distanceTo(t.position),p=this.project(t.position.clone().add(V3(0,t.kind==='air'?5:7,0)),camera);
+      // Anchor at the rendered object's world origin. Keep the label's gap in screen pixels:
+      // adding world Y makes it drift sideways relative to the object when the view rotates.
+      const anchor = t.mesh ? t.mesh.getWorldPosition(V3()) : t.position;
+      const distance=flight.position.distanceTo(anchor),p=this.project(anchor,camera);
       const visible=!t.destroyed&&distance<7500&&p&&p.x>25&&p.x<innerWidth-25&&p.y>110&&p.y<innerHeight-180&&clearSight(flight.position,t.position.clone().add(V3(0,2,0)));
       this.place(g,p,!!visible);
       if(visible){g.children[0].setAttribute('d',`M-${8*t.hp/t.maxHp},-14 H${8*t.hp/t.maxHp}`);g.children[1].textContent=t.name;g.children[2].textContent=`${(distance/1000).toFixed(2)} KM`;g.setAttribute('opacity',t===e.selected?'1':'.64');}

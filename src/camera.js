@@ -13,7 +13,7 @@ const WORLD_UP = V3(0, 1, 0);
 
 export class ChaseCamera {
   constructor(aspect) {
-    this.camera = new THREE.PerspectiveCamera(51, aspect, 0.3, 65000);
+    this.camera = new THREE.PerspectiveCamera(51, aspect, 0.8, 65000);
     this.mode = 0;
     this.smoothForward = V3(0, 0, -1);
     this.localOffset = V3(0, 6.5, 24);
@@ -124,8 +124,9 @@ export class ChaseCamera {
       }
     }
 
-    const fov = lerp(50, 58, clamp(speed / 300, 0, 1));
-    camera.fov = snap ? fov : lerp(camera.fov, fov, 1 - Math.exp(-dt * 2));
+    const fov = input?.keys.has('KeyZ') ? 26 : lerp(50, 58, clamp(speed / 300, 0, 1));
+    camera.fov = snap ? fov : lerp(camera.fov, fov, 1 - Math.exp(-dt * 8));
     camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
   }
 }

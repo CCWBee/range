@@ -153,10 +153,11 @@ export class Instructor {
 
     // Keyboard on top, before the guard and the caps so they still win.
     const keyRoll = Math.abs(k.roll) > 0.05;
-    qDem += 0.6 * k.pitch * pull;
+    // Direct pitch takes precedence over a saved mouse target, avoiding opposed demands.
+    if (Math.abs(k.pitch) > .05) qDem = k.pitch * (k.pitch > 0 ? pull : push);
     if (qDem > 0) qDem *= 1 - guard;
     if (latched) qDem = Math.min(qDem, -0.15);
-    const alphaCap = 12 * (0.30 - alpha), gCap = 7 * G0 / V, negCap = -1.5 * G0 / V;
+    const alphaCap = 12 * (0.30 - alpha), gCap = 8 * G0 / V, negCap = -1.5 * G0 / V;
     state.alphaLimited = qDem > alphaCap;
     state.gLimited = qDem > gCap;
     qDem = Math.max(Math.min(qDem, alphaCap, gCap), negCap);

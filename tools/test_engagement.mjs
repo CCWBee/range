@@ -5,8 +5,9 @@ import { Flight, bombStep } from '../physics.js';
 import { Instructor } from '../control.js';
 import { Input } from '../src/input.js';
 import { ChaseCamera } from '../src/camera.js';
-import { Engagement, heatSignature, missileStep, guidedBombStep } from '../src/engagement.js';
+import { Engagement, heatSignature, missileStep, guidedBombStep, proximityPass } from '../src/engagement.js';
 import { Effects } from '../src/effects.js';
+import { Hud } from '../src/hud.js';
 
 const V3=(...v)=>new THREE.Vector3(...v), dt=1/120;
 const pass=(name,data={})=>console.log('PASS',name,JSON.stringify(data));
@@ -118,5 +119,72 @@ delete globalThis.window;delete globalThis.document;
   e.update(2,f,null);assert(e.airTargets[0].destroyed,'Air target must stay destroyed');
   e.reset();effects.reset();assert(e.remaining===2&&released===0&&!ground.destroyed&&!e.airTargets[0].destroyed);
   pass('connected seeker, release, looping target kill, ground wreck and reset');
+}
+{
+  for (const step of [1/30,1/60,1/120]) {
+    const a=V3(-1200*step/2,0,0),b=V3(1200*step/2,0,0);
+    assert(proximityPass(a,b,V3(0,17,-300*step/2),V3(0,17,300*step/2))!==null);
+    assert.equal(proximityPass(a,b,V3(0,19,0),V3(0,19,0)),null);
+  }
+  pass('moving-target proximity fuse catches crossings and rejects outside-radius misses');
+}
+{
+  globalThis.window=Object.assign(new EventTarget(),{innerWidth:1920,innerHeight:1080});
+  globalThis.document=new EventTarget();
+  const canvas=new EventTarget();document.pointerLockElement=canvas;
+  const input=new Input(canvas),chase=new ChaseCamera(16/9),flight=airborne();
+  chase.update(dt,flight,null,true,true,input);input.aim(chase.camera);
+  const saved=input.worldAim.clone(),projector={scratch:V3()};
+  input.keys.add('KeyZ');input.keys.add('KeyC');input.look.set(.7,.3);
+  for(let i=0;i<120;i++)chase.update(dt,flight,input.aimState,true,false,input);
+  assert(chase.camera.fov<27,'Held zoom must smoothly reach the narrow field of view');
+  const target=flight.position.clone().add(V3(20,30,-1000));
+  const p=Hud.prototype.project.call(projector,target,chase.camera);
+  const expected=target.clone().project(chase.camera);
+  if(p)assert(Math.abs(p.x-(expected.x*.5+.5)*window.innerWidth)<1e-7);
+  input.keys.clear();input.look.set(0,0);input.returningLook=false;
+  chase.update(dt,flight,input.aimState,true,true,input);input.projectAim(chase.camera);
+  const axis=saved.clone().applyQuaternion(chase.camera.quaternion.clone().invert());
+  const px=axis.x/-axis.z*window.innerHeight/(2*Math.tan(chase.camera.fov*Math.PI/360));
+  assert(Math.abs(input.cursor.x-px)<1e-6,'Steering marker must use final camera pose');
+  assert(input.worldAim.distanceTo(saved)<1e-9,'Zoom and freelook must never alter steering');
+  pass('zoom and freelook preserve steering and final-camera projections');
+}
+{
+  const scene=new THREE.Scene(),library={has:()=>true,asset:()=>new THREE.Group()};
+  const effects=new Effects(library,scene,new THREE.PlaneGeometry(1,1),null),f=airborne();
+  f.position.set(0,20,0);f.velocity.set(80,-40,0);f.crash('impact');
+  const before=f.position.clone();
+  for(let i=0;i<600;i++)effects.update(dt,f,null,i*dt);
+  assert(f.position.distanceTo(before)>20,'Player wreck must retain impact momentum');
+  assert(effects.fire.live.length>0&&effects.smoke.live.length>0,'Wreck must still burn five seconds after impact');
+  assert(effects.debris.length>0,'Detached debris should outlast the initial flash');
+  assert(Number.isFinite(f.position.y)&&Number.isFinite(f.attitude.w));
+  effects.reset();assert.equal(effects.playerWreck,null);
+  pass('player crash momentum, continued burning, debris and reset');
+}
+{
+  // Ray-cast back from the HUD pixel to a stationary target during an orbit. This catches
+  // stale camera matrices and world offsets that only appear wrong during freelook.
+  globalThis.window=Object.assign(new EventTarget(),{innerWidth:1600,innerHeight:900});
+  const camera=new THREE.PerspectiveCamera(55,16/9,.8,65000);
+  const target=V3(120,400,-900),projector={scratch:V3()};
+  const ray=new THREE.Raycaster();
+  let samples=0;
+  for(const fov of [26,55]) for(let i=0;i<24;i++) {
+    const angle=i*Math.PI/12;
+    camera.position.copy(target).add(V3(Math.sin(angle)*300,80,Math.cos(angle)*300));
+    camera.lookAt(target);camera.rotateZ(.3*Math.sin(angle));
+    camera.fov=fov;camera.updateProjectionMatrix();
+    // Deliberately leave matrixWorld stale, as it is before renderer.render.
+    const p=Hud.prototype.project.call(projector,target,camera);
+    assert(p,'Target being looked at must remain visible throughout the orbit');
+    ray.setFromCamera(new THREE.Vector2(p.x/1600*2-1,1-p.y/900*2),camera);
+    assert(ray.ray.distanceToPoint(target)<1e-7,'Marker ray must intersect its world anchor');
+    const behind=camera.position.clone().add(camera.getWorldDirection(V3()).negate());
+    assert.equal(Hud.prototype.project.call(projector,behind,camera),null);
+    samples++;
+  }
+  pass('world marker stays anchored through full orbit, roll and zoom',{samples});
 }
 console.log('ALL ENGAGEMENT CHECKS PASS');

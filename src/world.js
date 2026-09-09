@@ -5,7 +5,9 @@
 // Placement is a data table read against the library by name. An asset the library does not carry
 // yet is logged once and skipped, so the scene fills in as stream B lands each mesh.
 import * as THREE from '../vendor/three.module.js';
-import { terrainHeight, onPavement, coast } from '../physics.js';
+import { terrainHeight, onPavement, coast, PAVEMENT } from '../physics.js';
+import { JERSEY } from './jersey.js';
+import { ROADS } from './roads.js';
 import { tiled } from './loader.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -21,7 +23,7 @@ float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float f=0.;float a=.5;for(int i=0;i<5;i++){f+=a*noise(p);p=mat2(1.6,1.2,-1.2,1.6)*p+13.4;a*=.5;}return f;}
 vec3 atmosphere(vec3 d){
- float h=max(d.y,0.);vec3 top=vec3(.095,.135,.19);vec3 horizon=vec3(.40,.445,.49);
+ float h=max(d.y,0.);vec3 top=vec3(.09,.24,.43);vec3 horizon=vec3(.48,.62,.73);
  vec3 col=mix(horizon,top,smoothstep(0.,.7,h));
  float warm=exp(-pow((d.y-.025)*17.,2.))*pow(max(0.,dot(normalize(d.xz),normalize(vec2(-.35,-1.)))),7.);
  col+=vec3(.30,.195,.085)*warm;
@@ -31,9 +33,9 @@ vec3 skyColour(vec3 d,vec2 offset){
  vec3 col=atmosphere(d);float h=max(.025,d.y+.045);
  vec2 p=d.xz/h*.82+offset;
  float n=fbm(p+fbm(p*.5)*1.5);
- float cover=smoothstep(.26,.57,n);
+ float cover=smoothstep(.39,.66,n);
  float layer=fbm(p*2.7+vec2(11.3));
- vec3 cloud=mix(vec3(.065,.083,.115),vec3(.29,.335,.39),layer*.8+max(0.,d.y)*.22);
+ vec3 cloud=mix(vec3(.18,.23,.30),vec3(.55,.61,.67),layer*.8+max(0.,d.y)*.22);
  cloud+=vec3(.12,.10,.075)*pow(max(0.,-d.z),4.)*exp(-h*4.);
  col=mix(col,cloud,cover*smoothstep(-.012,.10,d.y));
  col=mix(col,vec3(.50,.55,.59),exp(-abs(d.y)*85.)*.34);
@@ -218,7 +220,7 @@ export class World {
       fragmentShader: `varying vec3 direction;uniform sampler2D panorama;uniform vec2 offset;uniform float hasMap;${NOISE_GLSL}
 void main(){vec3 d=normalize(direction);
  vec2 uv=vec2(atan(d.z,d.x)/6.2831853+.5+offset.x*.025,asin(clamp(d.y,-1.,1.))/3.14159265+.5);
- vec3 col=hasMap>.5?texture2D(panorama,uv).rgb*.84:skyColour(d,offset);
+ vec3 col=hasMap>.5?mix(texture2D(panorama,uv).rgb,skyColour(d,offset),.55):skyColour(d,offset);
  gl_FragColor=vec4(col,1.);}`,
     });
     const skyGeometry = this.geometryOf('sky') || new THREE.SphereGeometry(1, 32, 20);
@@ -246,7 +248,7 @@ void main(){vec3 d=normalize(direction);
   buildLighting() {
     this.scene.add(new THREE.HemisphereLight(0xb9c6d3, 0x41453b, 1.9));
     const make = (footprint, height, distance, bias, normalBias) => {
-      const light = new THREE.DirectionalLight(0xe5ddd0, 0.42);
+      const light = new THREE.DirectionalLight(0xffedce, 0.75);
       light.castShadow = true;
       light.shadow.mapSize.set(2048, 2048);
       // The shadow camera is sized by ground footprint: a square of side W seen from 11 degrees
@@ -289,13 +291,13 @@ void main(){
  vec3 reflection=reflect(-eye,normal);
  vec3 reflected=atmosphere(reflection);
  float fres=pow(1.-max(0.,dot(eye,normal)),4.);
- vec3 c=mix(vec3(.035,.075,.086),reflected,.18+fres*.8);
+ vec3 c=mix(vec3(.025,.14,.20),reflected,.18+fres*.8);
  float foam=noise(worldP.xz*.1+time*.1);
  c+=vec3(.03)*smoothstep(.78,.95,foam);
  // Surf along the true analytic coast, so the water meets the shore on the same line the
  // terrain shader discards on.
  float d=worldP.x-coastX(worldP.z);
- c+=vec3(.10,.12,.13)*smoothstep(90.,4.,abs(d))*(.4+.6*noise(vec2(worldP.z*.05,time*.6)));
+ // The former sine-coast surf band does not apply to the island coastline.
  float fog=1.-exp(-length(cameraPosition-worldP)*.00009);
  c=mix(c,vec3(.44,.51,.55),fog);
  gl_FragColor=vec4(c,1.);}`,
@@ -303,7 +305,7 @@ void main(){
     const plane = new THREE.PlaneGeometry(120000, 120000);
     plane.rotateX(-Math.PI / 2);
     this.ocean = new THREE.Mesh(plane, this.oceanMaterial);
-    this.ocean.position.y = -7;
+    this.ocean.position.y = JERSEY.seaLevel;
     this.ocean.frustumCulled = false;
     this.scene.add(this.ocean);
   }
@@ -311,7 +313,19 @@ void main(){
   // ------------------------------------------------------------------------- terrain
 
   buildTerrain() {
-    const grid = this.library.terrain;
+    // Roads are part of the terrain material, so there is no coplanar road mesh to flicker.
+    const roadCanvas=document.createElement('canvas');roadCanvas.width=roadCanvas.height=2048;
+    const roadContext=roadCanvas.getContext('2d');roadContext.fillStyle='#000';roadContext.fillRect(0,0,2048,2048);
+    roadContext.strokeStyle='#fff';roadContext.lineWidth=1.1;roadContext.lineJoin='round';roadContext.lineCap='round';
+    for(const road of ROADS){
+      roadContext.beginPath();
+      road.points.forEach(([x,z],i)=>{
+        const u=(x-JERSEY.originX)/20000*2048,v=(z-JERSEY.originZ)/20000*2048;
+        if(i===0)roadContext.moveTo(u,v);else roadContext.lineTo(u,v);
+      });roadContext.stroke();
+    }
+    const roadMap=new THREE.CanvasTexture(roadCanvas);roadMap.flipY=false;
+    const grid = JERSEY;
     const nx = grid ? grid.nx : 256;
     const nz = grid ? grid.nz : 256;
     const originX = grid ? grid.originX : -12000;
@@ -324,7 +338,7 @@ void main(){
         const x = originX + i * spacing;
         const z = originZ + j * spacing;
         positions[index * 3] = x;
-        positions[index * 3 + 1] = grid ? grid.heights[index] : terrainHeight(x, z);
+        positions[index * 3 + 1] = terrainHeight(x, z);
         positions[index * 3 + 2] = z;
       }
     }
@@ -353,16 +367,19 @@ void main(){
       color: moor ? 0xffffff : 0x2c3527, roughness: 0.95, metalness: 0, map: moor,
     });
     this.terrainMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.roadMap={value:roadMap};
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 worldP;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nworldP=(modelMatrix*vec4(transformed,1.)).xyz;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\nvarying vec3 worldP;${NOISE_GLSL}${COAST_GLSL}`)
+        .replace('#include <common>', `#include <common>\nuniform sampler2D roadMap;varying vec3 worldP;${NOISE_GLSL}${COAST_GLSL}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
  // Analytic shoreline: drop the sea bed between the coast and the far shore so the water plane
  // shows through along the true sine coast instead of the height grid's stair-step.
  float coastD=worldP.x-coastX(worldP.z);
- if(coastD>0.&&coastD<2000.)discard;`)
+ // Jersey now uses measured elevation; the old analytic shoreline is no longer the land mask.
+ if(worldP.y < ${(JERSEY.seaLevel-.1).toFixed(2)})discard;
+ ${PAVEMENT.map(r=>`if(worldP.x>=${r.x0.toFixed(2)}&&worldP.x<=${r.x1.toFixed(2)}&&worldP.z>=${r.z0.toFixed(2)}&&worldP.z<=${r.z1.toFixed(2)})discard;`).join('\n')}`)
         .replace('#include <map_fragment>', `#include <map_fragment>
  // Two samples of the moor tile at different scales and rotations, so the repeat does not read.
  vec2 rot=vec2(worldP.x*.9397-worldP.z*.342,worldP.x*.342+worldP.z*.9397);
@@ -370,9 +387,15 @@ void main(){
  diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*fine*2.1,.45);
  float wet=fbm(worldP.xz*.0035);
  diffuseColor.rgb*=mix(.72,1.14,smoothstep(.25,.72,wet));
- diffuseColor.rgb*=.80+.35*noise(worldP.xz*.11);
+ vec2 fieldCell=floor((worldP.xz+vec2(0.,worldP.x*.13))/190.);
+ vec3 fieldColour=mix(vec3(.20,.34,.09),vec3(.46,.47,.18),noise(fieldCell));
+ diffuseColor.rgb=mix(diffuseColor.rgb,fieldColour,.48);
+ float detailFade=1.-smoothstep(.15,.6,length(fwidth(worldP.xz*.11)));
+ diffuseColor.rgb*=mix(.975,.80+.35*noise(worldP.xz*.11),detailFade);
+ float road=texture2D(roadMap,(worldP.xz-vec2(${JERSEY.originX.toFixed(1)},${JERSEY.originZ.toFixed(1)}))/20000.).r;
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.14,.15,.15),road*.85);
  // Shingle and wet sand within 30 m of the shore.
- float shore=1.-smoothstep(0.,30.,abs(coastD));
+ float shore=1.-smoothstep(${(JERSEY.seaLevel+1).toFixed(2)},${(JERSEY.seaLevel+9).toFixed(2)},worldP.y);
  diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.20,.195,.175),shore*.75);
  // Drainage ditches down both sides of the runway at 45 m.
  float ditch=exp(-pow((abs(worldP.x)-45.)*.5,2.))*step(-2560.,worldP.z)*step(worldP.z,360.);
@@ -485,6 +508,14 @@ void main(){
   // ------------------------------------------------------------------------- scenery
 
   buildScenery() {
+    // Real footprints are merged in Blender into spatial chunks, allowing ordinary frustum
+    // culling without one draw call per building. No downloaded tiles are needed at runtime.
+    for (const name of Object.keys(this.library.manifest.assets)) {
+      if (!name.startsWith('settlement_')) continue;
+      const group=this.library.asset(name);
+      group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true;}});
+      this.scene.add(group);
+    }
     let placed = 0;
     const before = new Set(this.scene.children);
     for (const entry of placements()) {
@@ -848,8 +879,16 @@ void main(){
   }
 
   aimLight(light, target) {
-    light.target.position.copy(target);
-    light.position.copy(target).addScaledVector(SUN_DIRECTION, light.userData.distance);
+    // Move in whole shadow texels. Fractional light-space motion makes stationary ground crawl.
+    const right=V3(0,1,0).cross(SUN_DIRECTION).normalize();
+    const up=SUN_DIRECTION.clone().cross(right).normalize();
+    const shadow=light.shadow.camera;
+    const dx=(shadow.right-shadow.left)/light.shadow.mapSize.x;
+    const dy=(shadow.top-shadow.bottom)/light.shadow.mapSize.y;
+    const snapped=target.clone().addScaledVector(right,Math.round(target.dot(right)/dx)*dx-target.dot(right))
+      .addScaledVector(up,Math.round(target.dot(up)/dy)*dy-target.dot(up));
+    light.target.position.copy(snapped);
+    light.position.copy(snapped).addScaledVector(SUN_DIRECTION, light.userData.distance);
     light.target.updateMatrixWorld();
   }
 }

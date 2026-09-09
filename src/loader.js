@@ -17,6 +17,7 @@ export const TEXTURE_STEMS = [
   'concrete', 'concrete_normal', 'moor', 'tarmac', 'corrugated', 'grime', 'sky',
   'grass_tuft', 'gorse', 'tree_card', 'cloud_1', 'cloud_2', 'cloud_3',
   'airframe', 'airframe_normal',
+  'raf_typhoon_heritage',
 ];
 
 function decodeBase64(text) {
@@ -146,6 +147,10 @@ function buildMaterials(library, renderer) {
       // that gives each material its shade rather than being thrown away.
     }
     if (normal) material.normalMap = normal;
+    if (definition.bumpMap) {
+      material.bumpMap = skin(library.texture(definition.bumpMap), uvScale, maxAnisotropy, false);
+      material.bumpScale = definition.bumpScale ?? .018;
+    }
     if (grime) {
       // A grime and streak mask multiplied over the base colour at a coarser scale than the
       // panels, so the weathering does not repeat with them.
@@ -285,7 +290,7 @@ export async function loadLibrary(renderer) {
   // its own skin, so a texture stem that only appears there is still fetched.
   const wanted = new Set(TEXTURE_STEMS);
   for (const definition of Object.values(manifest.materials || {})) {
-    for (const key of ['map', 'normalMap', 'ormMap', 'grimeMap']) {
+    for (const key of ['map', 'normalMap', 'bumpMap', 'ormMap', 'grimeMap']) {
       if (definition[key]) wanted.add(definition[key]);
     }
   }

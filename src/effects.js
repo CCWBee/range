@@ -94,7 +94,7 @@ void main(){
  float d=length(uvp-.5)*2.;
  float n=fbm(uvp*8.);
  float a=smoothstep(.96,.18,d+n*.25)*smoothstep(.22,.6,n)*vAlpha;
- vec3 shade=mix(vec3(.025,.033,.041),vec3(.23,.25,.26),uvp.y*.65+n*.4);
+ vec3 shade=mix(vec3(.012,.014,.018),vec3(.12,.13,.14),uvp.y*.65+n*.4);
  gl_FragColor=vec4(shade,a);
 }`, { tint: 0x30383d });
     this.spray = new SpritePool(scene, quadGeometry, 96, `
@@ -108,7 +108,7 @@ void main(){
 varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
 void main(){vec2 q=(uvp-.5)*2.;float n=fbm(uvp*11.+vAlpha*1.5);
  float edge=1.-length(q);float a=smoothstep(.03,.45,edge)*smoothstep(.25,.63,n)*vAlpha;
- vec3 c=mix(vec3(1.7,.17,.012),vec3(7.,3.1,.6),smoothstep(.43,.74,n)*vAlpha);
+ vec3 c=mix(vec3(2.4,.16,.012),vec3(10.,6.5,3.2),smoothstep(.43,.74,n)*vAlpha);
  gl_FragColor=vec4(c,a);}`,{additive:true});
     this.sparks = new SpritePool(scene,quadGeometry,400,`
 varying vec2 uvp;varying float vAlpha;uniform vec3 tint;
@@ -190,7 +190,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     for(let i=0;i<count;i++)this.sparks.spawn({position:position.clone(),velocity:V3((Math.random()-.5)*45,8+Math.random()*30,(Math.random()-.5)*45).addScaledVector(inherited,.15),size:1.3+Math.random()*2,width:.08,alpha:1,life:.4+Math.random()*1.4});
   }
 
-  explosion(position, strength = 1) {
+  explosion(position, strength = 1, inherited = V3()) {
     const ground=groundHeight(position.x,position.z),surface=position.y-ground<12;
     this.blasts.push({position:position.clone(),age:0,strength});
     this.hitFlash = 0.18;
@@ -208,9 +208,9 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
         size: 7 + Math.random()*14, alpha: .65+Math.random()*.2, life: 7+Math.random()*8,
       });
     }
-    if(surface && this.library.has('debris'))for(let i=0;i<12 && this.debris.length<72;i++){
+    if(this.library.has('debris'))for(let i=0;i<12 && this.debris.length<72;i++){
       const mesh=this.library.asset('debris');mesh.position.copy(position);mesh.scale.setScalar(.4+Math.random());mesh.traverse(o=>{if(o.isMesh)o.castShadow=true;});this.scene.add(mesh);
-      this.debris.push({mesh,velocity:V3((Math.random()-.5)*35,12+Math.random()*30,(Math.random()-.5)*35),spin:V3(Math.random()*7,Math.random()*6,Math.random()*8),life:6});
+      this.debris.push({mesh,velocity:V3((Math.random()-.5)*35,12+Math.random()*30,(Math.random()-.5)*35).add(inherited),spin:V3(Math.random()*7,Math.random()*6,Math.random()*8),life:30});
     }
     if(this.world?.blastImpulse)this.world.blastImpulse.value.set(position.x,position.z,0,80*strength);
     for (const target of this.targets) {
@@ -263,11 +263,40 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
       age: 0,
     });
     this.hitFlash = 0.025;
-    if (this.audio) this.audio.gun();
+    this.fire.spawn({position:flight.position.clone().addScaledVector(forward,8),velocity:flight.velocity.clone(),size:1.8,alpha:1,life:.045});
     return true;
   }
 
+  burningTrail(source, velocity, dt) {
+    source.burnTimer = (source.burnTimer || 0) + dt;
+    while (source.burnTimer >= .04) {
+      source.burnTimer -= .04;
+      const position = source.position.clone().addScaledVector(velocity, -source.burnTimer);
+      this.smoke.spawn({position:position.clone(),velocity:velocity.clone().multiplyScalar(.18).add(V3(2,5,1)),size:4+Math.random()*3,alpha:.9,life:18});
+      this.fire.spawn({position,velocity:velocity.clone().multiplyScalar(.55).add(V3(0,2,0)),size:3+Math.random()*4,alpha:1,life:.6});
+    }
+  }
+
   update(dt, flight, camera, elapsed) {
+    if (flight.crashed) {
+      if (!this.playerWreck) {
+        this.playerWreck = {position:flight.position,velocity:flight.wreckVelocity?.clone() || V3(),age:0};
+        this.explosion(flight.position,1.3,this.playerWreck.velocity);
+      }
+      const wreck = this.playerWreck;
+      wreck.age += dt;
+      wreck.velocity.y -= 9.81 * dt;
+      wreck.position.addScaledVector(wreck.velocity,dt);
+      const floor = groundHeight(wreck.position.x,wreck.position.z)+1;
+      if (wreck.position.y < floor) {
+        wreck.position.y = floor;
+        wreck.velocity.y = Math.abs(wreck.velocity.y)*.12;
+        wreck.velocity.multiplyScalar(Math.exp(-dt*2.2));
+      }
+      const spin = Math.min(1,wreck.velocity.length()/40);
+      flight.attitude.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(dt*.35*spin,dt*.2*spin,dt*.65*spin))).normalize();
+      this.burningTrail(wreck,wreck.velocity,dt);
+    }
     // Bombs: the mesh points along its velocity, so a fin-stabilised bomb noses over as it falls.
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
@@ -408,7 +437,16 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
       p.alpha *= Math.exp(-delta * 0.55);
       return p.alpha > 0.01;
     };
-    this.smoke.update(dt, step);
+    this.smoke.update(dt, (p,d) => {
+      p.life -= d;
+      p.position.addScaledVector(p.velocity,d);
+      p.velocity.x += Math.sin(p.life*1.7+p.position.z*.03)*d*1.2;
+      p.velocity.z += Math.cos(p.life*1.3+p.position.x*.03)*d*1.2;
+      p.velocity.lerp(V3(2,4,1),1-Math.exp(-d*.35));
+      p.size += d*2.1;
+      p.alpha *= Math.exp(-d*.12);
+      return p.life>0 && p.alpha>.015;
+    });
     this.spray.update(dt, step);
     this.dust.update(dt,step);
     this.fire.update(dt,(p,d)=>{p.life-=d;p.position.addScaledVector(p.velocity,d);p.size+=d*7;p.alpha*=Math.exp(-d*3.8);return p.life>0;});
@@ -420,6 +458,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   }
 
   reset() {
+    this.playerWreck = null;
     for (const bomb of this.bombs) this.scene.remove(bomb.mesh);
     this.bombs.length = 0;
     this.shots.length = 0;
