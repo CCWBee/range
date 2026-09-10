@@ -35,6 +35,9 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 #flightstate i{font-style:normal;color:#8f9ea7;margin-right:7px}
 #systems{position:absolute;bottom:36px;right:34px;font-size:12px;line-height:1.9;text-align:right;letter-spacing:.05em}
 #instructor{color:#d8cbb0}
+#instructor.stall-warning{color:#ff9d72;animation:stall-flash .7s steps(2,end) infinite}
+@keyframes stall-flash{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){#instructor.stall-warning{animation:none}}
 #hint{position:absolute;bottom:157px;left:34px;font-size:14px;color:#e3ddd0;max-width:620px;line-height:1.6}
 #markers{position:absolute;inset:0;pointer-events:none}
 #help{position:absolute;top:80px;right:30px;width:320px;padding:22px;background:#101b24ed;font-size:14px;line-height:1.8}
@@ -137,15 +140,15 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 <dt>A / D</dt><dd>Roll left / right</dd>
 <dt>Q / E</dt><dd>Rudder, nose wheel steering</dd>
 <dt>&uarr; / &darr;</dt><dd>Pitch nudge, down pulls</dd>
-<dt>&larr; / &rarr;</dt><dd>Roll, in manual mode</dd>
 <dt>G</dt><dd>Landing gear</dd>
 <dt>B</dt><dd>Airbrake, wheel brakes</dd>
 <dt>End / 6 / T</dt><dd>Select target near aim</dd>
 <dt>L / Num Lock / Delete</dt><dd>Laser on / off</dd>
 <dt>Alt + X</dt><dd>Sidewinder seeker on / off</dd>
 <dt>5 or /</dt><dd>Launch locked Sidewinder</dd>
-<dt>U</dt><dd>Instructor on or off</dd>
-<dt>Hold Z</dt><dd>Zoom</dd>
+<dt>Hold U</dt><dd>Follow last released munition</dd>
+<dt>Hold Z / right mouse</dt><dd>Zoom</dd>
+<dt>`</dt><dd>Developer map camera: WASD move, Q/E down/up, Shift faster</dd>
 <dt>Hold C</dt><dd>Free look</dd>
 <dt>V</dt><dd>Chase distance</dd>
 <dt>R</dt><dd>Restart sortie</dd>

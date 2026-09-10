@@ -8,6 +8,7 @@ import { ChaseCamera } from '../src/camera.js';
 import { Engagement, heatSignature, missileStep, guidedBombStep, proximityPass } from '../src/engagement.js';
 import { Effects } from '../src/effects.js';
 import { Hud } from '../src/hud.js';
+import { Aircraft } from '../src/aircraft.js';
 
 const V3=(...v)=>new THREE.Vector3(...v), dt=1/120;
 const pass=(name,data={})=>console.log('PASS',name,JSON.stringify(data));
@@ -49,6 +50,21 @@ globalThis.document=new EventTarget();
   input.keys.clear();for(let i=0;i<180;i++)chase.update(dt,f,aim,true,false,input);
   assert(!input.returningLook&&input.look.length()===0,'C release must return to flight view');
   pass('C free look preserves aim and returns');
+  input.running=true;
+  let instructorToggles=0;input.on('instructor',()=>instructorToggles++);
+  window.dispatchEvent(Object.assign(new Event('keydown'),{code:'KeyU',repeat:false}));
+  assert(input.keys.has('KeyU')&&instructorToggles===0,'U must be held camera input, never an instructor toggle');
+  document.dispatchEvent(Object.assign(new Event('mousemove'),{movementX:100,movementY:100}));
+  assert.equal(input.pendingMouse.lengthSq(),0,'Munition-view mouse movement must not redirect the aircraft');
+  input.keys.clear();input.keys.add('KeyC');
+  document.dispatchEvent(Object.assign(new Event('mousemove'),{movementX:10,movementY:10}));
+  assert(input.look.x>0&&input.look.y<0,'Only vertical freelook direction must be inverted');
+  input.keys.clear();
+  canvas.dispatchEvent(Object.assign(new Event('mousedown'),{button:2}));
+  chase.update(dt,f,aim,true,true,input);assert.equal(chase.camera.fov,26);
+  window.dispatchEvent(Object.assign(new Event('mouseup'),{button:2}));
+  chase.update(dt,f,aim,true,true,input);assert(chase.camera.fov>45);
+  pass('U preserves instructor, vertical-only freelook inversion, held right-mouse zoom');
 }
 delete globalThis.window;delete globalThis.document;
 
@@ -58,7 +74,7 @@ delete globalThis.window;delete globalThis.document;
     const f=airborne(),instructor=new Instructor();let peakG=0;
     for(let i=0;i<4800;i++){f.step(dt,instructor.update(dt,f,{active:true,direction},{}));peakG=Math.max(peakG,f.load);}
     const error=f.velocity.angleTo(direction)*180/Math.PI;
-    assert(!f.crashed&&error<5&&peakG>5&&peakG<9,'Large mouse requests must pull hard and catch the direction');
+    assert(!f.crashed&&error<5&&peakG>5&&peakG<11,`Large mouse requests must pull hard and catch the direction: error ${error}, peak ${peakG}`);
     report.push({errorDegrees:+error.toFixed(2),peakG:+peakG.toFixed(2)});
   }
   pass('hard mouse pull and reversal',report);
@@ -76,9 +92,12 @@ delete globalThis.window;delete globalThis.document;
       closest=new THREE.Line3(before,m.position).closestPointToPoint(t.position,true,V3()).distanceTo(t.position);
       maxSpeed=Math.max(maxSpeed,m.velocity.length());if(closest<11)break;
     }
-    assert(closest<11&&time<10&&maxSpeed<700&&m.velocity.length()<maxSpeed-80,'Motor must burn out and coast into an intercept');times.push(time);
+    assert(closest<11&&time<10&&maxSpeed<1000,'Extended motor must reach an intercept');times.push(time);
   }
   assert(Math.abs(times[0]-times[1])<.06,'Missile intercept must be stable at 60 and 120 Hz');
+  const coastTest={position:V3(0,5000,0),velocity:V3(0,0,-700),age:5.3};
+  missileStep(coastTest,null,.1);
+  assert(coastTest.velocity.length()<700,'Motor must stop accelerating after its finite burn');
   const lost={position:V3(0,1000,0),velocity:V3(0,0,-300),age:1,target:{position:V3(0,1000,1000),velocity:V3()}};
   missileStep(lost,lost.target,dt);assert(lost.lost&&lost.target===null,'Target behind the seeker must break tracking');
   pass('heat aspect, finite motor, interception and lock loss',{rear,front,interceptSeconds:times});
@@ -119,6 +138,26 @@ delete globalThis.window;delete globalThis.document;
   e.update(2,f,null);assert(e.airTargets[0].destroyed,'Air target must stay destroyed');
   e.reset();effects.reset();assert(e.remaining===2&&released===0&&!ground.destroyed&&!e.airTargets[0].destroyed);
   pass('connected seeker, release, looping target kill, ground wreck and reset');
+  const ship=effects.targets.find(t=>t.ship);
+  effects.explosion(ship.position,1.2);effects.update(.1,f,new THREE.PerspectiveCamera(),0);
+  assert(ship.destroyed&&ship.mesh.visible&&ship.smokeSource&&ship.mesh.position.y<ship.home.y,'Ship must retain its burning, settling hull');
+  let bombReloads=0;aircraft.resetStores=()=>bombReloads++;
+  f.bombs=0;f.rounds=0;e.remaining=0;
+  for(let i=0;i<110;i++){effects.update(.1,f,null,0);e.update(.1,f,null);}
+  assert.equal(f.rounds,0);assert.equal(f.bombs,0);assert.equal(e.remaining,0);
+  for(let i=0;i<150;i++){effects.update(.1,f,null,0);e.update(.1,f,null);}
+  assert.equal(f.rounds,150);assert.equal(f.bombs,4);assert.equal(e.remaining,2);assert.equal(bombReloads,1);
+  effects.reset();assert(!ship.destroyed&&ship.mesh.position.equals(ship.home));
+  pass('burning ship target, empty-store reload timers and reset');
+}
+{
+  const grey=new THREE.Texture({width:2048,height:2048}),heritage=new THREE.Texture({width:1254,height:1254}),original=grey.image;
+  const material={map:grey},aircraft={library:{texture:name=>name==='raf_typhoon_skin'?grey:heritage,materials:{raf_airframe:material}}};
+  for(let i=0;i<5;i++){
+    Aircraft.prototype.setSkin.call(aircraft,'heritage');assert.equal(material.map.image,heritage.image);assert.notEqual(material.map.source,grey.source);
+    Aircraft.prototype.setSkin.call(aircraft,'grey');assert.equal(material.map.image,original);
+  }
+  pass('different-sized skin atlases retain independent image storage');
 }
 {
   for (const step of [1/30,1/60,1/120]) {

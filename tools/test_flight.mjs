@@ -263,7 +263,8 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   const p0 = pitchDeg(f);
   let maxBank = 0, minLoad = Infinity;
   fly(f, 3, aimAt(0, -12), {}, f => { maxBank = Math.max(maxBank, Math.abs(bank(f))); minLoad = Math.min(minLoad, f.load); });
-  assert(pitchDeg(f) < p0 - 2 && maxBank < 15 && minLoad > -1 && !f.crashed, `push: pitch ${pitchDeg(f)} bank ${maxBank} load ${minLoad}`);
+  // Arcade assistance now permits a deliberate negative-g push, without rolling inverted.
+  assert(pitchDeg(f) < p0 - 12 && maxBank < 15 && minLoad > -4 && !f.crashed, `push: pitch ${pitchDeg(f)} bank ${maxBank} load ${minLoad}`);
   pass('instructor push', { pitch: round(pitchDeg(f), 1), maxBank: round(maxBank, 2), minLoad: round(minLoad, 2) });
 }
 {

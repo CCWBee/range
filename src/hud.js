@@ -93,6 +93,12 @@ export class Hud {
     el.weapons.textContent = `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · AIM-9 ${engagement?.remaining ?? 0}`;
     el.instructor.textContent = instructor.mode === 'manual' ? 'INSTRUCTOR OFF'
       : instructor.state.stallGuard > 0.05 ? 'STALL GUARD' : 'INSTRUCTOR ON';
+    const stallWarning = !flight.onGround && !flight.crashed && (flight.stall || instructor.state.stallGuard > .3);
+    el.instructor.textContent = stallWarning ? 'STALL · LOWER NOSE' : 'INSTRUCTOR ON';
+    el.instructor.classList.toggle('stall-warning',stallWarning);
+    if (flight.bombs === 0) el.weapons.textContent += ` · BOMBS ${Math.ceil(25-(effects.reload?.bombs||0))}s`;
+    if (flight.rounds === 0) el.weapons.textContent += ` · GUN ${Math.ceil(12-(effects.reload?.rounds||0))}s`;
+    if (engagement?.remaining === 0) el.weapons.textContent += ` · AIM-9 ${Math.ceil(20-(engagement.reloadTime||0))}s`;
 
     this.updateObjective(flight, effects);
     this.updateHint(flight, input, effects, options);
@@ -167,6 +173,8 @@ export class Hud {
     this.el.hint.textContent = hint;
     if(effects.engagement?.noticeTime>0)this.el.hint.textContent=effects.engagement.notice;
     else if(input.freeLook)this.el.hint.textContent='FREE LOOK · release C to return to the flight view';
+    if(input.keys.has('KeyU')&&effects.lastMunition)this.el.hint.textContent='MUNITION VIEW · release U to return · instructor remains active';
+    if(input.devCamera)this.el.hint.textContent='MAP CAMERA · WASD move · Q/E down/up · Shift faster · ` return';
   }
 
   updateMarkers(flight, camera, input, effects) {

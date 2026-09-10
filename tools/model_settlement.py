@@ -3,6 +3,11 @@ import bpy,json,math,subprocess,shutil,datetime
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
 features=json.loads((ROOT/'assets/settlement.json').read_text())['features']
+sites=json.loads((ROOT/'assets/landmarks.json').read_text()) if (ROOT/'assets/landmarks.json').exists() else []
+replacement_radii={"Saint Aubin's Fort":30,'Elizabeth Castle':80,'Mont Orgueil Castle':46,'Corbière Lighthouse':20,'Fort Henry':30,'Fort Regent':75}
+replaced={}
+for site in sites:
+    if site['name'] in replacement_radii and site['name'] not in replaced:replaced[site['name']]=site['point']
 script="""import fs from 'node:fs';import {terrainHeight} from './physics.js';
 const f=JSON.parse(fs.readFileSync('assets/settlement.json')).features;
 console.log(JSON.stringify(f.map(f=>f.points.map(p=>terrainHeight(...p)))));"""
@@ -34,6 +39,7 @@ for feature,ground in zip(features,heights):
     points=feature['points'];cx=sum(p[0] for p in points)/len(points);cz=sum(p[1] for p in points)/len(points)
     chunk=f'settlement_{math.floor(cx/1200)}_{math.floor(cz/1200)}'
     if feature['kind']=='building':
+        if any(math.hypot(cx-point[0],cz-point[1])<replacement_radii[name] for name,point in replaced.items()):continue
         base=max(-83.6,min(ground)-1);top=max(-80.6,max(ground))+feature['height']
         prism(points,base,top,chunk)
     elif feature['closed']:

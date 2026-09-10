@@ -10,7 +10,7 @@ import * as THREE from '../vendor/three.module.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 
 const HELD = new Set([
-  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'KeyC', 'KeyZ', 'KeyB', 'Space',
+  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'KeyC', 'KeyZ', 'KeyU', 'KeyB', 'Space',
   'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
 ]);
@@ -20,7 +20,7 @@ const ACTIONS = {
   Digit2: 'bomb', Digit3: 'bomb', KeyG: 'gear', KeyV: 'camera', KeyR: 'restart',
   Digit5: 'missile', Slash: 'missile', KeyL: 'laser', NumLock: 'laser', Delete: 'laser',
   End: 'target', Digit6: 'target', KeyT: 'target',
-  KeyH: 'help', KeyI: 'help', KeyU: 'instructor', KeyP: 'pause',
+  KeyH: 'help', KeyI: 'help', KeyP: 'pause', Backquote: 'devCamera',
 };
 
 export class Input {
@@ -80,13 +80,23 @@ export class Input {
         return;
       }
       if (event.button === 0) this.gunHeld = true;
+      if (event.button === 2) this.zoomHeld = true;
     });
-    window.addEventListener('mouseup', (event) => { if (event.button === 0) this.gunHeld = false; });
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
+    window.addEventListener('mouseup', (event) => { if (event.button === 0) this.gunHeld = false; if (event.button === 2) this.zoomHeld = false; });
     document.addEventListener('mousemove', (event) => {
       if (!this.locked) return;
+      if (this.devCamera) {
+        this.devLook ||= new THREE.Vector2();
+        this.devLook.x -= (event.movementX || 0) * .003;
+        this.devLook.y = THREE.MathUtils.clamp(this.devLook.y - (event.movementY || 0) * .003, -1.5, 1.5);
+        return;
+      }
+      // Weapon view must not redirect the aircraft using the munition camera's axes.
+      if (this.keys.has('KeyU')) return;
       if (this.freeLook) {
         this.look.x = THREE.MathUtils.clamp(this.look.x + (event.movementX || 0) * .004, -2.9, 2.9);
-        this.look.y = THREE.MathUtils.clamp(this.look.y + (event.movementY || 0) * .004, -1.1, 1.1);
+        this.look.y = THREE.MathUtils.clamp(this.look.y - (event.movementY || 0) * .004, -1.1, 1.1);
         this.returningLook = true;
         return;
       }
@@ -96,7 +106,7 @@ export class Input {
     });
     document.addEventListener('pointerlockchange', () => {
       if (this.locked) this.setPaused(false);
-      else if (this.running) { this.gunHeld = false; this.setPaused(true); }
+      else if (this.running) { this.gunHeld = false; this.zoomHeld = false; this.setPaused(true); }
     });
     document.addEventListener('pointerlockerror', () => { this.setPaused(true); });
 
@@ -113,7 +123,7 @@ export class Input {
       if (action) this.fire(action);
     });
     window.addEventListener('keyup', (event) => this.keys.delete(event.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.gunHeld = false; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.gunHeld = false; this.zoomHeld = false; });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.running) { this.exitLock(); this.setPaused(true); }
     });

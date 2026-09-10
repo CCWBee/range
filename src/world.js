@@ -6,6 +6,8 @@
 // yet is logged once and skipped, so the scene fills in as stream B lands each mesh.
 import * as THREE from '../vendor/three.module.js';
 import { terrainHeight, onPavement, coast, PAVEMENT } from '../physics.js';
+import { LANDCOVER } from './landcover.js';
+import { LANDMARKS } from './landmarks.js';
 import { JERSEY } from './jersey.js';
 import { ROADS } from './roads.js';
 import { tiled } from './loader.js';
@@ -198,6 +200,7 @@ export class World {
     this.buildScenery();
     this.buildLamps();
     this.buildClutter();
+    this.buildWoodland();
     this.buildClouds();
     this.buildTownLights();
   }
@@ -227,6 +230,7 @@ void main(){vec3 d=normalize(direction);
     this.sky = new THREE.Mesh(skyGeometry, this.skyMaterial);
     this.sky.scale.setScalar(40000);
     this.sky.frustumCulled = false;
+    this.sky.renderOrder = -3;
     this.sky.castShadow = false;
     this.sky.receiveShadow = false;
     this.scene.add(this.sky);
@@ -236,7 +240,7 @@ void main(){vec3 d=normalize(direction);
     const environmentSky = new THREE.Mesh(skyGeometry, this.skyMaterial);
     environmentSky.scale.setScalar(100);
     environmentScene.add(environmentSky);
-    const target = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+    const target = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType });
     const cubeCamera = new THREE.CubeCamera(0.1, 200, target);
     cubeCamera.update(this.renderer, environmentScene);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -280,6 +284,7 @@ void main(){vec3 d=normalize(direction);
     // The water plane is built here rather than taken from the library: it is one quad, and the
     // v2 scenery list drops the old `ocean` asset.
     this.oceanMaterial = new THREE.ShaderMaterial({
+      depthWrite: false,
       uniforms: { time: { value: 0 } },
       vertexShader: 'varying vec3 worldP;void main(){worldP=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(worldP,1.);}',
       fragmentShader: `varying vec3 worldP;uniform float time;${NOISE_GLSL}${COAST_GLSL}
@@ -307,17 +312,28 @@ void main(){
     this.ocean = new THREE.Mesh(plane, this.oceanMaterial);
     this.ocean.position.y = JERSEY.seaLevel;
     this.ocean.frustumCulled = false;
+    this.ocean.renderOrder = -2;
     this.scene.add(this.ocean);
   }
 
   // ------------------------------------------------------------------------- terrain
 
   buildTerrain() {
+    const coverCanvas=document.createElement('canvas');coverCanvas.width=coverCanvas.height=2048;
+    const coverContext=coverCanvas.getContext('2d');
+    for(const area of LANDCOVER){
+      coverContext.fillStyle=area.kind==='beach'?'#0000ff':/wood|forest|orchard/.test(area.kind)?'#00ff00':`rgb(${80+area.id%175},0,0)`;
+      coverContext.beginPath();
+      area.points.forEach(([x,z],i)=>{const u=(x-JERSEY.originX)/20000*2048,v=(z-JERSEY.originZ)/20000*2048;if(i)coverContext.lineTo(u,v);else coverContext.moveTo(u,v);});
+      coverContext.closePath();coverContext.fill();
+    }
+    const coverMap=new THREE.CanvasTexture(coverCanvas);coverMap.flipY=false;
     // Roads are part of the terrain material, so there is no coplanar road mesh to flicker.
     const roadCanvas=document.createElement('canvas');roadCanvas.width=roadCanvas.height=2048;
     const roadContext=roadCanvas.getContext('2d');roadContext.fillStyle='#000';roadContext.fillRect(0,0,2048,2048);
     roadContext.strokeStyle='#fff';roadContext.lineWidth=1.1;roadContext.lineJoin='round';roadContext.lineCap='round';
     for(const road of ROADS){
+      roadContext.lineWidth=/footway|path|steps/.test(road.kind)? .4 : /primary|secondary/.test(road.kind)?1.4:.8;
       roadContext.beginPath();
       road.points.forEach(([x,z],i)=>{
         const u=(x-JERSEY.originX)/20000*2048,v=(z-JERSEY.originZ)/20000*2048;
@@ -368,17 +384,18 @@ void main(){
     });
     this.terrainMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.roadMap={value:roadMap};
+      shader.uniforms.coverMap={value:coverMap};
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 worldP;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nworldP=(modelMatrix*vec4(transformed,1.)).xyz;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\nuniform sampler2D roadMap;varying vec3 worldP;${NOISE_GLSL}${COAST_GLSL}`)
+        .replace('#include <common>', `#include <common>\nuniform sampler2D roadMap;uniform sampler2D coverMap;varying vec3 worldP;${NOISE_GLSL}${COAST_GLSL}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
  // Analytic shoreline: drop the sea bed between the coast and the far shore so the water plane
  // shows through along the true sine coast instead of the height grid's stair-step.
  float coastD=worldP.x-coastX(worldP.z);
  // Jersey now uses measured elevation; the old analytic shoreline is no longer the land mask.
- if(worldP.y < ${(JERSEY.seaLevel-.1).toFixed(2)})discard;
+ if(worldP.y < ${(JERSEY.seaLevel+.2).toFixed(2)})discard;
  ${PAVEMENT.map(r=>`if(worldP.x>=${r.x0.toFixed(2)}&&worldP.x<=${r.x1.toFixed(2)}&&worldP.z>=${r.z0.toFixed(2)}&&worldP.z<=${r.z1.toFixed(2)})discard;`).join('\n')}`)
         .replace('#include <map_fragment>', `#include <map_fragment>
  // Two samples of the moor tile at different scales and rotations, so the repeat does not read.
@@ -389,20 +406,25 @@ void main(){
  diffuseColor.rgb*=mix(.72,1.14,smoothstep(.25,.72,wet));
  vec2 fieldCell=floor((worldP.xz+vec2(0.,worldP.x*.13))/190.);
  vec3 fieldColour=mix(vec3(.20,.34,.09),vec3(.46,.47,.18),noise(fieldCell));
- diffuseColor.rgb=mix(diffuseColor.rgb,fieldColour,.48);
+ diffuseColor.rgb=mix(diffuseColor.rgb,fieldColour,.12);
+ vec3 cover=texture2D(coverMap,(worldP.xz-vec2(${JERSEY.originX.toFixed(1)},${JERSEY.originZ.toFixed(1)}))/20000.).rgb;
+ vec3 cropColour=mix(vec3(.19,.29,.075),vec3(.46,.42,.19),cover.r);
+ diffuseColor.rgb=mix(diffuseColor.rgb,cropColour,step(.1,cover.r)*.7);
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.13,.22,.075),cover.g*.7);
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.62,.53,.36),cover.b*.9);
  float detailFade=1.-smoothstep(.15,.6,length(fwidth(worldP.xz*.11)));
  diffuseColor.rgb*=mix(.975,.80+.35*noise(worldP.xz*.11),detailFade);
  float road=texture2D(roadMap,(worldP.xz-vec2(${JERSEY.originX.toFixed(1)},${JERSEY.originZ.toFixed(1)}))/20000.).r;
  diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.14,.15,.15),road*.85);
  // Shingle and wet sand within 30 m of the shore.
  float shore=1.-smoothstep(${(JERSEY.seaLevel+1).toFixed(2)},${(JERSEY.seaLevel+9).toFixed(2)},worldP.y);
- diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.20,.195,.175),shore*.75);
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.42,.37,.27),shore*.55);
  // Drainage ditches down both sides of the runway at 45 m.
  float ditch=exp(-pow((abs(worldP.x)-45.)*.5,2.))*step(-2560.,worldP.z)*step(worldP.z,360.);
  diffuseColor.rgb*=1.-ditch*.55;`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
- roughnessFactor=mix(.98,.55,smoothstep(.25,.72,fbm(worldP.xz*.0035)));`);
+ roughnessFactor=mix(.98,.88,smoothstep(.25,.72,fbm(worldP.xz*.0035)));`);
     };
     this.terrain = new THREE.Mesh(geometry, this.terrainMaterial);
     this.terrain.receiveShadow = true;
@@ -508,6 +530,37 @@ void main(){
   // ------------------------------------------------------------------------- scenery
 
   buildScenery() {
+    for (const site of LANDMARKS) {
+      if (!this.library.has(site.asset)) continue;
+      const group=this.library.asset(site.asset);
+      group.name=site.name;
+      group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+      this.scene.add(group);
+    }
+    // World-scale masonry and sash windows stay consistent across the merged OSM footprints.
+    for (const name of ['jersey_render','landmark_granite','jersey_roof']) {
+      const material=this.library.materials[name];if(!material)continue;
+      material.customProgramCacheKey=()=>`jersey-surface-${name}`;
+      material.roughness=.94;
+      if(name==='jersey_render')material.color.setRGB(.43,.39,.32);
+      material.onBeforeCompile=shader=>{
+        shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 facadeP;varying vec3 facadeN;')
+          .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nfacadeP=(modelMatrix*vec4(transformed,1.)).xyz;facadeN=normalize(mat3(modelMatrix)*normal);');
+        shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>\nvarying vec3 facadeP;varying vec3 facadeN;${NOISE_GLSL}`)
+          .replace('#include <color_fragment>',`#include <color_fragment>
+ float wall=1.-smoothstep(.3,.65,abs(facadeN.y));
+ float horizontal=abs(facadeN.x)>.7?facadeP.z:facadeP.x;
+ vec2 windowCell=fract(vec2(horizontal/3.5,facadeP.y/3.2));
+ vec2 aa=max(fwidth(windowCell),vec2(.008));
+ float windowMask=(smoothstep(.23-aa.x,.23+aa.x,windowCell.x)-smoothstep(.70-aa.x,.70+aa.x,windowCell.x))*(smoothstep(.23-aa.y,.23+aa.y,windowCell.y)-smoothstep(.78-aa.y,.78+aa.y,windowCell.y));
+ float detailFade=1.-smoothstep(.8,3.5,length(fwidth(facadeP)));
+ float mortar=step(.94,fract(facadeP.y*2.4))+step(.97,fract(horizontal*1.4+floor(facadeP.y*2.4)*.5));
+ diffuseColor.rgb*=mix(.83,1.1,noise(facadeP.xz*.13));
+ diffuseColor.rgb*=1.-min(1.,mortar)*.12*detailFade;
+ ${name==='jersey_render'?'diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.065,.095,.11),windowMask*wall*.86*detailFade);':''}
+ `);
+      };
+    }
     // Real footprints are merged in Blender into spatial chunks, allowing ordinary frustum
     // culling without one draw call per building. No downloaded tiles are needed at runtime.
     for (const name of Object.keys(this.library.manifest.assets)) {
@@ -523,6 +576,7 @@ void main(){
       const bounds = this.library.bounds(entry.asset);
       const tall = entry.tall || (bounds && bounds.max.y > 3);
       for (const part of this.library.parts(entry.asset)) {
+        if (entry.asset.includes('hangar') || entry.asset === 'has') part.material.side = THREE.DoubleSide;
         const mesh = new THREE.InstancedMesh(part.geometry, part.material, entry.places.length);
         const matrix = new THREE.Matrix4();
         const quaternion = new THREE.Quaternion();
@@ -748,6 +802,31 @@ void main(){
   }
 
   // ------------------------------------------------------------------------- clouds
+
+  buildWoodland() {
+    if (!this.library.has('jersey_tree')) return;
+    const random=mulberry32(4901),positions=[];
+    const contains=(x,z,p)=>{let inside=false;for(let i=0,j=p.length-1;i<p.length;j=i++){
+      const a=p[i],b=p[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+    }return inside;};
+    for (const area of LANDCOVER) {
+      if (!/wood|forest|orchard/.test(area.kind)) continue;
+      const p=area.points,xs=p.map(p=>p[0]),zs=p.map(p=>p[1]);
+      const x0=Math.min(...xs),x1=Math.max(...xs),z0=Math.min(...zs),z1=Math.max(...zs);
+      const attempts=Math.min(250,Math.ceil((x1-x0)*(z1-z0)/550));
+      for(let i=0;i<attempts&&positions.length<3600;i++){
+        const x=x0+random()*(x1-x0),z=z0+random()*(z1-z0),y=terrainHeight(x,z);
+        if(y<JERSEY.seaLevel+5||onPavement(x,z)||!contains(x,z,p))continue;
+        positions.push([x,y,z,.65+random()*.7,random()*Math.PI*2]);
+      }
+    }
+    for(const part of this.library.parts('jersey_tree')){
+      const mesh=new THREE.InstancedMesh(part.geometry,part.material,positions.length),m=new THREE.Matrix4(),q=new THREE.Quaternion();
+      positions.forEach(([x,y,z,size,angle],i)=>{q.setFromAxisAngle(V3(0,1,0),angle);m.compose(V3(x,y,z),q,V3(size,size,size));mesh.setMatrixAt(i,m);});
+      mesh.castShadow=true;mesh.receiveShadow=true;mesh.computeBoundingSphere();this.scene.add(mesh);
+    }
+    console.log(`RANGE: ${positions.length} trees within OSM woodland and orchard boundaries`);
+  }
 
   buildClouds() {
     const textures = ['cloud_1', 'cloud_2', 'cloud_3'].map((s) => this.library.texture(s)).filter(Boolean);

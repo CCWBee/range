@@ -124,7 +124,8 @@ export class Instructor {
     const phiMax = Math.max(0.35, 0.9 * Math.acos(clamp(1 / Math.max(nAvail, 1e-6), 0, 1)));
     let phiDes = theta < 0.02 || latched ? 0 : clamp(6 * ex, -phiMax, phiMax);
     const pSmall = 4 * (phiDes - phi);
-    const pitchGain = 1.2 + (flight.gearPosition < .1 ? 1.2 * smoothstep(Math.abs(ey), .08, .3) : 0);
+    const authority = smoothstep(ias / vs, 1.15, 2.0);
+    const pitchGain = 1.2 + .8 * authority + (flight.gearPosition < .1 ? (1.2 + .6 * authority) * smoothstep(Math.abs(ey), .08, .3) : 0);
     const qSmall = pitchGain * ey * Math.cos(phi) + Math.min(0.4, (G0 / V) * Math.tan(phi) * Math.sin(phi));
     // Large-angle law: roll the target above the nose, then pull.
     const dphi = Math.atan2(bx, by);
@@ -157,7 +158,7 @@ export class Instructor {
     if (Math.abs(k.pitch) > .05) qDem = k.pitch * (k.pitch > 0 ? pull : push);
     if (qDem > 0) qDem *= 1 - guard;
     if (latched) qDem = Math.min(qDem, -0.15);
-    const alphaCap = 12 * (0.30 - alpha), gCap = 8 * G0 / V, negCap = -1.5 * G0 / V;
+    const alphaCap = 12 * (0.30 - alpha), gCap = pull, negCap = -push;
     state.alphaLimited = qDem > alphaCap;
     state.gLimited = qDem > gCap;
     qDem = Math.max(Math.min(qDem, alphaCap, gCap), negCap);

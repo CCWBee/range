@@ -116,9 +116,9 @@ function naturalHeight(x,z) {
 export function terrainHeight(x, z) {
   const dist = pavementDistance(x, z);
   if (dist === 0) return 0;
-  const airfieldDistance = Math.hypot(Math.max(-850-x,0,x-600),Math.max(-2900-z,0,z-1700));
-  const h = -0.34 + (naturalHeight(x,z)+0.34)*smoothstep(airfieldDistance,0,600);
-  return dist >= 400 ? h : h * smoothstep(dist, 0, 400);
+  const airfieldDistance = Math.hypot(Math.max(-700-x,0,x-140),Math.max(-2650-z,0,z-340));
+  const h = -0.34 + (naturalHeight(x,z)+0.34)*smoothstep(airfieldDistance,0,140);
+  return dist >= 120 ? h : h * smoothstep(dist, 0, 120);
 }
 
 export function speedOfSound(h) {
@@ -128,7 +128,7 @@ export function speedOfSound(h) {
 // FCS pitch rate limits (rad/s): a pull of 8 g0/V is about n = 9 in level flight.
 export function qMax(V) {
   const v = Math.max(V, 5);
-  return { pull: Math.min(8 * G0 / v, 1.2), push: Math.min(3 * G0 / v, 0.6) };
+  return { pull: Math.min(10 * G0 / v, 1.2), push: Math.min(6 * G0 / v, 0.8) };
 }
 
 // FCS roll rate limit (rad/s), reduced by stores and by the gear.
@@ -279,7 +279,7 @@ export class Flight {
     this.elevon += clamp(elevonTarget - this.elevon, -3.5 * dt, 3.5 * dt);
     const aileronTarget = clamp(0.8 * (rollIn * pMax(speed, this.bombs, gp) - p) / qn, -0.35, 0.35);
     this.aileron += clamp(aileronTarget - this.aileron, -5 * dt, 5 * dt);
-    this.rudderAngle = clamp(-yawIn * 0.52 * clamp(1 - speed / 250, 0.15, 1) - 1.5 * beta + 0.15 * r, -0.52, 0.52);
+    this.rudderAngle = clamp(-yawIn * 0.52 * clamp(1 - speed / 600, 0.4, 1) - 1.5 * beta + 0.15 * r, -0.52, 0.52);
     // Nose wheel steering authority falls with the square of speed, so that full deflection asks
     // for about a third of a g of lateral acceleration whatever the speed. A gentler schedule lets
     // a taxi turn command 0.9 g, which lifts the inner main wheel and rolls the aircraft over: the

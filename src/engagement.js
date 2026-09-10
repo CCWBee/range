@@ -49,11 +49,11 @@ export function missileStep(m, target, dt) {
     } else { m.target=null; m.lost=true; }
   }
   // Finite motor burn, drag, gravity and limited steering make a poor launch miss naturally.
-  const thrust=m.age<2.7 ? 175 : 0;
+  const thrust=m.age<5.2 ? 175 : 0;
   m.velocity.addScaledVector(forward,(thrust-speed*speed*.00016)*dt).addScaledVector(steer,dt);
   m.velocity.y-=9.81*dt;
   m.position.addScaledVector(m.velocity,dt);
-  return m.age>22 || m.position.y<groundHeight(m.position.x,m.position.z);
+  return m.age>32 || m.position.y<groundHeight(m.position.x,m.position.z);
 }
 
 export function guidedBombStep(b, laser, dt) {
@@ -88,7 +88,7 @@ export class Engagement {
       this.airTargets.push({kind:'air',name:'MiG-15',mesh,position:mesh.position,velocity:V3(),engine:1,hp:6,maxHp:6,destroyed:false,age:0,fall:V3()});
     }
     effects.engagement=this;
-    for(const [i,t] of effects.targets.entries())Object.assign(t,{kind:'ground',name:`RANGE ${i+1}`,maxHp:3});
+    for(const [i,t] of effects.targets.entries())Object.assign(t,{kind:'ground',name:t.name||`RANGE ${i+1}`,maxHp:t.maxHp||3});
     this.reset();
   }
 
@@ -117,7 +117,8 @@ export class Engagement {
     const mesh=this.library.asset('sidewinder');
     const position=this.aircraft.releaseMissile(2-this.remaining);mesh.position.copy(position);mesh.quaternion.copy(flight.attitude);this.scene.add(mesh);
     this.missiles.push({mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,30),target:s.target,age:0,trail:0});
-    this.remaining--;s.locked=false;s.dwell=0;this.message('SIDEWINDER AWAY');return true;
+    this.effects.lastMunition=this.missiles[this.missiles.length-1];
+    this.remaining--;s.locked=false;s.dwell=0;this.message('SIDEWINDER AWAY · hold U to follow');return true;
   }
   hitAir(target,damage,point){
     if(target.destroyed)return;
@@ -126,6 +127,10 @@ export class Engagement {
     if(target.hp<=0){target.destroyed=true;target.engine=0;target.fall.copy(target.velocity);target.age=0;target.impacted=false;this.effects.explosion(target.position,1,target.velocity);this.message('AIR TARGET DESTROYED');}
   }
   update(dt,flight,aim){
+    if (this.remaining === 0 && !flight.crashed) {
+      this.reloadTime = (this.reloadTime || 0) + dt;
+      if (this.reloadTime >= 20) { this.remaining=2; this.reloadTime=0; this.aircraft.resetMissiles(); this.message('SIDEWINDERS RELOADED'); }
+    }
     this.elapsed+=dt;this.noticeTime=Math.max(0,this.noticeTime-dt);
     for(const target of this.airTargets) {
       target.previousPosition = target.position.clone();
@@ -169,7 +174,7 @@ export class Engagement {
       const expired=missileStep(m,m.target,dt);
       m.mesh.quaternion.setFromUnitVectors(V3(0,0,-1),m.velocity.clone().normalize());
       m.trail+=dt;
-      if(m.age<3&&m.trail>.035){m.trail=0;this.effects.spray.spawn({position:m.position.clone(),velocity:V3(1,1,0),size:1.1,alpha:.5,life:2.7});}
+      if(m.age<5.2&&m.trail>.035){m.trail=0;this.effects.spray.spawn({position:m.position.clone(),velocity:V3(1,1,0),size:1.1,alpha:.5,life:2.7});}
       let hit = null;
       if (m.age > .2) for (const target of this.airTargets) {
         if (target.destroyed) continue;
@@ -182,6 +187,7 @@ export class Engagement {
     this.audio?.seeker?.(s.enabled,s.locked,!!s.target);
   }
   reset(){
+    this.reloadTime=0;
     this.remaining=2;this.selected=null;this.elapsed=0;this.laser.active=false;
     Object.assign(this.seeker,{enabled:false,warm:0,dwell:0,target:null,locked:false});
     for(const m of this.missiles)this.scene.remove(m.mesh);this.missiles.length=0;

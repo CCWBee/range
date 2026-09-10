@@ -137,9 +137,14 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   }
 
   buildTracers() {
-    const geometry = new THREE.PlaneGeometry(0.09, 6);
+    if(this.library.has('practice_ship')) {
+      const mesh=this.library.asset('practice_ship');mesh.position.set(4400,-82.6,-4300);
+      mesh.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});this.scene.add(mesh);
+      this.targets.push({mesh,position:mesh.position.clone().add(V3(0,4,0)),home:mesh.position.clone(),name:'PRACTICE COASTER',ship:true,hp:12,maxHp:12,destroyed:false,wreck:null});
+    }
+    const geometry = new THREE.CylinderGeometry(0.16, 0.16, 9, 6);
     this.tracerMesh = new THREE.InstancedMesh(
-      geometry, new THREE.MeshBasicMaterial({ color: 0xffe7a1, transparent: true, opacity: 0.95, depthWrite: false }), 64);
+      geometry, new THREE.MeshBasicMaterial({ color: 0xffe7a1, toneMapped: false, transparent: true, opacity: 0.95, depthWrite: false }), 64);
     this.tracerMesh.frustumCulled = false;
     this.tracerMesh.count = 0;
     this.scene.add(this.tracerMesh);
@@ -214,7 +219,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     }
     if(this.world?.blastImpulse)this.world.blastImpulse.value.set(position.x,position.z,0,80*strength);
     for (const target of this.targets) {
-      if (!target.destroyed && target.position.distanceTo(position) < 33 * strength) this.destroyTarget(target);
+      if (!target.destroyed && target.position.distanceTo(position) < (target.ship?48:33) * strength) this.destroyTarget(target);
     }
   }
 
@@ -222,6 +227,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     if (target.destroyed) return;
     target.destroyed = true;
     this.rangeHit++;
+    if (target.ship) { target.smokeSource=true;target.sinkTime=0;return; }
     target.mesh.visible = false;
     if (this.library.has('wreck')) {
       const wreck = this.library.asset('wreck');
@@ -250,6 +256,8 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
       velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
       guided: true, age: 0,
     });
+    this.lastMunition = this.bombs[this.bombs.length-1];
+    this.engagement?.message('PAVEWAY AWAY · hold U to follow · L controls the laser');
     return true;
   }
 
@@ -278,6 +286,22 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   }
 
   update(dt, flight, camera, elapsed) {
+    this.reload ||= { bombs: 0, rounds: 0 };
+    if (!flight.crashed) for (const [kind, capacity, seconds] of [['bombs',4,25],['rounds',150,12]]) {
+      if (flight[kind] === 0) {
+        this.reload[kind] += dt;
+        if (this.reload[kind] >= seconds) {
+          flight[kind] = capacity; this.reload[kind] = 0;
+          if (kind === 'bombs') this.engagement?.aircraft.resetStores();
+          this.engagement?.message(kind === 'bombs' ? 'PAVEWAYS RELOADED' : 'GUN RELOADED');
+        }
+      } else this.reload[kind] = 0;
+    }
+    for(const target of this.targets)if(target.ship&&target.destroyed){
+      target.sinkTime+=dt;target.mesh.rotation.z=Math.min(.20,target.sinkTime*.006);
+      target.mesh.position.y=target.home.y-Math.min(2.5,target.sinkTime*.07);
+      this.burningTrail(target,V3(),dt);
+    }
     if (flight.crashed) {
       if (!this.playerWreck) {
         this.playerWreck = {position:flight.position,velocity:flight.wreckVelocity?.clone() || V3(),age:0};
@@ -328,7 +352,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
         if (target.destroyed) continue;
         const centre = target.position.clone().add(V3(0, 1, 0));
         line.closestPointToPoint(centre, true, closest);
-        if (closest.distanceTo(centre) < 3.8) {
+        if (closest.distanceTo(centre) < (target.ship?18:3.8)) {
           target.hp--;
           this.smoke.spawn({ position: closest.clone(), velocity: V3(0, 3, 0), size: 3, alpha: 0.5, life: 1.2 });
           if (target.hp <= 0) { this.explosion(target.position, 0.35); this.destroyTarget(target); }
@@ -458,6 +482,8 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   }
 
   reset() {
+    this.lastMunition = null;
+    this.reload = { bombs: 0, rounds: 0 };
     this.playerWreck = null;
     for (const bomb of this.bombs) this.scene.remove(bomb.mesh);
     this.bombs.length = 0;
@@ -476,8 +502,9 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     for (const target of this.targets) {
       target.destroyed = false;
       target.smokeSource = false;
-      target.hp = 3;
+      target.hp = target.maxHp || 3;
       target.mesh.visible = true;
+      if(target.ship){target.mesh.position.copy(target.home);target.mesh.rotation.set(0,0,0);target.sinkTime=0;}
       if (target.wreck) { this.scene.remove(target.wreck); target.wreck = null; }
     }
   }

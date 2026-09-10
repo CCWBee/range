@@ -13,7 +13,7 @@ const clamp = THREE.MathUtils.clamp;
 
 // Body positions for the parts the library does not place for us.
 const PYLONS = [[-1.85, -0.80, 0.45], [1.85, -0.80, 0.45], [-2.85, -0.57, 1.25], [2.85, -0.57, 1.25]];
-const WINGTIPS = [[-5.35, -0.05, 3.6], [5.35, -0.05, 3.6]];
+const WINGTIPS = [[-5.54, -0.41, 2.70], [5.54, -0.41, 2.70]];
 
 const FLAME_FRAGMENT = `
 varying vec3 p;
@@ -70,7 +70,9 @@ export class Aircraft {
     this.skinMaps ||= { grey: material.map };
     if (!this.skinMaps[name]) {
       const map = this.skinMaps.grey.clone();
-      map.image = texture.image;
+      // Texture.clone shares its Source. Replacing image on that clone mutates the grey
+      // atlas too and reuses its GPU storage despite the different image dimensions.
+      map.source = texture.source;
       map.needsUpdate = true;
       this.skinMaps[name] = map;
     }
@@ -126,7 +128,7 @@ export class Aircraft {
       canopy.transparent = true;
       canopy.opacity = 0.85;
       canopy.envMapIntensity = 1.2;
-      canopy.roughness = Math.min(canopy.roughness, 0.12);
+      canopy.roughness = 0.19;
       canopy.side = THREE.DoubleSide;
     }
     // The tyre of each gear leg turns about body X through the centre of its rubber part.
@@ -226,10 +228,10 @@ export class Aircraft {
     this.navLights = [
       lamp(0xff2a1e, WINGTIPS[0], 0.55),
       lamp(0x24ff62, WINGTIPS[1], 0.55),
-      lamp(0xfff2dc, [0, 1.1, 5.6], 0.45),
+      lamp(0xfff2dc, [0, 3.32, 6.80], 0.45),
     ];
     // Strobes: fin and belly, a double flash every 1.4 s.
-    this.strobes = [lamp(0xffffff, [0, 3.5, 4.4], 1.1), lamp(0xffffff, [0, -0.85, 0.4], 1.1)];
+    this.strobes = [lamp(0xffffff, [0, 3.35, 6.35], 1.1), lamp(0xffffff, [0, -1.04, 0.4], 1.1)];
     // The landing light lives in the scene from load, because adding or removing a light
     // recompiles every material in the scene. Its intensity follows the gear.
     this.landingLight = new THREE.SpotLight(0xfff0d2, 0, 260, 0.30, 0.45, 1.2);

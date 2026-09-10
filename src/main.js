@@ -83,12 +83,15 @@ function start() {
 
 function reset() {
   flight.reset();
-  instructor.mode = instructor.mode === 'manual' ? 'manual' : 'assist';
+  instructor.mode = 'assist';
   instructor.stallLatched = false;
   effects.reset();
   engagement.reset();
   aircraft.resetStores();
   input.centreCursor();
+  input.devCamera = false;
+  input.devPosition = null;
+  input.zoomHeld = false;
   input.setPaused(false);
   hud.reset();
   accumulator = 0;
@@ -106,7 +109,7 @@ function setPauseUi(paused) {
 
 input.on('pause', setPauseUi);
 input.on('start', start);
-input.on('bomb', () => { if (input.locked && !input.paused) effects.dropBomb(flight, aircraft); });
+input.on('bomb', () => { if (input.locked && !input.paused && !input.devCamera) effects.dropBomb(flight, aircraft); });
 input.on('gear', () => { if (!flight.onGround && !flight.crashed) flight.gear = !flight.gear; });
 input.on('camera', () => chase.toggle());
 input.on('seeker',()=>{if(input.locked&&!input.paused)engagement.toggleSeeker();});
@@ -115,10 +118,7 @@ input.on('target',()=>{if(input.locked&&!input.paused)engagement.select(flight,i
 input.on('laser',()=>{if(input.locked&&!input.paused)engagement.designate(flight,input.aimState);});
 input.on('restart', reset);
 input.on('help', () => hud.toggleHelp());
-input.on('instructor', () => {
-  instructor.mode = instructor.mode === 'assist' ? 'manual' : 'assist';
-  input.manual = instructor.mode === 'manual';
-});
+input.on('devCamera', () => { input.devCamera = !input.devCamera; input.pendingMouse.set(0,0); engagement.message(input.devCamera ? 'MAP CAMERA · WASD move · Q/E down/up · Shift faster · ` return' : 'FLIGHT CAMERA'); });
 
 $('start').onclick = start;
 $('helpToggle').onclick = () => hud.toggleHelp();
@@ -144,18 +144,17 @@ function frame(dt, stepSim) {
     accumulator += dt;
     let guard = 0;
     while (accumulator >= STEP && guard < 40) {
-      const keys = input.commands(flight);
+      instructor.mode = 'assist';
+      const keys = input.devCamera ? {} : input.commands(flight);
       const cmd = instructor.update(STEP, flight, aim, keys);
       flight.step(STEP, cmd);
-      // Releasing direct pitch resumes mouse steering along the newly chosen flight path.
-      if (Math.abs(keys.pitch) > .05 && input.worldAim) input.worldAim.copy(flight.velocity).normalize();
       engagement.update(STEP,flight,aim);
       accumulator -= STEP;
       guard++;
     }
     if (guard >= 40) accumulator = 0;
     gunTimer -= dt;
-    if (input.gunFiring() && gunTimer <= 0 && !flight.crashed) {
+    if (!input.devCamera && input.gunFiring() && gunTimer <= 0 && !flight.crashed) {
       effects.fireGun(flight);
       gunTimer = 0.065;
     }
@@ -165,9 +164,26 @@ function frame(dt, stepSim) {
   elapsed += dt;
 
   chase.update(dt, flight, aim, running, false, input);
+  const munition = effects.lastMunition;
+  if (input.keys.has('KeyU') && munition && !input.devCamera) {
+    const direction = munition.velocity.clone().normalize();
+    camera.position.copy(munition.position).addScaledVector(direction, -20).add(V3(0,6,0));
+    camera.up.set(0,1,0);
+    camera.lookAt(munition.position);
+  }
+  if (input.devCamera) {
+    input.devPosition ||= camera.position.clone();
+    input.devLook ||= new THREE.Vector2();
+    camera.rotation.set(input.devLook.y,input.devLook.x,0,'YXZ');
+    const move = V3(Number(input.keys.has('KeyD'))-Number(input.keys.has('KeyA')),0,Number(input.keys.has('KeyS'))-Number(input.keys.has('KeyW')));
+    if (move.lengthSq()) move.normalize().applyQuaternion(camera.quaternion);
+    move.y += Number(input.keys.has('KeyE'))-Number(input.keys.has('KeyQ'));
+    input.devPosition.addScaledVector(move,dt*(input.keys.has('ShiftLeft')?900:160));
+    camera.position.copy(input.devPosition);
+  } else input.devPosition = null;
   camera.updateMatrixWorld(true);
   input.projectAim(camera);
-  audio.setGun(stepSim && input.gunFiring() && flight.rounds > 0 && !flight.crashed,flight,camera);
+  audio.setGun(stepSim && !input.devCamera && input.gunFiring() && flight.rounds > 0 && !flight.crashed,flight,camera);
   aircraft.update(dt, flight, camera, elapsed);
   world.update(dt, flight, camera, elapsed);
 

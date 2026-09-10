@@ -124,7 +124,7 @@ export class ChaseCamera {
       }
     }
 
-    const fov = input?.keys.has('KeyZ') ? 26 : lerp(50, 58, clamp(speed / 300, 0, 1));
+    const fov = (input?.keys.has('KeyZ') || input?.zoomHeld) ? 26 : lerp(50, 58, clamp(speed / 300, 0, 1));
     camera.fov = snap ? fov : lerp(camera.fov, fov, 1 - Math.exp(-dt * 8));
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
