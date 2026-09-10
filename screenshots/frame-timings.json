@@ -1,0 +1,251 @@
+{
+  "date": "2026-09-07",
+  "method": "Foreground Brave requestAnimationFrame, 60 warmup frames then 241 fresh intervals per stage and resolution. Vsync-limited throughput, not isolated GPU timing.",
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "viewport": [
+    1920,
+    1080
+  ],
+  "views": [
+    {
+      "stage": "ramp",
+      "normal": {
+        "meanMs": 7.404979253111937,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 181,
+          "fps": 134.7103726986978,
+          "meanMs": 7.423333333333333,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 410866
+        },
+        "samples": 241,
+        "slowFraction": 0
+      },
+      "stress": {
+        "meanMs": 7.406224066390138,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 181,
+          "fps": 134.77088948787062,
+          "meanMs": 7.42,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 2,
+          "resolution": [
+            3840,
+            2160
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 410866
+        },
+        "samples": 241,
+        "slowFraction": 0
+      }
+    },
+    {
+      "stage": "takeoff",
+      "normal": {
+        "meanMs": 7.4207468879666605,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 179,
+          "fps": 134.87086115044983,
+          "meanMs": 7.414499999999922,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 404996
+        },
+        "samples": 241,
+        "slowFraction": 0
+      },
+      "stress": {
+        "meanMs": 7.402904564315256,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 179,
+          "fps": 134.62876119101543,
+          "meanMs": 7.427833333333353,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 2,
+          "resolution": [
+            3840,
+            2160
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 404996
+        },
+        "samples": 241,
+        "slowFraction": 0
+      }
+    },
+    {
+      "stage": "cloud",
+      "normal": {
+        "meanMs": 7.409128630705298,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 102,
+          "fps": 134.96794511303565,
+          "meanMs": 7.409166666666667,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 260244
+        },
+        "samples": 241,
+        "slowFraction": 0
+      },
+      "stress": {
+        "meanMs": 7.436514522821383,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 102,
+          "fps": 134.40559127259763,
+          "meanMs": 7.440166666666628,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 2,
+          "resolution": [
+            3840,
+            2160
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 260244
+        },
+        "samples": 241,
+        "slowFraction": 0
+      }
+    },
+    {
+      "stage": "bomb",
+      "normal": {
+        "meanMs": 7.434854771784184,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 128,
+          "fps": 134.51708366962532,
+          "meanMs": 7.434000000000039,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 275584
+        },
+        "samples": 241,
+        "slowFraction": 0
+      },
+      "stress": {
+        "meanMs": 7.435684647302905,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 128,
+          "fps": 134.40860215053763,
+          "meanMs": 7.44,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 2,
+          "resolution": [
+            3840,
+            2160
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 275584
+        },
+        "samples": 241,
+        "slowFraction": 0
+      }
+    },
+    {
+      "stage": "landing",
+      "normal": {
+        "meanMs": 7.4136929460581396,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 177,
+          "fps": 134.74365020548336,
+          "meanMs": 7.421500000000039,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 1,
+          "resolution": [
+            1920,
+            1080
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 401556
+        },
+        "samples": 241,
+        "slowFraction": 0
+      },
+      "stress": {
+        "meanMs": 7.399170124481376,
+        "p95Ms": 7.600000000034925,
+        "render": {
+          "drawCalls": 177,
+          "fps": 134.86176668914362,
+          "meanMs": 7.415,
+          "p95Ms": 7.600000000034925,
+          "pixelRatio": 2,
+          "resolution": [
+            3840,
+            2160
+          ],
+          "samples": 600,
+          "slowFraction": 0,
+          "triangles": 401556
+        },
+        "samples": 241,
+        "slowFraction": 0
+      }
+    }
+  ],
+  "flightChecks": 28,
+  "effects": {
+    "bomb": {
+      "destroyed": true,
+      "falls": true,
+      "impact": true,
+      "released": true,
+      "smoke": true,
+      "wreckVisible": true
+    },
+    "gun": {
+      "destroyed": true,
+      "roundsUsed": 3,
+      "wreckVisible": true
+    },
+    "persistentBombWreck": true
+  },
+  "liveInput": {
+    "mouseRightTurnDegrees": 13,
+    "altitudeMetresBefore": 1000,
+    "altitudeMetresAfter": 1004,
+    "bombKey": true,
+    "instructorToggle": true,
+    "pauseResume": true
+  }
+}
