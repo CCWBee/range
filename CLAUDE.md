@@ -79,7 +79,10 @@ no pill labels, no decorative dots, no emoji icons.
   `window.range.benchmark()`, which renders synchronously, and `stress(true)` before it for the
   headroom number.
 - `frame-timings.json` at 6.94 ms every stage is the 144 Hz vsync interval, not GPU load. The
-  headroom number is the stressed one (pixel ratio 2).
+  headroom number is the stressed one (pixel ratio 2). `benchmark()` calls `gl.finish()` after
+  each frame: without it a synchronous timing is the CPU's submission rate, not the GPU's frame
+  time. Measured 10 September 2026 on the RTX 5070 Ti: 1.5 to 1.9 ms a frame at 2559 × 925, 1.8
+  to 2.4 ms at pixel ratio 2.
 - Phone sensors need a secure context: `deviceorientation` never fires over plain http, so the
   touch layer is tested on the Pages URL (or `cloudflared tunnel --url http://127.0.0.1:8099` for
   a local build), never over the LAN http server. iOS also needs

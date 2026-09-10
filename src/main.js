@@ -391,12 +391,16 @@ function renderOnce(dt = 1 / 60) {
   return dt;
 }
 
+// WebGL queues its work, so the frame is finished on the GPU before the clock stops; without
+// that the figure is the CPU's submission rate, which says nothing where the GPU is the limit.
 function benchmark(frames = 240, dt = 1 / 60) {
   const warmup = Math.min(30, Math.floor(frames / 4));
+  const gl = renderer.getContext();
   const times = [];
   for (let i = 0; i < frames + warmup; i++) {
     const t0 = performance.now();
     renderOnce(dt);
+    gl.finish();
     const t1 = performance.now();
     if (i >= warmup) times.push(t1 - t0);
   }

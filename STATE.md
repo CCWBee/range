@@ -29,7 +29,10 @@ packed library, the page's unique ids); all pass. Headless frames: `screenshots/
   design-library, MIT); whether the Crown-copyright Typhoon adaptation may stay in a public repo
   (the RAF site refused automated reading of its terms, so nothing there was verified); whether the
   old Codex folder should still be mirrored now that Codex commits here.
-- Frame rate is unmeasured on a phone and in Brave.
+- Desktop frame rate, measured 10 September in Brave on the RTX 5070 Ti with the GPU finished
+  each frame: 1.5 to 1.9 ms a frame at 2559 × 925 (cloud 678 fps, bomb run 613, ramp 520) and 1.8
+  to 2.4 ms at pixel ratio 2 (4654 × 1682); the live loop is vsync-bound at 144 Hz, so the 60 fps
+  target holds by a factor of ten. The phone's frame rate is still unmeasured.
 
 ## Next action
 
