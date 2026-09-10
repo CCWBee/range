@@ -180,7 +180,9 @@ function lampPlacements() {
 // ---------------------------------------------------------------------------------------------
 
 export class World {
-  constructor(renderer, library) {
+  // options.tier: 'desktop' or 'mobile' (spec 2026-09-10 section 8: one 1024 shadow map).
+  constructor(renderer, library, options = {}) {
+    this.tier = options.tier || 'desktop';
     this.renderer = renderer;
     this.library = library;
     this.scene = new THREE.Scene();
@@ -254,7 +256,8 @@ void main(){vec3 d=normalize(direction);
     const make = (footprint, height, distance, bias, normalBias) => {
       const light = new THREE.DirectionalLight(0xffedce, 0.75);
       light.castShadow = true;
-      light.shadow.mapSize.set(2048, 2048);
+      const size = this.tier === 'mobile' ? 1024 : 2048;
+      light.shadow.mapSize.set(size, size);
       // The shadow camera is sized by ground footprint: a square of side W seen from 11 degrees
       // of elevation and 19 degrees off the axis needs 1.27 W across and W sin(11) plus the
       // caster height along the light.
@@ -276,6 +279,8 @@ void main(){vec3 d=normalize(direction);
     // of anything it taxis past. Far: an 800 m square ahead of the camera for the buildings.
     this.nearLight = make(70, 6, 260, -0.00012, 0.06);
     this.farLight = make(800, 24, 2200, -0.0006, 0.9);
+    // The mobile tier keeps the aircraft's own shadow and drops the far map for the buildings.
+    if (this.tier === 'mobile') this.farLight.castShadow = false;
   }
 
   // ------------------------------------------------------------------------- ocean
@@ -342,11 +347,14 @@ void main(){
     }
     const roadMap=new THREE.CanvasTexture(roadCanvas);roadMap.flipY=false;
     const grid = JERSEY;
-    const nx = grid ? grid.nx : 256;
-    const nz = grid ? grid.nz : 256;
+    // The mobile tier meshes every other grid point: the same extent at twice the spacing, a
+    // quarter of the triangles, and every vertex still on the true height.
+    const stride = this.tier === 'mobile' ? 2 : 1;
+    const nx = grid ? Math.ceil(grid.nx / stride) : 256;
+    const nz = grid ? Math.ceil(grid.nz / stride) : 256;
     const originX = grid ? grid.originX : -12000;
     const originZ = grid ? grid.originZ : -14000;
-    const spacing = grid ? grid.spacing : 110;
+    const spacing = (grid ? grid.spacing : 110) * stride;
     const positions = new Float32Array(nx * nz * 3);
     for (let j = 0; j < nz; j++) {
       for (let i = 0; i < nx; i++) {
@@ -752,6 +760,7 @@ void main(){
     const geometry = crossed();
     const random = mulberry32(31337);
     const scatter = (count, stem, height, tint) => {
+      if (this.tier === 'mobile') count = Math.round(count / 2);
       const map = this.library.texture(stem);
       if (map) map.colorSpace = THREE.SRGBColorSpace;
       const material = new THREE.MeshStandardMaterial({
@@ -814,7 +823,7 @@ void main(){
       const p=area.points,xs=p.map(p=>p[0]),zs=p.map(p=>p[1]);
       const x0=Math.min(...xs),x1=Math.max(...xs),z0=Math.min(...zs),z1=Math.max(...zs);
       const attempts=Math.min(250,Math.ceil((x1-x0)*(z1-z0)/550));
-      for(let i=0;i<attempts&&positions.length<3600;i++){
+      for(let i=0;i<attempts&&positions.length<(this.tier==='mobile'?1200:3600);i++){
         const x=x0+random()*(x1-x0),z=z0+random()*(z1-z0),y=terrainHeight(x,z);
         if(y<JERSEY.seaLevel+5||onPavement(x,z)||!contains(x,z,p))continue;
         positions.push([x,y,z,.65+random()*.7,random()*Math.PI*2]);

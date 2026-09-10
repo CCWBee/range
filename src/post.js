@@ -48,13 +48,17 @@ void main() {
 }`;
 
 export class Post {
-  constructor(renderer, quadGeometry) {
+  // options: samples (MSAA on the scene target, 4 on desktop, 0 on the mobile tier) and
+  // bloomDivisor (the bloom runs at a third on desktop, a quarter on the mobile tier).
+  constructor(renderer, quadGeometry, options = {}) {
     this.renderer = renderer;
+    this.samples = options.samples ?? 4;
+    this.divisor = options.bloomDivisor || 3;
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     this.sceneTarget = new THREE.WebGLRenderTarget(size.x, size.y, {
-      type: THREE.HalfFloatType, samples: 4,
+      type: THREE.HalfFloatType, samples: this.samples,
     });
-    this.bloomA = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(size.x / 3)), Math.max(1, Math.floor(size.y / 3)), {
+    this.bloomA = new THREE.WebGLRenderTarget(Math.max(1, Math.floor(size.x / this.divisor)), Math.max(1, Math.floor(size.y / this.divisor)), {
       type: THREE.HalfFloatType, depthBuffer: false,
     });
     this.bloomB = this.bloomA.clone();
@@ -89,8 +93,8 @@ export class Post {
   resize() {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
     this.sceneTarget.setSize(size.x, size.y);
-    const w = Math.max(1, Math.floor(size.x / 3));
-    const h = Math.max(1, Math.floor(size.y / 3));
+    const w = Math.max(1, Math.floor(size.x / this.divisor));
+    const h = Math.max(1, Math.floor(size.y / this.divisor));
     this.bloomA.setSize(w, h);
     this.bloomB.setSize(w, h);
   }

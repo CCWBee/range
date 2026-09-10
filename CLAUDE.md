@@ -1,10 +1,14 @@
 # RANGE
 
-A self-contained three.js flight demo: one Eurofighter Typhoon, a wet North Sea airbase at dusk,
-a short sortie (take off, fly the coastal box, gun and bomb the range, land). Every mesh is
-authored in Blender, textures are generated or baked, and the deliverable is one HTML file with
-no external assets. Started 5 September 2026 in the Codex app, moved here on 6 September 2026.
-The specs live in `docs/specs/`; the current one is `2026-09-06-range-v2.md`.
+A self-contained three.js flight demo: one Eurofighter Typhoon over Jersey at a wet dusk (Jersey
+Airport, OpenStreetMap roads, buildings and harbour, a MiG to chase), a short sortie (take off,
+fly the coast, gun, Paveways and Sidewinders, land). Every mesh is authored in Blender, textures
+are generated or baked, and the deliverable is one HTML file with no external assets. Started
+5 September 2026 in the Codex app, moved here on 6 September 2026. Public at
+https://ccwbee.github.io/range/ (Pages deploys on every push to master); the phone version is
+`mobile.html` beside it. The specs live in `docs/specs/`: `2026-09-06-range-v2.md` is the base,
+`2026-09-10-range-mobile.md` the tilt-to-fly touch version; `docs/DESIGN.md` holds the design
+thesis, tokens and the primitive registry.
 
 ## Layout
 
@@ -12,7 +16,8 @@ The specs live in `docs/specs/`; the current one is `2026-09-06-range-v2.md`.
   wraps it with the three.js licence.
 - `physics.js`: rigid-body flight model with a rate-command fly-by-wire loop and three wheel
   contacts. `control.js`: the mouse-aim instructor. `src/`: renderer modules (loader, world,
-  aircraft, effects, camera, input, hud, audio, post, main).
+  aircraft, effects, engagement, camera, input, touch, hud, audio, post, main) and the Jersey data
+  modules (jersey, roads, landcover, landmarks), which the bundler transforms per tier.
 - `assets/meshes.json` (manifest) + `assets/meshes.bin` (binary library) are exported from
   `assets/RANGE.blend` by `tools/export_meshes.py`; `tools/model_range.py` authors every mesh.
   `tools/bake_jet.py` bakes the aircraft atlases (`textures/jet_*`).
@@ -31,10 +36,14 @@ no pill labels, no decorative dots, no emoji icons.
 
 ## Run
 
-- Tests: `node tools/test_flight.mjs` (physics and instructor acceptance tests; every line prints
-  `PASS`). This is the project's check command.
-- Bundle: `python tools/build.py` (prints the byte count, asserts no external references, writes
-  `dist/index.html` and `RANGE.zip`).
+- Tests: `node tools/test_flight.mjs` (physics, instructor, engagement and touch acceptance tests,
+  chained; every line prints `PASS`). This is the project's check command.
+- Bundle: `python tools/build.py` (writes `dist/index.html` and `RANGE.zip`, then the lighter
+  `dist/mobile.html`; `--tier desktop|mobile` writes one; prints the byte counts, asserts the size
+  budgets and no external references).
+- Touch layer on a desktop: open either bundle with `?touch=1` (drag aims; no sensors), inject a
+  tilt with `window.range.touch.simulate(beta, gamma)`, or stage the overlay with
+  `window.range.touchDemo('cloud')`. The layout frame: `node E:\claude-projects\design\tools\qa\shot.mjs --url "file:///E:/claude-projects/range/dist/mobile.html?touch=1" --out screenshots\touch-mobile.png --width 932 --height 430 --wait 3500 --eval "window.range.touchDemo('cloud')"`.
 - Dev page: serve the folder over HTTP (`python -m http.server 8080` here) and open
   `http://localhost:8080/`; `file://` only works for `dist/index.html` because the dev page fetches
   the library.
@@ -65,3 +74,10 @@ no pill labels, no decorative dots, no emoji icons.
   headroom number.
 - `frame-timings.json` at 6.94 ms every stage is the 144 Hz vsync interval, not GPU load. The
   headroom number is the stressed one (pixel ratio 2).
+- Phone sensors need a secure context: `deviceorientation` never fires over plain http, so the
+  touch layer is tested on the Pages URL (or `cloudflared tunnel --url http://127.0.0.1:8099` for
+  a local build), never over the LAN http server. iOS also needs
+  `DeviceOrientationEvent.requestPermission()` inside the ENTER tap; `src/touch.js` does that.
+- A pure roll of the phone must read as no pitch. Measuring pitch against the screen-up component
+  alone shrinks it as the phone rolls; `tiltFromUp` measures it against the whole in-plane
+  magnitude, and the test "right edge down is positive roll and no pitch" catches a regression.

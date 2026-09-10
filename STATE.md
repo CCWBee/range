@@ -1,5 +1,31 @@
 # STATE
 
+## 10 September 2026: the mobile tilt-to-fly version
+
+Where it stands: built, tested and bundled (spec `docs/specs/2026-09-10-range-mobile.md`, design
+`docs/DESIGN.md`). `src/touch.js` plus hooks in input, main, hud, world and post; the tilt is the
+aim (azimuth relative to the path, elevation absolute above the horizon), a throttle slider, GUN,
+PAVEWAY and one SEEKER button that reads FIRE on lock; gear, brakes and the laser are automatic.
+`tools/test_touch.mjs` is chained from `test_flight.mjs` (48 PASS lines across the three suites).
+`python tools/build.py` writes `dist/index.html` (37.2 MB, height grid now int16) and
+`dist/mobile.html` (12.5 MB: 25 of 87 settlement chunks, thinned roads and land cover, smaller
+textures, no heritage skin); the desktop page sends phones to the mobile one. The mobile tier draws
+941k triangles at the cloud pose (from 2.7 M) with a stride-2 terrain, fewer trees and less
+clutter. Headless frames: `screenshots/touch.png` (desktop bundle, `?touch=1`) and
+`screenshots/touch-mobile.png` (the mobile bundle). Pages deploys on push, so
+https://ccwbee.github.io/range/mobile.html carries it once the workflow has run.
+
+Open threads: the one check only a phone can make. Open the Pages URL on the phone, grant motion,
+hold it sideways: right edge down turns right, a pull climbs, the top of the slider lights reheat,
+PAVEWAY drops with the laser message, SEEKER turns to FIRE on the MiG and launches. The feel lives
+in the constants at the top of `src/touch.js` (deadzones, tilt limits, azimuth and elevation
+ranges, smoothing). Frame rate on a phone is unmeasured, and desktop fps is still unmeasured in
+Brave.
+
+Next action: the phone check above, then adjust the tilt constants to taste. Correction to the
+notes below: git shows those changes committed (`1078f46`, `fab715a`), pushed, and live at
+https://ccwbee.github.io/range/ (the repository is public and Pages deploys on every push).
+
 ## 9 September 2026 skin and publishing update
 
 The RAF FBX is integrated with its supplied 2048px grey atlas and bump map. The heritage

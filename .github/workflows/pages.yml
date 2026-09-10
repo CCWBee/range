@@ -25,7 +25,7 @@ jobs:
       - name: Check flight and engagement
         run: node tools/test_flight.mjs
       - name: Check standalone build
-        run: test -s dist/index.html
+        run: test -s dist/index.html && test -s dist/mobile.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

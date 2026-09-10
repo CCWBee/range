@@ -40,6 +40,8 @@ export class Input {
     this.look = new THREE.Vector2();
     this.returningLook = false;
     this.aimState = { direction: null, active: false };
+    // Touch mode: the sim runs under a virtual lock, since phones have no pointer lock.
+    this.virtualLock = false;
     this.attach();
   }
 
@@ -47,11 +49,12 @@ export class Input {
 
   fire(name, value) { if (this.handlers[name]) this.handlers[name](value); }
 
-  get locked() { return document.pointerLockElement === this.canvas; }
+  get locked() { return this.virtualLock || document.pointerLockElement === this.canvas; }
   get freeLook() { return this.keys.has('KeyC'); }
 
   // Only ever called from a user gesture on the canvas, never from start() or stage().
   requestLock() {
+    if (this.virtualLock) return;
     let result;
     try { result = this.canvas.requestPointerLock(); } catch { result = null; }
     if (result && typeof result.catch === 'function') {
@@ -59,7 +62,7 @@ export class Input {
     }
   }
 
-  exitLock() { if (this.locked) document.exitPointerLock(); }
+  exitLock() { if (!this.virtualLock && this.locked) document.exitPointerLock(); }
 
   // Idempotent: calling it with the state it is already in does nothing.
   setPaused(value) {
@@ -72,7 +75,8 @@ export class Input {
   attach() {
     const canvas = this.canvas;
     canvas.addEventListener('mousedown', (event) => {
-      if (!this.running) return;
+      // Under the virtual lock the touch layer owns the view, and a tap is never a gun event.
+      if (!this.running || this.virtualLock) return;
       if (!this.locked) {
         // The click that takes the lock back is not a gun event.
         this.setPaused(false);

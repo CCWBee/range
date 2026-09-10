@@ -21,7 +21,7 @@ const CRASH_REASONS = {
   airframe: 'The airframe broke up',
 };
 
-const RANGE_CENTRE = V3(-1000, 0, -4200);
+export const RANGE_CENTRE = V3(-1000, 0, -4200);
 const AIRFIELD_CENTRE = V3(0, 0, -900);
 
 export class Hud {
@@ -106,7 +106,7 @@ export class Hud {
     if (flight.crashed && !this.crashShown) {
       this.crashShown = true;
       const reason = CRASH_REASONS[flight.crashReason] || 'Aircraft lost';
-      this.setStatus(`AIRCRAFT LOST<small>${reason}. Press R to fly the sortie again.</small>`);
+      this.setStatus(`AIRCRAFT LOST<small>${reason}. ${options.touch ? 'Tap to fly again.' : 'Press R to fly the sortie again.'}</small>`);
       if (options.onCrash) options.onCrash();
     }
   }
@@ -170,6 +170,8 @@ export class Hud {
     if (Math.abs(flight.position.x) > 11000 || Math.abs(flight.position.z) > 12000) {
       hint = 'Leaving the coastal box. Turn back towards the airfield.';
     }
+    // Touch mode supplies its own wording for the same sortie.
+    if (options.hint !== undefined) hint = options.hint;
     this.el.hint.textContent = hint;
     if(effects.engagement?.noticeTime>0)this.el.hint.textContent=effects.engagement.notice;
     else if(input.freeLook)this.el.hint.textContent='FREE LOOK · release C to return to the flight view';

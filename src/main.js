@@ -14,6 +14,7 @@ import { Hud } from './hud.js';
 import { Audio } from './audio.js';
 import { Post } from './post.js';
 import { Engagement } from './engagement.js';
+import { Touch, autoGear, seekerPress, releaseBomb } from './touch.js';
 
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -28,7 +29,11 @@ try {
   $('error').textContent = 'RANGE needs WebGL 2. Open it in a browser with hardware acceleration enabled. ' + error.message;
   throw error;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+// The render tier: mobile in touch mode or when asked for (spec 2026-09-10 section 8).
+const touchWanted = Touch.wanted();
+const MOBILE = touchWanted || new URLSearchParams(location.search).get('tier') === 'mobile';
+const basePixelRatio = () => Math.min(devicePixelRatio, MOBILE ? 1 : 1.5);
+renderer.setPixelRatio(basePixelRatio());
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -46,13 +51,19 @@ const input = new Input(canvas);
 const hud = new Hud();
 
 const library = await loadLibrary(renderer);
-const world = new World(renderer, library);
+const world = new World(renderer, library, { tier: MOBILE ? 'mobile' : 'desktop' });
 const chase = new ChaseCamera(innerWidth / innerHeight);
 const aircraft = new Aircraft(library, world.scene, world.quadGeometry);
 const effects = new Effects(library, world.scene, world.quadGeometry, audio);
 const engagement = new Engagement(library,world.scene,effects,aircraft,audio);
 effects.world=world;
-const post = new Post(renderer, world.quadGeometry);
+const post = new Post(renderer, world.quadGeometry, { samples: MOBILE ? 0 : 4, bloomDivisor: MOBILE ? 4 : 3 });
+// The touch layer exists only on a coarse-pointer device or under ?touch=1; the class on body
+// switches the intro copy and the HUD layout before the sortie starts.
+const touch = touchWanted ? new Touch(input, canvas) : null;
+if (touch) document.body.classList.add('touch');
+// The mobile bundle carries one skin, so the selector goes with the tier, not the layer.
+if (MOBILE) $('skinControl').classList.add('hidden');
 
 const scene = world.scene;
 const camera = chase.camera;
@@ -103,7 +114,8 @@ function setPauseUi(paused) {
   if (!running) return;
   audio.update(flight,paused);
   if(paused)audio.seeker(false,false,false);
-  hud.setStatus(paused && !flight.crashed ? 'PAUSED<small>Click the view to take the controls back.</small>' : '');
+  const resume = touch?.active ? 'Tap to continue.' : 'Click the view to take the controls back.';
+  hud.setStatus(paused && !flight.crashed ? `PAUSED<small>${resume}</small>` : '');
   if (flight.crashed) hud.crashShown = false;
 }
 
@@ -120,7 +132,20 @@ input.on('restart', reset);
 input.on('help', () => hud.toggleHelp());
 input.on('devCamera', () => { input.devCamera = !input.devCamera; input.pendingMouse.set(0,0); engagement.message(input.devCamera ? 'MAP CAMERA · WASD move · Q/E down/up · Shift faster · ` return' : 'FLIGHT CAMERA'); });
 
-$('start').onclick = start;
+$('start').onclick = () => { if (touch) touch.enter(); start(); };
+if (touch) {
+  touch.on('bomb', () => { if (!input.paused && !input.devCamera) releaseBomb(engagement, effects, flight, aircraft, input.aimState); });
+  touch.on('seeker', () => { if (!input.paused) seekerPress(engagement, flight); });
+  touch.on('pause', () => { if (running) input.setPaused(true); });
+  touch.on('resume', () => { input.setPaused(false); audio.start(); });
+  touch.on('notice', (text) => engagement.message(text));
+  // A tap once the sortie is over restarts it; true tells the layer the tap is spent.
+  touch.on('tap', () => {
+    const over = flight.crashed || (flight.landed && flight.onGround && flight.velocity.length() < 4);
+    if (over) reset();
+    return over;
+  });
+}
 $('helpToggle').onclick = () => hud.toggleHelp();
 $('pauseButton').onclick = () => { input.setPaused(true); input.exitLock(); };
 $('sound').onclick = () => { $('sound').textContent = audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON'; };
@@ -139,15 +164,17 @@ window.addEventListener('resize', () => {
 // One frame of everything the loop does. The animation loop and renderOnce both come through
 // here, so a benchmark measures exactly what the game draws.
 function frame(dt, stepSim) {
+  if (touch) touch.update(dt, flight);
   const aim = input.aim(camera);
   if (stepSim) {
     accumulator += dt;
     let guard = 0;
     while (accumulator >= STEP && guard < 40) {
       instructor.mode = 'assist';
-      const keys = input.devCamera ? {} : input.commands(flight);
+      const keys = input.devCamera ? {} : touch?.active ? touch.commands(flight) : input.commands(flight);
       const cmd = instructor.update(STEP, flight, aim, keys);
       flight.step(STEP, cmd);
+      if (touch?.active) autoGear(flight);
       engagement.update(STEP,flight,aim);
       accumulator -= STEP;
       guard++;
@@ -190,16 +217,22 @@ function frame(dt, stepSim) {
   if (running) {
     hud.updateMarkers(flight, camera, input, effects);
     hud.updateEngagement(flight, camera, input, engagement);
+    if (touch?.active) touch.render(flight, effects, engagement);
   }
 
   hudTimer += dt;
   if (running && hudTimer > 0.1) {
     hudTimer = 0;
-    hud.update(flight, camera, input, instructor, effects, { paused: input.paused });
+    hud.update(flight, camera, input, instructor, effects, hudOptions());
   }
 
   renderer.info.reset();
   post.render(scene, camera, elapsed, effects.hitFlash);
+}
+
+// The HUD's options: in touch mode the layer supplies the hint wording and the crash copy.
+function hudOptions(paused = input.paused) {
+  return touch?.active ? { paused, touch: true, hint: touch.hint(flight, effects, paused) } : { paused };
 }
 
 function loop(now) {
@@ -368,10 +401,28 @@ function benchmark(frames = 240, dt = 1 / 60) {
 // number spec section 7 asks for.
 function stress(on = true) {
   stressed = !!on;
-  renderer.setPixelRatio(stressed ? 2 : Math.min(devicePixelRatio, 1.5));
+  renderer.setPixelRatio(stressed ? 2 : basePixelRatio());
   renderer.setSize(innerWidth, innerHeight);
   post.resize();
   return renderer.getPixelRatio();
+}
+
+// The touch overlay over a staged pose, for the layout screenshot. There is no device, so the
+// neutral pose is injected first and a rolled sample after it, and the slider takes the pose's
+// throttle.
+function touchDemo(name = 'cloud', beta = 50, gamma = 12) {
+  stage(name);
+  if (!touch) return null;
+  touch.enter();
+  touch.simulate(beta, 0);
+  touch.simulate(beta, gamma);
+  touch.throttle = flight.throttle;
+  touch.renderThrottle();
+  input.setPaused(false);
+  hud.setStatus('');
+  hud.update(flight, camera, input, instructor, effects, hudOptions(false));
+  frame(0.001, false);
+  return name;
 }
 
 function setAim(azimuth, elevation) {
@@ -396,9 +447,9 @@ requestAnimationFrame(loop);
 // Assigned last, once every await has settled, so a headless --eval that runs the moment the page
 // loads either finds the whole object or none of it.
 window.range = {
-  flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement,
+  flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch,
   targets: effects.targets, bombs: effects.bombs,
-  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim,
+  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo,
   dropBomb: () => effects.dropBomb(flight, aircraft),
   fireGun: () => effects.fireGun(flight),
   explosion: (position, strength) => effects.explosion(position, strength),
