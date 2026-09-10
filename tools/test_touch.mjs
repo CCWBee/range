@@ -9,7 +9,9 @@ import { Input } from '../src/input.js';
 import {
   upFromOrientation, calibrate, tiltFromUp, shape, aimFromTilt, seekerLabel, autoGear, releaseBomb,
   seekerPress, throttleCommands, ROLL_DEAD, ROLL_LIMIT, PITCH_DEAD, PITCH_LIMIT, AZIMUTH_MAX, ELEVATION_MAX,
+  Touch, seekerParts, countdown, CAP_LEGENDS, GATE_LEGENDS,
 } from '../src/touch.js';
+import { nextPixelRatio, SLOW_MS } from '../src/quality.js';
 
 const V3 = (...v) => new THREE.Vector3(...v), dt = 1 / 120, DEG = Math.PI / 180;
 const pass = (name, data = {}) => console.log('PASS', name, JSON.stringify(data));
@@ -180,10 +182,165 @@ globalThis.document ||= new EventTarget();
   const ids = [...page.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
   const seen = new Set(), duplicates = ids.filter((id) => seen.size === seen.add(id).size);
   assert.deepEqual(duplicates, [], `every id in index.html is unique: ${duplicates}`);
-  for (const id of ['quadrant', 'throttleFill', 'throttleLever', 'gunButton', 'bombButton', 'seekerButton', 'pauseTouch', 'recentre']) {
+  for (const id of ['quadrant', 'throttleSlot', 'throttleFill', 'throttleLever', 'throttleValue', 'throttleLabel',
+    'gunButton', 'bombButton', 'seekerButton', 'pauseTouch', 'recentre',
+    'skinSwitch', 'skinGrey', 'skinTrack', 'skinKnob', 'skinHeritage']) {
     assert(ids.includes(id), `the touch layer's ${id} exists`);
   }
   pass('page ids are unique and the touch layer has its elements', { ids: ids.length });
+}
+
+{
+  // The seeker cap's two lines: the legend carries the state and the numeral line is always a
+  // number. Every row of the table in spec section 3.10.
+  const s = { enabled: false, warm: 0, locked: false, target: null };
+  assert.deepEqual(seekerParts(s, 0, 5), { legend: 'SEEKER', value: '15', state: 'dim' },
+    'reloading keeps the SEEKER legend and puts a bare number on the value line');
+  assert.deepEqual(seekerParts(s, 2), { legend: 'SEEKER', value: '2', state: 'resting' });
+  s.enabled = true;
+  assert.deepEqual(seekerParts(s, 2), { legend: 'WARMING', value: '2', state: 'warming' });
+  s.warm = 1;
+  const search = seekerParts(s, 2);
+  assert.deepEqual(search, { legend: 'SEARCH', value: '2', state: 'lit' });
+  s.target = {};
+  const locking = seekerParts(s, 2);
+  assert.deepEqual(locking, { legend: 'LOCKING', value: '2', state: 'lit' });
+  // The lit and locked states differ in hue, so the legend string has to change as well: hue may
+  // never be the only channel.
+  assert.notEqual(search.legend, locking.legend, 'SEARCH and LOCKING are different strings');
+  s.locked = true;
+  const fire = seekerParts(s, 2);
+  assert.deepEqual(fire, { legend: 'FIRE', value: '2', state: 'locked' });
+  assert.notEqual(locking.legend, fire.legend, 'the lit and the locked legends are different strings');
+  pass('the seeker cap maps state to the legend line');
+}
+
+{
+  // The vocabulary is a ceiling, so a future state word cannot be added that will not fit: eight
+  // glyphs on a cap legend, five on a gate legend, three on any numeral the render can produce.
+  for (const legend of CAP_LEGENDS) assert(legend.length <= 8, `cap legend ${legend} is over 8 glyphs`);
+  for (const gate of Object.values(GATE_LEGENDS)) assert(gate.length <= 5, `gate legend ${gate} is over 5 glyphs`);
+  // The legends seekerParts can emit are the same list, so render() cannot mint one quietly.
+  const seeker = { enabled: false, warm: 0, locked: false, target: null };
+  for (const enabled of [false, true]) {
+    for (const warm of [0, 1]) {
+      for (const target of [null, {}]) {
+        for (const locked of [false, true]) {
+          Object.assign(seeker, { enabled, warm, target, locked });
+          for (const remaining of [0, 1, 2]) {
+            const parts = seekerParts(seeker, remaining, 0);
+            assert(CAP_LEGENDS.includes(parts.legend), `${parts.legend} is not in CAP_LEGENDS`);
+            assert(parts.value.length <= 3, `seeker numeral ${parts.value} is over 3 glyphs`);
+          }
+        }
+      }
+    }
+  }
+  // The three countdowns, over their whole run, and the fullest magazine.
+  for (let elapsed = 0; elapsed <= 25; elapsed += 0.25) {
+    for (const seconds of [12, 25, 20]) {
+      assert(countdown(seconds, elapsed).length <= 3, `countdown ${seconds} at ${elapsed} is over 3 glyphs`);
+    }
+  }
+  for (const numeral of [150, 4, 2, 0, 112]) {
+    assert(String(numeral).length <= 3, `numeral ${numeral} is over 3 glyphs`);
+  }
+  // The lists are a ceiling on the markup too. GUN, BOMB, MIL and IDLE are literals in index.html
+  // rather than written from these exports, so without this a nine-glyph legend typed into the page
+  // would pass every other assertion in this file.
+  const markup = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const printed = {};
+  for (const [pattern, allowed, what] of [
+    [/<span[^>]*class="name"[^>]*>([^<]*)</g, CAP_LEGENDS, 'cap legend'],
+    [/<span[^>]*class="gate[^"]*"[^>]*>([^<]*)</g, Object.values(GATE_LEGENDS), 'gate legend'],
+  ]) {
+    const found = [...markup.matchAll(pattern)].map((m) => m[1].trim());
+    assert(found.length, `index.html prints at least one ${what}`);
+    for (const legend of found) assert(allowed.includes(legend), `${what} ${legend} in index.html is not in the exported list`);
+    printed[what] = found.length;
+  }
+  pass('the legend and numeral budgets', { legends: CAP_LEGENDS.length, gates: Object.keys(GATE_LEGENDS).length, printed });
+}
+
+{
+  // The screen wake lock, driven through the prototype so it needs no DOM and no phone. Node
+  // defines navigator as a getter-only global, so the stub goes in through defineProperty.
+  const nativeNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const stub = (request) => Object.defineProperty(globalThis, 'navigator',
+    { value: { wakeLock: request ? { request } : undefined }, configurable: true, writable: true });
+  // Off the prototype rather than a bare object, because syncWakeLock calls the other two on this.
+  const layer = () => Object.assign(Object.create(Touch.prototype),
+    { active: true, wakeLock: null, wakePending: null, wakeWanted: true });
+  const request = Touch.prototype.requestWakeLock, sync = Touch.prototype.syncWakeLock;
+  const newLock = () => {
+    const lock = { released: 0, release() { lock.released++; return Promise.resolve(); }, addEventListener() {} };
+    return lock;
+  };
+
+  let asked = [], lock = newLock(), settle = null;
+  stub((type) => { asked.push(type); return Promise.resolve(lock); });
+  const t = layer();
+  await request.call(t);
+  assert.deepEqual(asked, ['screen'], 'an active layer asks once for a screen lock');
+  assert.equal(t.wakeLock, lock, 'and holds it');
+  await sync.call(t, true);
+  assert(t.wakeLock === null && lock.released === 1, 'a pause releases the lock and clears the handle');
+  await sync.call(t, false);
+  assert.equal(asked.length, 2, 'a resume asks again');
+  await sync.call(t, false);
+  assert.equal(asked.length, 2, 'the same value twice asks once: that is the edge detector');
+
+  // The race, which is the assertion that earns its place: a guard on the resolved handle alone
+  // passes only because a stub resolves in a microtask, and on a phone it takes two locks.
+  asked = []; lock = newLock();
+  stub((type) => { asked.push(type); return new Promise((resolve) => { settle = () => resolve(lock); }); });
+  const r = layer();
+  const first = request.call(r), second = request.call(r);
+  assert.deepEqual(asked, ['screen'], 'two calls before the first resolves ask once');
+  settle();
+  await Promise.all([first, second]);
+  assert(r.wakeLock === lock && lock.released === 0, 'and one lock is held');
+
+  // A pause that lands while the request is still outstanding.
+  asked = []; lock = newLock();
+  const p = layer();
+  const pending = request.call(p);
+  p.wakeWanted = false;
+  settle();
+  await pending;
+  assert(p.wakeLock === null && lock.released === 1, 'a lock arriving after the pause is handed straight back');
+
+  // The phones that cannot: no wakeLock at all, and a request that refuses. Neither throws, and
+  // neither locks the layer out of asking again for the rest of the sortie.
+  for (const broken of [undefined, () => Promise.reject(new Error('refused'))]) {
+    const n = layer();
+    stub(broken);
+    assert.equal(await request.call(n), null, 'an unsupported or refused lock resolves to null');
+    assert.equal(n.wakePending, null, 'and leaves the layer free to ask again');
+    assert.equal(await request.call(n), null, 'which it does');
+  }
+  if (nativeNavigator) Object.defineProperty(globalThis, 'navigator', nativeNavigator);
+  else delete globalThis.navigator;
+  pass('the screen wake lock, its race and the phones that cannot');
+}
+
+{
+  // The render scale. A 60 Hz phone's frames are 16.7 ms by definition, so the old p95-under-9-ms
+  // recovery branch was unreachable on every 60 Hz device.
+  const window120 = (ms, slow = 0, slowMs = 0) => [...Array(120 - slow).fill(ms), ...Array(slow).fill(slowMs)];
+  assert.equal(SLOW_MS, 22);
+  assert.equal(nextPixelRatio(window120(16.7), 1.5, 2, 1), 1.6, '120 frames at 60 Hz step a phone up');
+  assert.equal(nextPixelRatio(window120(16.7, 12, 33.4), 2, 2, 1), 1.9, 'one dropped frame in ten steps it down');
+  assert.equal(nextPixelRatio(window120(8.3), 1.5, 2, 1), 1.6, '120 frames at 120 Hz step up');
+  assert.equal(nextPixelRatio(window120(8.3, 12, 25), 2, 2, 1), 1.9, 'and a slow tail steps down');
+  assert.equal(nextPixelRatio(window120(40), 2, 2, 1), 1.9, 'a flat 40 ms window steps down on the SLOW_MS guard');
+  assert.equal(nextPixelRatio(window120(40), 1.1, 2, 1), 1, 'the ladder lands on the floor exactly');
+  assert.equal(nextPixelRatio(window120(40), 1, 2, 1), 1, 'and never goes under it');
+  assert.equal(nextPixelRatio(window120(16.7), 2, 2, 1), 2, 'a healthy window at the base stays there');
+  assert.equal(nextPixelRatio(window120(20.8), 1.9, 2, 1), 2, "a variable panel's 48 Hz floor still recovers");
+  assert.equal(nextPixelRatio(Array(59).fill(40), 2, 2, 1), 2, 'fewer than 60 samples decide nothing');
+  assert.equal(nextPixelRatio(window120(20), 0.7, 1.5, 0.6), 0.8, 'the desktop keeps its own floor');
+  pass('the adaptive pixel ratio recovers on every refresh rate');
 }
 
 console.log('ALL TOUCH CHECKS PASS');

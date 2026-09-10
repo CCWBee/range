@@ -1028,8 +1028,8 @@ def build_nose_gear():
     cylinder('Nose drag stay', (0, -0.95, -4.05), 0.028, 0.72, m, (math.pi / 2 + 0.55, 0, 0), 10)
     box('Landing light', (0, -1.05, -4.44), (0.14, 0.14, 0.06), mat('canopy'))
     wheel('Nose tyre', axle, 0.26, 0.20, mat('rubber'), m)
-    # Folds forward into the bay under the cockpit, tucked up so the stowed leg clears the skin.
-    hinge_pivot('jet_gear_nose', top, (0, 0.10, -1), (0, -1, 0))
+    # Aft-retracting nose leg, as shown in David Watson's Typhoon walkaround.
+    hinge_pivot('jet_gear_nose', top, (0, 0.10, 1), (0, -1, 0))
 
 
 # Main wheel track 3.87 m, the real Typhoon figure. Stream P widened it from the spec's 1.15 m

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#141b20"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>RANGE</title><meta name="description" content="One Typhoon, a wet coastal airbase and the last light of the day. A self-contained flight demo.">
+<link rel="icon" type="image/svg+xml" href="assets/icon/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="assets/icon/apple-touch-icon.png">
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#141b20;color:#eceded;font-family:Arial,Helvetica,sans-serif}
@@ -71,76 +72,461 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 #flightstate{left:18px;bottom:96px;gap:14px;font-size:10px}
 #hint{left:18px;bottom:132px;width:80%;font-size:12px}
 #location{font-size:10px;right:18px}#help{right:18px}#buttons{right:18px}}
-/* Touch mode (spec 2026-09-10, docs/DESIGN.md "Touch material"): the intro copy, the reduced HUD
-   and the overlay. The controls share one material, a clear dark lens with a lit top rim rather
-   than frosted glass: low blur, saturation restored, a hairline, a two-stop shadow; a heavier tint
-   without backdrop-filter and under reduced transparency. Only FIRE takes colour. The throttle is
-   a quadrant with etched ticks, MIL at 100 and the reheat band above it. */
-#introTouch{display:none}
-body.touch #introKeys{display:none}
-body.touch #introTouch{display:block}
-body.touch #intro{top:8%}
-body.touch h1{font-size:clamp(40px,10vh,72px);margin-bottom:12px}
-body.touch #intro p{font-size:14px;line-height:1.5}
-body.touch #start{margin-top:16px;padding:12px 22px}
-body.touch #intro small{margin-top:12px;line-height:1.6}
+/* touch:start */
+/* Barlow Condensed, SIL Open Font License 1.1. Copyright 2017 The Barlow Project Authors
+   (https://github.com/jpt/barlow). Licence text: assets/fonts/OFL-BarlowCondensed.txt */
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:400;font-display:block;
+ src:url(assets/fonts/BarlowCondensed-Regular.woff2) format('woff2')}
+@font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:500;font-display:block;
+ src:url(assets/fonts/BarlowCondensed-Medium.woff2) format('woff2')}
+body.touch{font-family:'Barlow Condensed','Roboto Condensed','Arial Narrow',Arial,sans-serif}
+body.touch #telemetry b,body.touch .key .value,body.touch #throttleValue{
+ font-family:inherit;font-variant-numeric:tabular-nums}
+/* Touch cockpit (spec docs/specs/2026-09-10-range-touch-cockpit.md sections 1 to 11, docs/DESIGN.md
+   "Touch material"): one instrument panel let into the frame, the throttle quadrant at the left
+   edge, and three equal caps in single file down the right edge. The panel and each cap are glass of
+   their own, cut from one material: a matte near-black film at 48 per cent over a blur, 14 px on the
+   panel and 8 px on a cap, a dark cut edge and one light from above and slightly left. Nothing sits
+   on glass, so there is no cap on a bezel and no stacked film; the throttle slot, the etched ticks
+   and the machined lever are painted on the panel. Everything that is not a control is HUD text on
+   the canopy,
+   under two full-bleed bands rather than a text shadow. Colour is a ladder: monochrome at rest,
+   phosphor green on the glyphs of a legend whose system is running, the lock core when something is
+   about to happen, amber for a countdown. A light here is always a legend that glows, never a dot. */
+:root{
+ /* Every safe-area inset goes through one of these four, declared once, so a QA run can shim a
+    notch by setting them on the root element. */
+ --sat:env(safe-area-inset-top,0px);--sar:env(safe-area-inset-right,0px);
+ --sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);
+ /* The screen inset: a notch never adds to a full 18 px margin. */
+ --inset-left:max(18px,calc(var(--sal) + 6px));
+ --inset-right:max(18px,calc(var(--sar) + 6px));
+ /* .52, down from the .56 of the first build: the panel and the three caps are one material, and a
+    cap that is its own glass cannot be darker than the panel it mirrors. Section 11.3 sets .48 and
+    names .52 as the figure to fall back to if the matrix fails; it is the caps rather than the
+    quadrant that needed it, and both moved together so the material stays one. */
+ --panel-tint:rgba(8,12,15,.72);
+ /* The two fallback films of the spec's section 6, named here so the fallback blocks at the foot of
+    this block carry a token rather than a literal. */
+ --panel-tint-flat:rgba(8,12,15,.74);
+ --panel-tint-opaque:rgba(8,12,15,.88);
+ --panel-backdrop:blur(14px) saturate(112%);
+ /* A cap is its own glass rather than a film on a bezel: one layer, the same figure as the panel,
+    over an 8 px blur. Section 11.3 computes .48 as the lightest film that clears the gate over the
+    backdrop section 2.1 sampled, and the caps have since moved from the bottom corner into the middle
+    of the right edge, where the landing stage's sky is brighter than anything that number was fitted
+    to: at .48 the locked legend measured 4.56:1 against the 4.5 floor. At .52 it measures 5.06 and
+    the ink 5.8, which is the margin the arithmetic predicted. One layer either way, against the two
+    stacked films of the first build that combined to 66 per cent and read as too dark. */
+ --cap-glass:rgba(8,12,15,.52);
+ --cap-glass-dim:rgba(6,10,13,.58);
+ --cap-glass-press:rgba(4,8,10,.62);
+ /* The cap's own fallback films, which section 6 sizes for the panel alone: without a blur the
+    backdrop's 95th percentile stands where the blur pulled it down, so the film goes up by the same
+    steps the panel takes. All three states move together, keeping the six and ten points that
+    separate resting from dim and pressed: with only the resting film raised, a cap under a thumb
+    would go lighter than the same cap at rest and an unavailable one lighter than an available one,
+    which is section 6's contract inverted. */
+ --cap-glass-flat:rgba(8,12,15,.66);
+ --cap-glass-dim-flat:rgba(6,10,13,.72);
+ --cap-glass-press-flat:rgba(4,8,10,.76);
+ --cap-glass-opaque:rgba(8,12,15,.80);
+ --cap-glass-dim-opaque:rgba(6,10,13,.86);
+ --cap-glass-press-opaque:rgba(4,8,10,.90);
+ --cap-backdrop:blur(8px) saturate(112%);
+ --slot-tint:rgba(3,5,7,.30);
+ --veil-top:rgba(6,12,16,.46);
+ /* .58, not the .48 section 2.1 sampled. The runway glare at 667 px puts the raw backdrop behind
+    the hint near L 0.60, three times the L 0.200 that number was fitted to, so the hint measured
+    4.31:1 against the 4.5 floor on the first screen of every sortie. Contrast is bought with film
+    alpha, which is what this token is for. */
+ --veil-bottom:rgba(6,12,16,.58);
+ --veil-intro:rgba(6,12,16,.54);
+ --veil-clear:rgba(6,12,16,0);
+ --ink:#eceded;
+ --ink-pressed:#f6fafb;
+ --ink-shadow:rgba(0,0,0,.85);
+ --halo:0 0 1px #000,0 0 3px #000,0 1px 2px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.75);
+ --focus:#d7e5ed;
+ --advisory:#d8cbb0;
+ --lit-core:#bdf6d4;
+ --lit-fringe:rgba(74,214,132,.95);
+ --lit-bloom:rgba(53,196,106,.50);
+ --lit-wash:rgba(53,196,106,.10);
+ --lock:#f09676;
+ --lock-core:#ffd9c6;
+ --lock-wash:rgba(240,150,118,.15);
+ --rim-top:rgba(233,240,242,.30);
+ --rim-left:rgba(233,240,242,.10);
+ --rim-bottom:rgba(0,0,0,.42);
+ --cut:rgba(0,0,0,.45);
+ --etch-dark:rgba(0,0,0,.50);
+ --etch-light:rgba(233,240,242,.18);
+ --metal:#dde4e7 0,#b4bec3 38%,#8a949a 62%,#59615f 100%;
+ /* ---- the one light, as a gradient per surface rather than the same literal written out at each
+    use: the panel's five per cent lift and ten per cent shade, the cap's, the cap's once it has
+    dropped below the bezel, the cap when the control is unavailable, and the cap under its own
+    lamp. Written here so the material is declared in one place and the rules below name it. */
+ --light-panel:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,0) 34%,rgba(0,0,0,.10));
+ --light-cap:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,0) 40%,rgba(0,0,0,.12));
+ --light-cap-lock:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,0) 40%,rgba(0,0,0,.12));
+ --light-cap-press:linear-gradient(180deg,rgba(0,0,0,.16),rgba(0,0,0,0) 45%,rgba(255,255,255,.04));
+ --light-cap-dim:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0) 40%,rgba(0,0,0,.14));
+ /* The lamp behind the panel, warming the face around a legend that is lit from behind. */
+ --lit-lamp:radial-gradient(120% 92% at 50% 64%,var(--lit-wash),transparent 68%);
+ --lock-lamp:radial-gradient(120% 92% at 50% 64%,var(--lock-wash),transparent 68%);
+ /* A cap's rims: lit top, lit left, shaded bottom, the bezel catching light just below it, and the
+    drop. The dim and locked cap each change two of the five and keep the rest. */
+ /* A cap standing on the frame takes the panel's own rims and its dark cut edge, because it is the
+    same material under the same light; only its drop is shorter, since a cap is a smaller object.
+    The dim and the locked cap each change the top rim and keep the rest. */
+ --cap-glass-drop:rgba(0,0,0,.34);
+ --cap-rim-top-dim:rgba(233,240,242,.16);
+ --cap-rim-top-lock:rgba(255,214,196,.34);
+ --cap-glow-lock:rgba(240,150,118,.20);
+ /* The panel's own contact shadow and its 8 px drop: tight, because a panel sits in the aircraft. */
+ --panel-contact:rgba(0,0,0,.50);
+ --panel-drop:rgba(0,0,0,.36);
+ /* Every cut thing inverts the cap's pair, the shade at the top and the lit lip at the bottom. The
+    lip is also a pressed cap's inverted rim, which is the same light on the same object. */
+ --slot-shade:rgba(0,0,0,.55);
+ --slot-shade-side:rgba(0,0,0,.35);
+ --slot-lip:rgba(233,240,242,.14);
+ --slot-fill:rgba(233,240,242,.10);
+ /* The fill past the gate. The hatch is the reheat marking, but the lever covers most of it at the
+    top stop (a 22 px lever centred on its position over a 17 px band), so the fill is the only cue
+    that can show while reheat is actually lit. Spec section 3.5 prints both rules. */
+ --slot-fill-lit:rgba(53,196,106,.16);
+ /* The machined face: its four-stop gradient, the hard specular at the very top edge, the shade
+    under it, the 1 px dark contour that stops it bleeding into the slot, its drop, the deeper drop
+    it takes while a finger is on it, and the knurling as alternating 1 px grooves. */
+ --metal-face:linear-gradient(180deg,var(--metal));
+ --metal-spec:rgba(255,255,255,.80);
+ --metal-shade:rgba(0,0,0,.60);
+ --metal-contour:rgba(0,0,0,.35);
+ --metal-drop:rgba(0,0,0,.55);
+ --metal-drop-held:rgba(0,0,0,.60);
+ --knurl:repeating-linear-gradient(90deg,rgba(18,24,28,.40) 0 1px,rgba(255,255,255,.22) 1px 2px,transparent 2px 4px);
+ /* The etched scale, the MIL detent's brighter face, and the reheat hatch in both of its states. */
+ --etch-ticks:repeating-linear-gradient(to top,var(--etch-dark) 0 1px,var(--etch-light) 1px 2px,transparent 2px 8.929%);
+ --detent-face:linear-gradient(180deg,rgba(233,240,242,.62),rgba(0,0,0,.55));
+ --hatch:repeating-linear-gradient(135deg,rgba(233,240,242,.16) 0 2px,rgba(233,240,242,0) 2px 5px);
+ --hatch-lit:repeating-linear-gradient(135deg,rgba(120,240,170,.45) 0 2px,rgba(120,240,170,0) 2px 5px);
+ --reheat-lamp:radial-gradient(120% 100% at 50% 100%,var(--lit-wash),transparent 70%);
+ --reheat-glow:rgba(53,196,106,.30);
+ /* The three surfaces that are not a control: the canopy's own text shadow, the halo that keeps the
+    markers off bare cloud, the stop veil and the rotate veil. */
+ --marker-halo:rgba(6,12,16,.85);
+ --stop-veil:rgba(8,14,18,.60);
+ --rotate-veil:rgba(6,10,13,.94);
+ /* The three-stop text shadows of a lit and a locked legend: core, 1 px fringe, bloom. Core to
+    fringe is what reads as lit from behind; a warming legend keeps the fringe and drops the bloom. */
+ --lit-glow:0 0 1px var(--lit-fringe),0 0 6px var(--lit-bloom),0 0 14px rgba(53,196,106,.26);
+ --lit-glow-warming:0 0 1px var(--lit-fringe),0 1px 2px rgba(0,0,0,.55);
+ --lock-glow:0 0 1px rgba(240,150,118,.95),0 0 7px rgba(240,150,118,.55),0 0 16px rgba(240,150,118,.28);
+ /* The one curve on the layer: a cap's 70 ms press and the switch knob's 120 ms slide. */
+ --e-out:ease}
+
+/* ---- the copy that differs between the desktop and the phone. Two spans, not a data attribute
+   printed through ::after, which would need the original text suppressed and can strip the
+   accessible name. */
+.short{display:none}
+body.touch .long{display:none}
+body.touch .short{display:inline}
+/* Two ids, not one: #intro small{display:block} outranks a bare #introTouch and the placard leaks
+   onto the desktop intro. */
+#intro #introTouch{display:none}
+body.touch #intro #introKeys{display:none}
+body.touch #intro #introTouch{display:block}
 body.touch canvas{cursor:default;touch-action:none}
 body.touch #buttons,body.touch #help,body.touch #skinControl,body.touch #location,body.touch #flightstate,body.touch #systems,body.touch #telemetry div:nth-child(3){display:none}
-body.touch #brand{top:calc(14px + env(safe-area-inset-top));left:calc(18px + env(safe-area-inset-left))}
-body.touch #objective{top:calc(40px + env(safe-area-inset-top));left:calc(18px + env(safe-area-inset-left));font-size:11px}
-body.touch #telemetry{left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom));gap:26px}
-body.touch #telemetry b{font-size:22px}
-body.touch #telemetry div{min-width:56px}
-body.touch #hint{left:50%;transform:translateX(-50%);bottom:calc(68px + env(safe-area-inset-bottom));max-width:min(50vw,460px);font-size:12px;line-height:1.5;text-align:center}
-body.touch #status{font-size:22px}
-body.touch #status small{font-size:12px}
-:root{--lens-tint:rgba(14,22,28,.34);--lens-tint-pressed:rgba(14,22,28,.56);--lens-blur:8px;--lens-line:rgba(214,229,237,.22);
- --lens-rim:inset 0 1px 0 rgba(236,240,242,.26),inset 1px 0 0 rgba(236,240,242,.08),inset 0 -1px 0 rgba(0,0,0,.30);
- --lens-shadow:0 1px 2px rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.32);
- --lens-sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 45%)}
+
+/* ---- the canopy. Two full-bleed gradients on #hud, holding their alpha flat for the full depth
+   the text occupies and only then decaying, because a band that decays through its own text is the
+   failure this replaces. Both stops carry the safe-area inset, or the home indicator pushes the
+   hint out of the held region on a real phone while headless Chrome, where the inset is zero,
+   passes it. No edge and no rule: it is a gradient across the whole width. */
+/* The bands above were the first build; Charles read them as faded bars and struck them
+   (spec section 12). The HUD text now stands on the bare frame with a tight dark halo, which
+   the QA probe measures by keeping the shadow when it blanks the ink. */
+body.touch #hud{background-image:none;text-shadow:var(--halo)}
+body.touch #brand{top:calc(14px + var(--sat));left:var(--inset-left);font-size:14px;font-weight:500;letter-spacing:.26em;color:var(--ink)}
+body.touch #objective{display:none}
+/* The readouts sit immediately right of the throttle panel: its own left edge plus its 70 px width
+   plus 18 px, so the two cannot drift apart on a notch. */
+body.touch #telemetry{left:calc(var(--inset-left) + 88px);bottom:calc(16px + var(--sab));transform:none;display:flex;align-items:baseline;gap:20px}
+body.touch #telemetry div{display:flex;align-items:baseline;gap:5px;min-width:0}
+body.touch #telemetry label{display:inline;margin:0;font-size:9px;font-weight:500;letter-spacing:.18em;color:var(--ink)}
+body.touch #telemetry b{font-size:22px;font-weight:400}
+body.touch #telemetry span{margin:0;font-size:10px;font-weight:500;letter-spacing:.18em;color:var(--ink)}
+/* The hint in two voices: the instructor in sentence case in the ink, the aircraft in upper case in
+   the advisory amber, the stall in the lock core with the .7 s flash DESIGN.md reserves for it. */
+/* width:auto because the under-700px rule above sets width:80%, which stretched the box to its
+   max-width at 667 and let it shrink-wrap at 844, so the two verification widths measured different
+   boxes for the same sentence. */
+body.touch #hint{left:calc(var(--inset-left) + 88px);bottom:calc(52px + var(--sab));transform:none;text-align:left;width:auto;max-width:min(46vw,300px);font-size:12px;font-weight:400;letter-spacing:.01em;line-height:1.45;color:var(--ink)}
+body.touch #hint.notice{font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--advisory)}
+/* Its own keyframe, dipping to 72 per cent rather than the desktop's 35: at 10 px on the phone the
+   dim step of the desktop flash measured 2.45:1 against the 4.5 floor, so for a real fraction of
+   every 0.7 s the stall notice was the one ink on the layer under the gate. The flash is still the
+   flash DESIGN.md reserves for the stall; the desktop keyframe is untouched. */
+@keyframes stall-flash-touch{50%{opacity:.72}}
+body.touch #hint.warning{font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--lock-core);animation:stall-flash-touch .7s steps(2,end) infinite}
+/* The markers are the one thing that must stay on the bare image, so they take a halo rather than a
+   backdrop: a 1 px stroke over bright cloud is under 2:1 against the 3:1 floor for a graphic. */
+body.touch #markers{filter:drop-shadow(0 0 2px var(--marker-halo))}
+/* The sim has stopped, so the frame stops being a live instrument and becomes a poster. The veil is
+   the whole screen rather than a box around the text, which would be a fifth dark rectangle. */
+/* Full width with no transform, so the status line centres without becoming a containing block for
+   anything. The veil is #hud's own background colour and not a layer over the screen: a background
+   colour paints under its element's background images and under every child, so the render dims
+   while the HUD's text, everything #touch draws and #status itself stay lit. The veil painted on
+   #status covered the render and all of the text bar one block, which put RECENTRE and PAUSE, two
+   live 44 px controls, at 2.2:1 as the reader saw them while contrast.py read the undimmed ink off
+   getComputedStyle and passed them. :has() rather than a class, so #status stays the one writer of
+   the stop state. */
+body.touch #status{left:0;right:0;transform:none;font-size:22px;font-weight:400;letter-spacing:.10em;color:var(--ink)}
+body.touch #status small{font-size:12px;letter-spacing:.02em;color:var(--ink)}
+body.touch:has(#status:not(:empty)) #hud{background-color:var(--stop-veil)}
+
+/* ---- the intro. Five items in the screen's rank order: the title, one line of prose, the ENTER
+   cap, the skin switch and one placard line. The veil is the intro's surface and the intro's
+   backdrop is the brightest region in the demo, so it holds its alpha flat for the width the text
+   occupies, exactly as the canopy bands do. */
+body.touch #veil{background:linear-gradient(90deg,var(--veil-intro) 0,var(--veil-intro) 260px,var(--veil-clear) 420px)}
+body.touch #intro{top:calc(22px + var(--sat));left:var(--inset-left);width:min(300px,76vw)}
+body.touch h1{font-size:clamp(40px,10vh,72px);letter-spacing:.22em;margin:0 0 14px}
+/* #intro p sets #c1cbd0, a grey step the touch build removed: it measures 4.17:1 on this veil
+   where the ink measures 5.86:1. */
+body.touch #intro p{font-size:14px;line-height:1.45;letter-spacing:.01em;margin:0 0 22px;max-width:none;color:var(--ink)}
+body.touch #start{display:inline-flex;align-items:center;justify-content:center;margin:0 0 14px;padding:0 18px;
+ min-height:44px;border:0;border-radius:10px;font-size:13px;font-weight:500;letter-spacing:.16em;color:var(--ink)}
+/* Two element selectors, because #intro small and body.touch #intro small would otherwise win on
+   specificity and keep their margin and their grey. */
+body.touch #intro #introTouch{margin:0;font-size:9px;font-weight:500;letter-spacing:.14em;line-height:1.5;color:var(--ink)}
+body.touch #loading{left:var(--inset-left);bottom:calc(22px + var(--sab));font-size:12px;color:var(--ink)}
+
+/* ---- the skin switch: the quadrant in miniature. A slot cut into the veil with a machined knob at
+   one end or the other and the two legends etched either side. Monochrome, because a skin is not a
+   running system and the intro is the one screen where nothing is running at all; the knob's
+   position is the state, aria-checked carries it, and the live legend's weight is a third channel
+   rather than the channel. */
+#skinSwitch{display:none}
+body.touch #skinSwitch{display:flex;align-items:center;gap:10px;min-height:44px;margin:0 0 22px;
+ touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+body.touch .skinLegend{border:0;background:transparent;padding:0 2px;min-height:44px;color:var(--ink);
+ font-size:10px;font-weight:400;letter-spacing:.14em;white-space:nowrap}
+body.touch .skinLegend[aria-checked="true"]{font-weight:500}
+body.touch .skinLegend:active{color:var(--ink-pressed)}
+body.touch .skinLegend:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+/* 60 px wide, not the 56 the spec sizes it at, and the knob travels 4 to 30 rather than 2 to 28: a
+   radius-5 knob at 2 px inside a radius-13 track hung 3 to 4 px outside the slot's rounded ends, so
+   it read as a metal tile laid on a dark pill rather than a knob sitting in a slot. */
+body.touch #skinTrack{position:relative;flex:0 0 auto;width:60px;height:26px;border-radius:13px;
+ background:var(--slot-tint);
+ box-shadow:inset 0 2px 3px var(--slot-shade),inset 1px 0 2px var(--slot-shade-side),inset 0 -1px 0 var(--slot-lip)}
+body.touch #skinKnob{position:absolute;top:2px;left:4px;width:26px;height:22px;border-radius:5px;
+ background:var(--metal-face);
+ box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
+  inset 0 -1px 0 var(--metal-shade),0 2px 5px var(--metal-drop);
+ transition:left .12s var(--e-out)}
+body.touch #skinKnob::after{content:"";position:absolute;left:8px;right:8px;top:7px;height:8px;
+ background:var(--knurl)}
+body.touch #skinSwitch.heritage #skinKnob{left:30px}
+/* The shadow deepens from two stops to three while a finger is on it, which is the lift a lever
+   takes when it is held. A metal lever under a thumb does not change colour and does not shrink. */
+body.touch #skinSwitch.sliding #skinKnob{transition:none;
+ box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
+  inset 0 -1px 0 var(--metal-shade),0 3px 7px var(--metal-drop-held)}
+
+/* ---- the material. The gradient is the one light, not a decorative sheen: five per cent lift over
+   the top third, ten per cent shade at the bottom. Elevation is tight because a panel sits in the
+   aircraft, it does not float above it, and the outer ring is a dark cut edge rather than a bright
+   hairline, because over a bright sky a light hairline outlines a sticker. */
 #touch{position:absolute;inset:0;pointer-events:none}
 #touch>*{pointer-events:auto}
 #touch button{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:none;font-family:inherit;color:inherit}
-.lens{border:1px solid var(--lens-line);background:var(--lens-sheen),var(--lens-tint);box-shadow:var(--lens-rim),var(--lens-shadow)}
-#quadrant{position:absolute;left:calc(18px + env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:40px;height:46vh;min-height:170px;border-radius:20px;touch-action:none}
-#throttleTicks{position:absolute;left:8px;right:8px;top:0;bottom:0;border-radius:inherit;background:repeating-linear-gradient(to top,rgba(214,229,237,.34) 0 1px,transparent 1px 8.929%)}
-#throttleReheat{position:absolute;left:0;right:0;top:0;height:10.7%;border-radius:20px 20px 0 0;background:rgba(240,150,118,.12)}
-#throttleFill{position:absolute;left:0;right:0;bottom:0;height:0;border-radius:0 0 20px 20px;background:rgba(214,229,237,.12)}
-#quadrant.reheat #throttleFill{background:rgba(240,150,118,.18)}
-#throttleTick{position:absolute;left:-2px;right:-2px;bottom:89.3%;border-top:1px solid rgba(236,240,242,.55)}
-#throttleLever{position:absolute;left:-7px;right:-7px;height:24px;margin-bottom:-12px;bottom:0;border-radius:12px;background:var(--lens-sheen),rgba(236,240,242,.86);box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -1px 0 rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.4)}
-#throttleLever::after{content:"";position:absolute;left:14px;right:14px;top:11px;height:2px;border-radius:1px;background:rgba(20,27,32,.35)}
-#quadrant .mark{position:absolute;left:100%;margin-left:10px;font-size:9px;letter-spacing:.16em;color:#adbdc7;transform:translateY(50%);white-space:nowrap}
-#quadrant .mark.mil{bottom:89.3%}
-#quadrant .mark.max{bottom:100%}
-#throttleLabel{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:10px;font-size:10px;letter-spacing:.14em;color:#c4cfd6;white-space:nowrap}
-#touchWeapons{position:absolute;right:calc(18px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));width:156px;height:158px;pointer-events:none}
-.key{position:absolute;pointer-events:auto;border-radius:18px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#dfe6ea;transition:transform .08s ease,background-color .08s ease}
-.key .name{font-size:10px;letter-spacing:.16em}
-.key .value{font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;font-weight:300;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:.04em}
-#gunButton{right:0;bottom:0;width:78px;height:78px;border-radius:22px}
-#bombButton{right:92px;bottom:8px;width:62px;height:62px}
-#seekerButton{right:8px;bottom:94px;width:62px;height:62px}
-.key.pressed{background:var(--lens-sheen),var(--lens-tint-pressed);transform:scale(.96)}
-.key.dim{color:#8f9ea7}
-#seekerButton.locked{border-color:rgba(240,150,118,.6);background:var(--lens-sheen),rgba(240,150,118,.30);color:#fbe3d6}
-#seekerButton.locked.pressed{background:var(--lens-sheen),rgba(240,150,118,.44)}
-#touchTop{position:absolute;top:calc(6px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));display:flex;gap:4px}
-#touch .text{border:0;background:transparent;color:#c4cfd6;font-size:11px;letter-spacing:.14em;padding:14px 12px;min-height:44px}
-#touch .text.pressed{color:#eceded}
-#rotate{display:none;position:absolute;inset:0;background:rgba(12,22,29,.94);align-items:center;justify-content:center;font-size:14px;letter-spacing:.1em;color:#c4cfd6;text-align:center}
-@media (orientation:portrait){body.touch #rotate{display:flex}}
+.panel{position:absolute;border:0;border-radius:15px;
+ background:var(--light-panel),var(--panel-tint);
+ box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),
+  0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 8px 20px var(--panel-drop);
+ transform:translateZ(0)}
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-.lens{-webkit-backdrop-filter:blur(var(--lens-blur)) saturate(150%);backdrop-filter:blur(var(--lens-blur)) saturate(150%)}}
+ .panel{-webkit-backdrop-filter:var(--panel-backdrop);backdrop-filter:var(--panel-backdrop)}}
+/* Soft-touch grain: a 96 px stitched tile, static, and the one detail that makes the surface matte
+   rather than plastic. A CSS background url() is img-src, which the CSP allows. The caps take it too,
+   because they are the same material; it is the first thing to drop if the frame cost says so. */
+.panel::after,.key::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+ opacity:.05;mix-blend-mode:overlay;
+ background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='96' height='96' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* A switch cap: its own glass, one layer of it. The panel's rims, its dark cut edge and a shorter
+   drop, because a cap standing on the frame is the same material as the panel under the same light
+   and is simply a smaller object. The ENTER cap on the intro is the same rule, so the first control
+   the player touches is the material the sortie is built from. The states are declared resting, lit,
+   locked, pressed, dim: press and dim are properties of the control and both outrank the lock's own
+   wash. */
+.key,body.touch #start,body.touch #start:hover{border:0;border-radius:10px;color:var(--ink);
+ background:var(--light-cap),var(--cap-glass);
+ box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),
+  0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 6px 16px var(--cap-glass-drop);
+ transform:translateZ(0);
+ transition:transform .07s var(--e-out),background-color .07s var(--e-out),box-shadow .07s var(--e-out)}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+ .key,body.touch #start{-webkit-backdrop-filter:var(--cap-backdrop);backdrop-filter:var(--cap-backdrop)}}
+.key{position:relative;pointer-events:auto;padding:0 5px;display:flex;flex-direction:column;
+ align-items:center;justify-content:center;gap:4px}
+.key .name{font-size:10px;font-weight:500;letter-spacing:.14em}
+.key .value{font-size:17px;font-weight:400;letter-spacing:.02em}
+/* Lit: the three text-shadow stops are the NVIS ramp read off the reference, and the radial wash is
+   the lamp behind the panel warming the face around the legend. */
+.key.lit{background-image:var(--lit-lamp),var(--light-cap)}
+.key.lit .name{color:var(--lit-core);text-shadow:var(--lit-glow)}
+.key.lit.warming .name{text-shadow:var(--lit-glow-warming)}
+/* Locked: the same grammar as the green, a different hue, so the ladder is legible. The outer glow
+   is the cap itself lighting and the top rim warms because the lamp is inside the cap. No flash:
+   navigator.vibrate(8) already fires on lock and DESIGN.md reserves flashing for the stall. */
+.key.locked{background-image:var(--lock-lamp),var(--light-cap-lock);
+ box-shadow:inset 0 1px 0 var(--cap-rim-top-lock),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),
+  0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 6px 16px var(--cap-glass-drop),0 0 12px var(--cap-glow-lock)}
+.key.locked .name{color:var(--lock-core);text-shadow:var(--lock-glow)}
+/* Pressed: four simultaneous signals and not one of them is colour. The cap drops 1 px, the film
+   deepens 14 points, the legend brightens, and the rim inverts because the cap is now below the
+   surface under the same light. The cut edge stays, or a pressed cap loses its outline over bright
+   cloud. scale(.985), not .96: a four per cent shrink on a 62 px cap is a 2.5 px jump that reads as a
+   web button. */
+.key.pressed,body.touch #start:active{background:var(--light-cap-press),var(--cap-glass-press);
+ box-shadow:inset 0 2px 3px var(--slot-shade),inset 0 -1px 0 var(--slot-lip),0 0 0 1px var(--cut);
+ transform:translateY(1px) scale(.985)}
+.key.pressed .name{color:var(--ink-pressed)}
+/* Press is geometry and film, lit and locked are colour, and the gun lights only while it is held,
+   so lit implies pressed on that one cap: without these two rules the phosphor legend and the green
+   wash never appear at all, because the pressed rules come later and win on source order. */
+.key.lit.pressed{background-image:var(--lit-lamp),var(--light-cap-press)}
+.key.lit.pressed .name{color:var(--lit-core);text-shadow:var(--lit-glow)}
+.key.lit.warming.pressed .name{text-shadow:var(--lit-glow-warming)}
+.key.locked.pressed{background-image:var(--lock-lamp),var(--light-cap-press)}
+.key.locked.pressed .name{color:var(--lock-core);text-shadow:var(--lock-glow)}
+/* Dim: the cap darkens, the legend does not. Unavailable is a property of the control, not of the
+   word on it, and the ink stays where it was. */
+.key.dim,body.touch #start:disabled{background:var(--light-cap-dim),var(--cap-glass-dim);
+ box-shadow:inset 0 1px 0 var(--cap-rim-top-dim),inset 0 -1px 0 var(--rim-bottom),
+  0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 6px 16px var(--cap-glass-drop)}
+/* The amber is the countdown and only the countdown: scoped to .reloading rather than to .dim,
+   because a cap dimmed for any other reason (a bomb on the ground, a lock inhibited below 45 m/s)
+   was otherwise showing a full magazine in a colour that means something is counting down. */
+.key.dim.reloading .value{color:var(--advisory)}
+.key.dim.pressed{background:var(--light-cap-press),var(--cap-glass-press)}
+
+/* ---- the throttle quadrant: a panel with a 26 px slot cut into it at the left and a 24 px legend
+   column at the right. The whole panel is the pointer target, so the 44 px minimum is met by 70. */
+#quadrant{left:var(--inset-left);top:50%;transform:translateY(-50%);
+ width:70px;height:46vh;min-height:176px;max-height:248px;touch-action:none}
+/* The slot's shadow is at the top and its lit line at the bottom: the exact inverse of a cap, under
+   the same light. It is a child of the panel, so it inherits the blurred backdrop without a second
+   backdrop-filter of its own. */
+/* Inset 19 px top and bottom, not the 8 the spec gives it: the lever is 22 px tall and centred on
+   the travel, so at 8 its bright top edge stood 3 px above the panel and 8 px of machined metal hung
+   outside the radius-15 corner over bare cloud. At 19 the lever's own rounded corners stay inside
+   the panel's at both ends of the travel, and the tick scale is unchanged because every mark in the
+   slot is a percentage of the slot. */
+#throttleSlot{position:absolute;left:6px;top:19px;bottom:19px;width:26px;border-radius:13px;
+ background:var(--slot-tint);
+ box-shadow:inset 0 2px 3px var(--slot-shade),inset 1px 0 2px var(--slot-shade-side),inset 0 -1px 0 var(--slot-lip)}
+/* Two lines to a tick, a dark groove with a lit lip under it, so the scale reads as machined into
+   the face rather than printed on it. 8.929 per cent is ten per cent of the 0 to 1.12 range. */
+#throttleTicks{position:absolute;inset:0;border-radius:inherit;background:var(--etch-ticks)}
+/* The MIL detent overhangs the slot by 3 px each side and is 2 px and brighter, because a gate
+   outranks a graduation. */
+#throttleTick{position:absolute;left:-3px;right:-3px;bottom:89.29%;height:2px;
+ background:var(--detent-face)}
+/* The reheat band is a permanent marking in monochrome and lights only while the lever is past the
+   gate, which is a system that is live and powered. */
+#throttleReheat{position:absolute;left:0;right:0;top:0;height:10.71%;border-radius:13px 13px 0 0;
+ background:var(--hatch)}
+#quadrant.reheat #throttleReheat{background:var(--reheat-lamp),var(--hatch-lit);
+ box-shadow:0 0 10px var(--reheat-glow)}
+/* The fill is monochrome until the lever is past the gate, and then it lights with the hatch. It is
+   the one fill on the layer the lit ramp reaches, ruled on 10 September and printed in the spec's own
+   section 3.5: the hatch is the marking, but a 22 px lever centred on its position covers about
+   11 px of the band's 17, so at the top stop the hatch alone is a sliver and the fill is the only
+   cue that reheat is actually lit. */
+#throttleFill{position:absolute;left:0;right:0;bottom:0;height:0;border-radius:0 0 13px 13px;background:var(--slot-fill)}
+#quadrant.reheat #throttleFill{background:var(--slot-fill-lit)}
+/* The lever is the only bright object on the layer: a four-stop gradient reading top-lit and
+   bottom-dark, a hard specular at the very top edge, a 1 px dark contour so it does not bleed into
+   the slot, and knurling as alternating 1 px grooves rather than one grey line. Radius 5, not 12: a
+   machined lever is not a pill. */
+#throttleLever{position:absolute;left:-5px;right:-5px;height:22px;bottom:0;margin-bottom:-11px;
+ border-radius:5px;background:var(--metal-face);
+ box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
+  inset 0 -1px 0 var(--metal-shade),0 2px 5px var(--metal-drop)}
+#throttleLever::after{content:"";position:absolute;left:8px;right:8px;top:7px;height:8px;
+ background:var(--knurl)}
+/* The gate legends are etched on the panel beside the slot, right aligned in the 24 px column. The
+   slot is inset 19 px top and bottom, so a fraction f of its travel is 19px + f(100% - 38px) of the
+   panel: MIL at 89.29 per cent is calc(89.29% - 14.93px), and the bottom gate is the slot's floor.
+   MIL is permanently unlit, and the bottom gate stays monochrome because the string is the signal:
+   lighting it would put a lit legend on a resting aircraft on the first frame of every sortie. */
+#quadrant .gate{position:absolute;right:6px;width:24px;text-align:right;transform:translateY(50%);
+ font-size:8px;font-weight:500;letter-spacing:.08em;line-height:1;white-space:nowrap;color:var(--ink)}
+#quadrant .gate.mil{bottom:calc(89.29% - 14.93px)}
+#quadrant .gate.idle{bottom:19px}
+/* The commanded power, transient: it appears only while a finger is on the lever, where MAX used to
+   be. The end of the track already labels the end of the track. */
+#throttleValue{position:absolute;top:2px;right:6px;width:24px;text-align:right;
+ font-size:15px;font-weight:400;letter-spacing:.02em;line-height:1;color:var(--ink);
+ opacity:0;transition:opacity .12s}
+#quadrant.sliding #throttleValue{opacity:1}
+
+/* ---- the weapons caps: three equal caps in single file down the right edge, mirroring the throttle
+   panel on the left. The bezel is gone, so #touchWeapons carries no film, no blur, no grain, no rim
+   and no shadow: it is a positioning box and nothing else, and the caps stand on the frame as their
+   own glass. Laid out with flex rather than offsets, so nothing can skew, and 62 x 62 each rather
+   than a taller GUN, because held-versus-tapped is carried by the lit state and not by size. The
+   column is 202 px tall and centred, which clears #touchTop above it and the frame edge below at
+   every verification height. Usable width is 52 px at 5 px padding, against WARMING's 42.2. */
+#touchWeapons{position:absolute;right:var(--inset-right);top:50%;transform:translateY(-50%);
+ display:flex;flex-direction:column;gap:8px;width:62px;pointer-events:none}
+#touchWeapons .key{width:62px;height:62px}
+
+/* ---- RECENTRE and PAUSE stay plain legends on the canopy band: a panel here would add a third
+   dark box to a screen whose fourth banned tell is a wall of them. */
+#touchTop{position:absolute;top:calc(6px + var(--sat));right:calc(var(--inset-right) - 12px);display:flex;gap:6px}
+#touch .text{border:0;background:transparent;color:var(--ink);font-size:9px;font-weight:500;letter-spacing:.14em;padding:14px 12px;min-height:44px;text-shadow:var(--halo)}
+#touch .text.pressed{color:var(--ink-pressed)}
+
+/* ---- the one surface allowed to go nearly opaque, because nothing behind it is playable, and the
+   aircraft refusing to fly rather than the instructor advising, so it is set as a legend. */
+#rotate{display:none;position:absolute;inset:0;background:var(--rotate-veil);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+ align-items:center;justify-content:center;text-align:center}
+#rotate p{margin:0;font-size:13px;font-weight:500;letter-spacing:.18em;color:var(--ink)}
+@media (orientation:portrait){body.touch #rotate{display:flex}}
+
+/* ---- fallbacks. Contrast goes up in every one of them, never down. The caps now carry a blur of
+   their own, so both ladders cover the cap film as well as the panel's. */
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-:root{--lens-tint:rgba(14,22,28,.62);--lens-tint-pressed:rgba(14,22,28,.78)}}
-@media (prefers-reduced-transparency:reduce){:root{--lens-tint:rgba(14,22,28,.7);--lens-tint-pressed:rgba(14,22,28,.84)}.lens{-webkit-backdrop-filter:none;backdrop-filter:none}}
-@media (prefers-reduced-motion:reduce){.key{transition:none}.key.pressed{transform:none}}
+ :root{--panel-tint:var(--panel-tint-flat);--cap-glass:var(--cap-glass-flat);
+  --cap-glass-dim:var(--cap-glass-dim-flat);--cap-glass-press:var(--cap-glass-press-flat)}}
+@media (prefers-reduced-transparency:reduce){
+ :root{--panel-tint:var(--panel-tint-opaque);--cap-glass:var(--cap-glass-opaque);
+  --cap-glass-dim:var(--cap-glass-dim-opaque);--cap-glass-press:var(--cap-glass-press-opaque)}
+ .panel{-webkit-backdrop-filter:none;backdrop-filter:none}
+ .key,body.touch #start{-webkit-backdrop-filter:none;backdrop-filter:none}}
+/* The press transform and every transition go; the film deepening and the rim inversion stay, so
+   press feedback survives without movement. */
+@media (prefers-reduced-motion:reduce){
+ .key{transition:none}
+ .key.pressed{transform:none}
+ #throttleValue{transition:none}
+ body.touch #skinKnob{transition:none}
+ body.touch #hint.warning{animation:none}}
+/* touch:end */
 </style></head>
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
 <div id="veil"></div>
-<div id="intro"><h1>RANGE</h1><p>Jersey. Clearing skies.<br>One aircraft. A short sortie.<br>Bring it home.</p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">Tilt to fly · Hold the phone sideways<br>Headphones recommended</small></div>
+<div id="intro"><h1>RANGE</h1><p><span class="long">Jersey. Clearing skies.<br>One aircraft. A short sortie.<br>Bring it home.</span><span class="short">Jersey. A short sortie. Bring it home.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="skinSwitch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="skinLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" aria-hidden="true"><span id="skinKnob"></span></span><button type="button" id="skinHeritage" class="skinLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
 <div id="hud" class="hidden">
 <div id="brand">RANGE</div>
 <div id="location">JERSEY · CHANNEL ISLANDS</div>
@@ -171,10 +557,10 @@ body.touch #status small{font-size:12px}
  <g id="laserMark" visibility="hidden" fill="none" stroke="#e8c78b" stroke-width="1.5"><path d="M-14,-6 V-14 H-6 M6,-14 H14 V-6 M14,6 V14 H6 M-6,14 H-14 V6"/><text y="-23" fill="#e8c78b" stroke="none" text-anchor="middle" font-size="10">LTD</text></g>
 </svg>
 <div id="telemetry">
- <div><label>AIRSPEED</label><b id="speed">0</b><span>KT</span></div>
- <div><label>ALTITUDE</label><b id="alt">0</b><span>FT</span></div>
+ <div><label><span class="long">AIRSPEED</span><span class="short">IAS</span></label><b id="speed">0</b><span>KT</span></div>
+ <div><label><span class="long">ALTITUDE</span><span class="short">ALT</span></label><b id="alt">0</b><span>FT</span></div>
  <div><label>THROTTLE</label><b id="throttle">0</b><span>%</span></div>
- <div><label>HEADING</label><b id="heading">000</b></div>
+ <div><label><span class="long">HEADING</span><span class="short">HDG</span></label><b id="heading">000</b></div>
 </div>
 <div id="flightstate">
  <div><i>G</i><b id="load">1.0</b></div>
@@ -194,10 +580,9 @@ body.touch #status small{font-size:12px}
 </div>
 <div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">I to show controls</button><button id="pauseButton">PAUSE · P</button></div>
 <div id="touch" class="hidden">
-<div id="quadrant" class="lens" role="slider" aria-label="Throttle" aria-valuemin="0" aria-valuemax="112" aria-valuenow="0" tabindex="0"><div id="throttleTicks"></div><div id="throttleReheat"></div><div id="throttleFill"></div><div id="throttleTick"></div><div id="throttleLever"></div><span class="mark mil">MIL</span><span class="mark max">MAX</span><span id="throttleLabel">THR 0</span></div>
-<div id="touchWeapons"><button id="seekerButton" class="key lens"><span class="name">SEEKER</span><span class="value">OFF</span></button><button id="bombButton" class="key lens"><span class="name">PAVEWAY</span><span class="value">4</span></button><button id="gunButton" class="key lens"><span class="name">GUN</span><span class="value">150</span></button></div>
+<div id="quadrant" class="panel" role="slider" aria-label="Throttle" aria-valuemin="0" aria-valuemax="112" aria-valuenow="0" tabindex="0"><div id="throttleSlot"><div id="throttleTicks"></div><div id="throttleReheat"></div><div id="throttleFill"></div><div id="throttleTick"></div><div id="throttleLever"></div></div><span class="gate mil">MIL</span><span id="throttleLabel" class="gate idle">IDLE</span><span id="throttleValue">0</span></div>
+<div id="touchWeapons"><button id="seekerButton" class="key"><span class="name">SEEKER</span><span class="value">2</span></button><button id="bombButton" class="key"><span class="name">BOMB</span><span class="value">4</span></button><button id="gunButton" class="key"><span class="name">GUN</span><span class="value">150</span></button></div>
 <div id="touchTop"><button id="recentre" class="text">RECENTRE</button><button id="pauseTouch" class="text">PAUSE</button></div>
-<div id="rotate"><p>Turn the phone sideways.</p></div>
 </div>
 <div id="help" class="hidden">
 <p>Fly towards the circle. The aircraft turns its flight path to it, and the instructor keeps you off the stall.</p>
@@ -215,8 +600,8 @@ body.touch #status small{font-size:12px}
 <dt>B</dt><dd>Airbrake, wheel brakes</dd>
 <dt>End / 6 / T</dt><dd>Select target near aim</dd>
 <dt>L / Num Lock / Delete</dt><dd>Laser on / off</dd>
-<dt>Alt + X</dt><dd>Sidewinder seeker on / off</dd>
-<dt>5 or /</dt><dd>Launch locked Sidewinder</dd>
+<dt>Alt + X</dt><dd>ASRAAM seeker on / off</dd>
+<dt>5 or /</dt><dd>Launch locked ASRAAM</dd>
 <dt>Hold U</dt><dd>Follow last released munition</dd>
 <dt>Hold Z / right mouse</dt><dd>Zoom</dd>
 <dt>`</dt><dd>Developer map camera: WASD move, Q/E down/up, Shift faster</dd>
@@ -225,7 +610,13 @@ body.touch #status small{font-size:12px}
 <dt>R</dt><dd>Restart sortie</dd>
 <dt>I / H</dt><dd>Show / hide controls</dd>
 <dt>P, Esc</dt><dd>Pause</dd>
-</dl><details><summary>Map credits</summary><p>Mapzen Terrain Tiles. Europe terrain produced using Copernicus data and information funded by the European Union (EU-DEM). SRTM and GMTED2010 courtesy of USGS; ETOPO1 NOAA. Roads, buildings and harbour geometry © OpenStreetMap contributors, ODbL 1.0 (openstreetmap.org/copyright). Building heights are estimated where not supplied. Horizontal scale 85%. Jersey Airport location and runway bearing follow the NATS aerodrome chart; runway length and airfield buildings are adapted for gameplay.</p></details></div>
-<div id="status"></div><div id="loading">Preparing aircraft and airfield…</div><div id="error" class="hidden"></div>
+</dl><details><summary>Map credits</summary><p>Mapzen Terrain Tiles. Europe terrain produced using Copernicus data and information funded by the European Union (EU-DEM). SRTM and GMTED2010 courtesy of USGS; ETOPO1 NOAA. Roads, buildings and harbour geometry © OpenStreetMap contributors, ODbL 1.0 (openstreetmap.org/copyright). Building heights are estimated where not supplied. Horizontal scale 85%. Jersey Airport location and runway bearing follow the NATS aerodrome chart; runway length and airfield buildings are adapted for gameplay. Barlow Condensed, copyright 2017 The Barlow Project Authors, SIL Open Font License 1.1; the licence text is at assets/fonts/OFL-BarlowCondensed.txt.</p></details></div>
+<div id="status"></div><div id="loading">Preparing aircraft and airfield…</div>
+<!-- Outside #touch, which carries .hidden until ENTER: the intro deleted its own "Hold the phone
+     sideways" line on the grounds that this veil says it in the only situation where it is needed,
+     and inside a display:none ancestor it never painted on the intro at all. Last but for the error
+     box, so nothing paints over the one surface allowed to go nearly opaque. -->
+<div id="rotate"><p>TURN THE PHONE SIDEWAYS</p></div>
+<div id="error" class="hidden"></div>
 <script type="module" src="src/main.js"></script>
 </body></html>

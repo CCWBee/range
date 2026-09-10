@@ -11,3 +11,10 @@ dist/
 RANGE.zip
 assets/meshes.json
 assets/meshes.bin
+screenshots/qa/
+screenshots/qa-*/
+# The one exception: the before-baseline's contrast table, which the spec argues from and STATE.md
+# cites. The frames themselves stay out: the history was slimmed on 10 September to drop screenshots.
+!screenshots/qa-before/
+screenshots/qa-before/*
+!screenshots/qa-before/contrast.md

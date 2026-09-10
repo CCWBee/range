@@ -12,7 +12,8 @@ const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = THREE.MathUtils.clamp;
 
 // Body positions for the parts the library does not place for us.
-const PYLONS = [[-1.85, -0.80, 0.45], [1.85, -0.80, 0.45], [-2.85, -0.57, 1.25], [2.85, -0.57, 1.25]];
+// Measured against the RAF mesh by tools/refine_gear_mounts.py, recorded in store_mounts.json.
+const PYLONS = [[-2.4,-1.036,.75],[2.4,-1.036,.75],[-3.55,-.981,1.85],[3.55,-.981,1.85]];
 const WINGTIPS = [[-5.54, -0.41, 2.70], [5.54, -0.41, 2.70]];
 
 const FLAME_FRAGMENT = `
@@ -126,10 +127,15 @@ export class Aircraft {
     const canopy = this.library.materials.canopy;
     if (canopy) {
       canopy.transparent = true;
-      canopy.opacity = 0.85;
+      canopy.opacity = 0.62;
       canopy.envMapIntensity = 1.2;
       canopy.roughness = 0.19;
-      canopy.side = THREE.DoubleSide;
+      canopy.metalness = 0;
+      canopy.depthWrite = false;
+      canopy.side = THREE.FrontSide;
+      // Glass is not an opaque shadow receiver. PCF self-shadow samples on this thin shell
+      // produced a grid over the reflected sky; rendering both faces also doubled its tint.
+      this.parts.jet_canopy?.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
     }
     // The tyre of each gear leg turns about body X through the centre of its rubber part.
     for (const [name, index] of [['jet_gear_nose', 0], ['jet_gear_main_l', 1], ['jet_gear_main_r', 2]]) {
@@ -170,9 +176,10 @@ export class Aircraft {
       this.stores.push(bomb);
     }
     this.addPart('jet_detail');
+    this.addPart('jet_pylons');
     this.missileStores=[];
-    if(this.library.has('sidewinder'))for(const side of [-1,1]){
-      const missile=this.library.asset('sidewinder');missile.position.set(side*3.68,-.49,1.15);
+    if(this.library.has('asraam'))for(const side of [-1,1]){
+      const missile=this.library.asset('asraam');missile.position.set(side*4.65,-.857,2.8);
       missile.traverse(o=>{if(o.isMesh)o.castShadow=true;});this.root.add(missile);this.missileStores.push(missile);
     }
   }

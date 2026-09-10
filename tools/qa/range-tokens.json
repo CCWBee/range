@@ -1,0 +1,19 @@
+{
+  "_note": "RANGE touch layer, spec docs/specs/2026-09-10-range-touch-cockpit.md section 8. The scale is section 2.2 (font sizes and weights) and section 2.4 (spacing 4/7/14/22/32) verbatim, with the radius family as section 11.6 restates it (panels 15, caps 10, slot 13, lever 5, text none), which is why 8px has gone and 10px stands in its place; 0, 0px, auto and inherit are structural rather than rhythm and are carried so the scanner does not flag every margin:0 and border-radius:inherit. The colour rule admits a var() and nothing else: the palette's own declarations now live in screenshots/qa/tokens.css, which tools/qa_touch.mjs writes beside touch.css, so a literal can no longer pass itself off as a token. The machined internals that section 2.4's geometry table dimensions from the object rather than from the layout rhythm (a cap's 5 px padding, the slot's 6 px gutter, the knurl's 8 px inset, the bomb cap at 78 px) are recorded in tools/qa/range-allow.txt with their reasons, not added here.",
+  "fontSize": ["8px", "9px", "10px", "12px", "13px", "14px", "15px", "17px", "22px"],
+  "fontWeight": ["400", "500"],
+  "spacing": ["0", "0px", "4px", "7px", "14px", "22px", "32px", "auto"],
+  "radius": ["0", "0px", "5px", "10px", "13px", "15px", "inherit"],
+  "shadow": ["none"],
+  "easing": ["var(--e-out)"],
+  "colour": "^(var\\(--[\\w-]+\\)|transparent|currentColor|inherit|none)$",
+  "ignore": ["tokens.css"],
+  "flags": {
+    "backdropFilter": true,
+    "uppercase": true,
+    "tracking": true,
+    "easing": true,
+    "gradient": true,
+    "endlessMotion": true
+  }
+}

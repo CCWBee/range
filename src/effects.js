@@ -325,6 +325,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
       if (guidedBombStep(bomb, this.engagement?.laser, dt)) {
+        bomb.expired = true;
         this.explosion(bomb.position, 1.2);
         this.addCrater(bomb.position, 16);
         this.scene.remove(bomb.mesh);

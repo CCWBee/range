@@ -427,6 +427,14 @@ void main(){
  // Shingle and wet sand within 30 m of the shore.
  float shore=1.-smoothstep(${(JERSEY.seaLevel+1).toFixed(2)},${(JERSEY.seaLevel+9).toFixed(2)},worldP.y);
  diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.42,.37,.27),shore*.55);
+ // Geological colour follows world position; steep faces expose granite rather than grass.
+ vec3 faceNormal=normalize(cross(dFdx(worldP),dFdy(worldP)));
+ float exposed=smoothstep(.22,.72,1.-abs(faceNormal.y)+noise(worldP.xz*.028)*.14);
+ float north=clamp((-worldP.x+1000.)/5000.,0.,1.);
+ vec3 granite=mix(vec3(.39,.20,.13),vec3(.43,.34,.31),north);
+ float strata=noise(vec2(worldP.x*.075+worldP.z*.04,worldP.y*.32));
+ granite*=.72+.48*strata;
+ diffuseColor.rgb=mix(diffuseColor.rgb,granite,exposed);
  // Drainage ditches down both sides of the runway at 45 m.
  float ditch=exp(-pow((abs(worldP.x)-45.)*.5,2.))*step(-2560.,worldP.z)*step(worldP.z,360.);
  diffuseColor.rgb*=1.-ditch*.55;`);
@@ -546,7 +554,7 @@ void main(){
       this.scene.add(group);
     }
     // World-scale masonry and sash windows stay consistent across the merged OSM footprints.
-    for (const name of ['jersey_render','landmark_granite','jersey_roof']) {
+    for (const name of Object.keys(this.library.materials).filter(n=>n.startsWith('jersey_render') || ['landmark_granite','jersey_roof'].includes(n))) {
       const material=this.library.materials[name];if(!material)continue;
       material.customProgramCacheKey=()=>`jersey-surface-${name}`;
       material.roughness=.94;
@@ -565,7 +573,7 @@ void main(){
  float mortar=step(.94,fract(facadeP.y*2.4))+step(.97,fract(horizontal*1.4+floor(facadeP.y*2.4)*.5));
  diffuseColor.rgb*=mix(.83,1.1,noise(facadeP.xz*.13));
  diffuseColor.rgb*=1.-min(1.,mortar)*.12*detailFade;
- ${name==='jersey_render'?'diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.065,.095,.11),windowMask*wall*.86*detailFade);':''}
+ ${name.startsWith('jersey_render')?'diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.065,.095,.11),windowMask*wall*.86*detailFade);':''}
  `);
       };
     }

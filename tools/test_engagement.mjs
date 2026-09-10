@@ -4,8 +4,8 @@ import * as THREE from '../vendor/three.module.js';
 import { Flight, bombStep } from '../physics.js';
 import { Instructor } from '../control.js';
 import { Input } from '../src/input.js';
-import { ChaseCamera } from '../src/camera.js';
-import { Engagement, heatSignature, missileStep, guidedBombStep, proximityPass } from '../src/engagement.js';
+import { ChaseCamera, MunitionCamera } from '../src/camera.js';
+import { AAM, Engagement, heatSignature, missileStep, guidedBombStep, proximityPass } from '../src/engagement.js';
 import { Effects } from '../src/effects.js';
 import { Hud } from '../src/hud.js';
 import { Aircraft } from '../src/aircraft.js';
@@ -95,7 +95,7 @@ delete globalThis.window;delete globalThis.document;
     assert(closest<11&&time<10&&maxSpeed<1000,'Extended motor must reach an intercept');times.push(time);
   }
   assert(Math.abs(times[0]-times[1])<.06,'Missile intercept must be stable at 60 and 120 Hz');
-  const coastTest={position:V3(0,5000,0),velocity:V3(0,0,-700),age:5.3};
+  const coastTest={position:V3(0,5000,0),velocity:V3(0,0,-700),age:AAM.burn+.1};
   missileStep(coastTest,null,.1);
   assert(coastTest.velocity.length()<700,'Motor must stop accelerating after its finite burn');
   const lost={position:V3(0,1000,0),velocity:V3(0,0,-300),age:1,target:{position:V3(0,1000,1000),velocity:V3()}};
@@ -225,5 +225,26 @@ delete globalThis.window;delete globalThis.document;
     samples++;
   }
   pass('world marker stays anchored through full orbit, roll and zoom',{samples});
+}
+{
+  const t={position:V3(0,3000,0),velocity:V3(0,0,-200),engine:1,throttle:1};
+  const rear=V3(0,3000,6000),front=V3(0,3000,-6000);
+  assert(heatSignature(t,rear)>AAM.threshold,'Hot military rear aspect should acquire at 6 km');
+  assert(heatSignature(t,front)<AAM.threshold,'Same-distance frontal aspect should be weaker');
+  t.afterburner=true;
+  assert(heatSignature(t,V3(0,3000,10000))>AAM.threshold,'Reheat rear aspect should acquire at 10 km');
+  t.afterburner=false;t.throttle=.25;
+  assert(heatSignature(t,rear)<AAM.threshold,'Low power should reduce acquisition range');
+  t.destroyed=true;assert.equal(heatSignature(t,rear),0);
+  const camera=new THREE.PerspectiveCamera(),follow=new MunitionCamera(),scene=new THREE.Scene();
+  const m={position:V3(0,1000,0),velocity:V3(0,0,-500),mesh:new THREE.Group()};scene.add(m.mesh);
+  assert(follow.update(camera,m,true,dt));
+  const offset=camera.position.clone().sub(m.position);m.velocity.set(500,0,0);
+  follow.update(camera,m,true,dt);
+  assert(camera.position.clone().sub(m.position).distanceTo(offset)<3,'Direction changes must be damped');
+  assert(!follow.update(camera,m,false,dt),'Release immediately relinquishes the camera');
+  m.expired=true;assert(!follow.update(camera,m,true,dt),'Impact ends held follow');
+  m.expired=false;scene.remove(m.mesh);assert(!follow.update(camera,m,true,dt),'Despawn ends held follow');
+  pass('WVR signature envelope and damped munition camera lifetime');
 }
 console.log('ALL ENGAGEMENT CHECKS PASS');

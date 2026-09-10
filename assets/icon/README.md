@@ -1,0 +1,6 @@
+- `favicon.svg` the mark: a teal `#0A6165` rounded square, corner radius 14 of 64 (22 per cent), carrying the Typhoon from directly above as one orange `#FF8A1F` silhouette. Written by `python tools/icon_planform.py --icon`, whose ICON section holds every number and the reason for it.
+- `icon-square.svg` the same artwork full bleed, no corner radius, because iOS masks the home-screen icon with its own. Same command.
+- `apple-touch-icon.png` `icon-square.svg` at 180 x 180 for the iPhone home screen. Written by `python tools/icon_planform.py --render` (headless Chrome through `E:\claude-projects\design\tools\qa\shot.mjs`).
+- `favicon-32.png` `favicon.svg` at 32 x 32 for the browser tab, with real alpha in the rounded corners rather than a baked white ground. Same `--render` command, which shoots the tile on white and on black and recovers the alpha from the pair.
+- `planform.svg` the raw traced planform, one path on transparent at viewBox 1000, the reference the mark was drawn against. Written by `python tools/icon_planform.py` (no flag), which reads `assets/library.json` plus `library.bin`, itself packed from `assets/RANGE.blend`.
+- `planform.png` the 1024 px trace mask that `planform.svg` is contoured from, white on black. Same command; `--sheet` writes the contact sheet at `screenshots/icon-sheet.png`.

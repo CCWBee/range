@@ -11,6 +11,29 @@ const clamp = THREE.MathUtils.clamp;
 const lerp = THREE.MathUtils.lerp;
 const WORLD_UP = V3(0, 1, 0);
 
+// The aircraft camera continues updating underneath this override. Releasing follow therefore
+// restores its current mode immediately, without blending back from a distant impact site.
+export class MunitionCamera {
+  constructor() { this.target=null; this.direction=V3(); this.offset=V3(); }
+  update(camera, target, held, dt) {
+    if (!held || !target || target.expired || !target.mesh?.parent) { this.target=null; return false; }
+    const fresh=this.target!==target;
+    this.target=target;
+    const path=target.velocity.clone().normalize();
+    if (fresh) this.direction.copy(path);
+    else this.direction.lerp(path,1-Math.exp(-dt*3)).normalize();
+    const bomb=!!target.guided;
+    const offset=this.direction.clone().multiplyScalar(bomb?-42:-30).add(V3(0,bomb?18:9,0));
+    if (fresh) this.offset.copy(offset);
+    else this.offset.lerp(offset,1-Math.exp(-dt*4));
+    camera.position.copy(target.position).add(this.offset);
+    camera.position.y=Math.max(camera.position.y,groundHeight(camera.position.x,camera.position.z)+2);
+    camera.up.copy(WORLD_UP);
+    camera.lookAt(target.position);
+    return true;
+  }
+}
+
 export class ChaseCamera {
   constructor(aspect) {
     this.camera = new THREE.PerspectiveCamera(51, aspect, 0.8, 65000);

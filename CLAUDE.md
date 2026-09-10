@@ -57,6 +57,32 @@ no pill labels, no decorative dots, no emoji icons.
   (run from PowerShell; stages: ramp, takeoff, cloud, bomb, landing). Headless frame rate is
   meaningless (software or throttled); measure fps in Brave through Claude-in-Chrome with
   `window.range.metrics()` and `window.range.stress(true)`.
+- Touch-layer QA: `node tools/qa_touch.mjs --out screenshots\qa` runs the 27-cell matrix against
+  `dist/mobile.html?touch=1`, writes the touch CSS out beside the cells as `touch.css` (the token
+  block goes to `tokens.css`, which the scanner is told to ignore) and finishes with
+  `python tools/contrast.py screenshots\qa --check`. The mechanical scan is
+  `node E:\claude-projects\design\tools\qa\scan.mjs screenshots\qa\touch.css --tokens tools\qa\range-tokens.json --allow tools\qa\range-allow.txt --check`.
+  The safe-area pass shims the four inset custom properties through the stage expression rather
+  than a flag, into a folder under `screenshots\qa` so the two mirrored passes do not overwrite each
+  other and `contrast.py`, whose glob is not recursive, still reads each on its own:
+  `node tools/qa_touch.mjs --out screenshots\qa\inset-left --widths 667x375,844x390 --states resting --stage-expr "document.documentElement.style.setProperty('--sal','47px');document.documentElement.style.setProperty('--sab','21px');window.range.touchDemo(STAGE, STATE)"`,
+  and again into `screenshots\qa\inset-right` with `--sar` for the mirrored notch. `touchDemo`'s
+  states are resting, locked, reloading, firing, warming and searching; the last three are the only
+  frames that photograph a lit legend.
+- The intro pass, which stages nothing because the intro is what the page shows before `start()`,
+  and photographs the skin switch in both positions in the same run:
+  `node tools/qa_touch.mjs --out screenshots\qa\intro --intro --states grey,heritage --stage-expr "window.range.setSkin(STATE)"`.
+  `--intro` probes `#intro` and `#loading` instead of the HUD; `--probe-roots` sets that by hand.
+  Two more states worth staging by hand, neither of them in the 27-cell product, both of which have
+  failed the contrast gate before: the stop screens,
+  `--stage-expr "window.range.touchDemo(STAGE, STATE);window.range.hud.setStatus('PAUSED<small>Tap to continue.</small>')"`,
+  and the stall notice at the dim step of its own flash,
+  `--stage-expr "window.range.touchDemo(STAGE, STATE);window.range.flight.stall=true;setTimeout(()=>{const h=document.getElementById('hint');h.style.animation='none';h.style.opacity='.72';},120)"`.
+- Icon: `python tools/icon_planform.py --icon --render --sheet` regenerates `assets/icon/` (the
+  favicon SVG, the 180 px home-screen PNG, the 32 px PNG) and `screenshots/icon-sheet.png`; the
+  planform is traced from the packed library. `build.py` inlines `favicon.svg` as a data: URL and
+  copies `apple-touch-icon.png` beside the bundles, the one relative reference `DependencyCheck`
+  allows, because iOS will not take a home-screen icon from a data: URL.
 - Blender: `"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --python tools\start_blender.py`
   starts Blender with the MCP add-on on 127.0.0.1:9876; `python tools\blender_call.py <script.py>`
   runs a script inside it (no argument: prints the scene). Bakes run in a background process:
@@ -92,6 +118,32 @@ no pill labels, no decorative dots, no emoji icons.
   (the quadrant and the HUD's throttle readout both had `id="throttle"`). The unique-id check in
   `tools/test_touch.mjs` catches it; a headless run with synthetic `PointerEvent`s on the built
   bundle is how it was found.
+- Every staged ramp screenshot showed a parked aircraft at full reheat, the lever hard against the
+  top stop and the gate reading IDLE, beside IAS 0 KT. The cause is that `Touch.update()` writes the
+  layer's own throttle back into `flight` on every frame, so the frame `stage()` paints restores the
+  previous cell's lever before anything reads the pose. `stage()` therefore syncs the lever from the
+  flight model immediately before its own `frame()` call, and `touchDemo()` enters the layer before
+  staging so that sync covers the first cell too. The check: in a ramp cell the gate reads BRAKE,
+  `#throttleValue` is 0 and `#throttleFill`'s height is 0%.
+- HUD text that is plainly legible on the frame fails `tools/contrast.py` by the dozen after the
+  canopy bands were removed. The cause is what the sampler measured: the brightest pixels anywhere
+  in the element's box, which is mostly bare sky between the letters that a text halo never
+  reaches. It now samples only under the strokes (where the frame and the ink-blanked frame differ)
+  and keeps the HUD's text-shadow when blanking, while a cap legend's glow is stripped, since that
+  is its lamp rather than its backdrop. The check: `screenshots/qa/contrast.md` lists a halo'd HUD
+  box at well over 4.5:1 while the same box measured under 3:1 before the change.
 - A pure roll of the phone must read as no pitch. Measuring pitch against the screen-up component
   alone shrinks it as the phone rolls; `tiltFromUp` measures it against the whole in-plane
   magnitude, and the test "right edge down is positive roll and no pitch" catches a regression.
+- Paused, every instrument went grey while `contrast.py` reported the whole screen green. The cause
+  is paint order: the stop veil was a `::before` on `#status`, which paints after `#hud` and `#touch`
+  in tree order, so it covered the render and all of the text bar the status line itself, and the
+  tool reads a box's ink off `getComputedStyle` rather than off the frame. The veil is now
+  `#hud`'s own `background-color` under `body.touch:has(#status:not(:empty))`, which paints under its
+  element's own text and under everything `#touch` draws. The check is a staged paused cell whose ink
+  is read off the PNG, not off the style: `screenshots\qa\paused`, and the brand's rendered
+  luminance there must match the running frame's (0.85, against 0.134 before).
+- A rule written as `#touchWeapons .key` beats `.key.lit`, `.key.pressed` and `.key.locked` on
+  specificity, so moving the cap material into an id-scoped rule silently kills every state the caps
+  have. The material lives on `.key` itself, which is why the ENTER cap shares that selector rather
+  than repeating the declarations.

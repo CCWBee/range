@@ -50,7 +50,8 @@ export class Input {
   fire(name, value) { if (this.handlers[name]) this.handlers[name](value); }
 
   get locked() { return this.virtualLock || document.pointerLockElement === this.canvas; }
-  get freeLook() { return this.keys.has('KeyC'); }
+  // C on the desktop; on the phone the touch layer sets touchLook for as long as a finger drags.
+  get freeLook() { return this.keys.has('KeyC') || !!this.touchLook; }
 
   // Only ever called from a user gesture on the canvas, never from start() or stage().
   requestLock() {

@@ -7,6 +7,12 @@ const V3=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const clamp=THREE.MathUtils.clamp;
 const DEG=Math.PI/180;
 
+// Public identity: MBDA, 2023 ASRAAM datasheet (88 kg, 2.9 m, 166 mm).
+// https://www.mbda-systems.com/sites/mbda/files/2024-06/2023%20ASRAAM%20datasheet.pdf
+// Everything below is a deliberately simplified game envelope, not engineering data.
+export const AAM = Object.freeze({ name:'ASRAAM', burn:6, life:36, acquisition:12000,
+  threshold:.075, cone:28, trackingCone:65 });
+
 // Closest approach of two moving points during one simulation step. The fuse is independent
 // of seeker lock: a seeker losing the target beside the nose must not disable the warhead.
 export function proximityPass(a0, a1, b0, b1, radius = 18) {
@@ -27,8 +33,12 @@ export function heatSignature(target, observer) {
   const toward=observer.clone().sub(target.position),distance=toward.length();
   toward.normalize();
   const rear=target.velocity.clone().normalize().negate();
-  const aspect=.12+.88*Math.pow(Math.max(0,rear.dot(toward)),2);
-  return target.engine*aspect/(1+Math.pow(distance/1800,2));
+  const aspect=.15+.85*Math.pow(Math.max(0,rear.dot(toward)),1.6);
+  const throttle=clamp(target.throttle ?? target.engine,0,1);
+  // The MiG-15 has no afterburner. Other aircraft may explicitly declare one.
+  const power=(.25+.75*throttle*throttle)*(target.afterburner ? 3.2 : 1);
+  const atmosphere=Math.exp(-distance/Math.max(1000,target.visibility ?? 28000));
+  return target.engine*power*aspect*atmosphere/(1+Math.pow(distance/2900,2));
 }
 
 export function missileStep(m, target, dt) {
@@ -39,21 +49,25 @@ export function missileStep(m, target, dt) {
   if(target && !target.destroyed && m.age>.18) {
     const delta=target.position.clone().sub(m.position);
     const los=delta.clone().normalize();
-    if(forward.dot(los)>Math.cos(42*DEG) && clearSight(m.position,target.position)) {
+    if(forward.dot(los)>Math.cos(AAM.trackingCone*DEG) && clearSight(m.position,target.position)) {
       const closing=Math.max(150,speed-target.velocity.dot(los));
-      const lead=target.velocity.clone().multiplyScalar(clamp(delta.length()/closing,0,4)*.9);
+      const lead=target.velocity.clone().multiplyScalar(clamp(delta.length()/closing,0,8)*.95);
       const desired=delta.add(lead).normalize();
       steer.copy(desired).addScaledVector(forward,-desired.dot(forward));
       const demand=steer.length();
-      if(demand>0)steer.multiplyScalar(Math.min(180,demand*speed*2.6)/demand);
+      const authority=45*9.81*clamp(Math.pow(speed/650,2),0,1);
+      if(demand>0)steer.multiplyScalar(Math.min(authority,demand*speed*3.1)/demand);
     } else { m.target=null; m.lost=true; }
   }
   // Finite motor burn, drag, gravity and limited steering make a poor launch miss naturally.
-  const thrust=m.age<5.2 ? 175 : 0;
-  m.velocity.addScaledVector(forward,(thrust-speed*speed*.00016)*dt).addScaledVector(steer,dt);
+  const thrust=m.age<1.5 ? 330 : m.age<AAM.burn ? 180 : 0;
+  const turnLoss=steer.lengthSq()/(Math.max(150,speed)*35);
+  const nextSpeed=Math.max(0,speed+(thrust-speed*speed*.000095-turnLoss)*dt);
+  // Rotate the flight path without accidentally adding kinetic energy with lateral steering.
+  m.velocity.addScaledVector(steer,dt).normalize().multiplyScalar(nextSpeed);
   m.velocity.y-=9.81*dt;
   m.position.addScaledVector(m.velocity,dt);
-  return m.age>32 || m.position.y<groundHeight(m.position.x,m.position.z);
+  return m.age>AAM.life || m.position.y<groundHeight(m.position.x,m.position.z);
 }
 
 export function guidedBombStep(b, laser, dt) {
@@ -85,7 +99,7 @@ export class Engagement {
     if(library.has('mig15')) {
       const mesh=library.asset('mig15');scene.add(mesh);
       mesh.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
-      this.airTargets.push({kind:'air',name:'MiG-15',mesh,position:mesh.position,velocity:V3(),engine:1,hp:6,maxHp:6,destroyed:false,age:0,fall:V3()});
+      this.airTargets.push({kind:'air',name:'MiG-15',mesh,position:mesh.position,velocity:V3(),engine:1,throttle:.9,afterburner:false,hp:6,maxHp:6,destroyed:false,age:0,fall:V3()});
     }
     effects.engagement=this;
     for(const [i,t] of effects.targets.entries())Object.assign(t,{kind:'ground',name:t.name||`RANGE ${i+1}`,maxHp:t.maxHp||3});
@@ -112,13 +126,13 @@ export class Engagement {
   launch(flight){
     const s=this.seeker;
     if(flight.onGround||flight.crashed||flight.velocity.length()<45){this.message('LAUNCH INHIBITED');return false;}
-    if(this.remaining<=0){this.message('SIDEWINDERS EXPENDED');return false;}
+    if(this.remaining<=0){this.message('ASRAAM EXPENDED');return false;}
     if(!s.locked||!s.target){this.message('NO HEAT LOCK');return false;}
-    const mesh=this.library.asset('sidewinder');
+    const mesh=this.library.asset('asraam');
     const position=this.aircraft.releaseMissile(2-this.remaining);mesh.position.copy(position);mesh.quaternion.copy(flight.attitude);this.scene.add(mesh);
     this.missiles.push({mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,30),target:s.target,age:0,trail:0});
     this.effects.lastMunition=this.missiles[this.missiles.length-1];
-    this.remaining--;s.locked=false;s.dwell=0;this.message('SIDEWINDER AWAY · hold U to follow');return true;
+    this.remaining--;s.locked=false;s.dwell=0;this.message('ASRAAM AWAY · hold U to follow');return true;
   }
   hitAir(target,damage,point){
     if(target.destroyed)return;
@@ -129,7 +143,7 @@ export class Engagement {
   update(dt,flight,aim){
     if (this.remaining === 0 && !flight.crashed) {
       this.reloadTime = (this.reloadTime || 0) + dt;
-      if (this.reloadTime >= 20) { this.remaining=2; this.reloadTime=0; this.aircraft.resetMissiles(); this.message('SIDEWINDERS RELOADED'); }
+      if (this.reloadTime >= 20) { this.remaining=2; this.reloadTime=0; this.aircraft.resetMissiles(); this.message('ASRAAM RELOADED'); }
     }
     this.elapsed+=dt;this.noticeTime=Math.max(0,this.noticeTime-dt);
     for(const target of this.airTargets) {
@@ -160,12 +174,16 @@ export class Engagement {
       const axis=flight.basis().forward;
       // The small circle is the seeker head; the larger circle is the acquisition envelope.
       s.direction.copy(axis);
-      const candidates=this.airTargets.filter(t=>!t.destroyed&&t.position.distanceTo(flight.position)<5000
-        &&axis.dot(t.position.clone().sub(flight.position).normalize())>Math.cos(18*DEG)
-        &&heatSignature(t,flight.position)>.085&&clearSight(flight.position,t.position));
+      const inCone=this.airTargets.filter(t=>!t.destroyed
+        &&axis.dot(t.position.clone().sub(flight.position).normalize())>Math.cos(AAM.cone*DEG));
+      const visible=inCone.filter(t=>clearSight(flight.position,t.position));
+      const candidates=visible.filter(t=>t.position.distanceTo(flight.position)<AAM.acquisition
+        &&heatSignature(t,flight.position)>AAM.threshold);
       const target=candidates.sort((a,b)=>heatSignature(b,flight.position)-heatSignature(a,flight.position))[0]||null;
       if(target!==s.target)s.dwell=0;
       s.target=target;s.dwell=target&&s.warm===1?Math.min(1,s.dwell+dt/.65):0;s.locked=s.dwell===1;
+      s.status=s.warm<1?'SEEKER WARMING':s.locked?'ASRAAM LOCK':target?'ACQUIRING':
+        visible.length?'IR TOO WEAK · CLOSE OR CHANGE ASPECT':inCone.length?'TARGET MASKED':'NO SEEKER CONTACT';
       if(target)s.direction.copy(target.position).sub(flight.position).normalize();
     }
     if(this.laser.active && (!clearSight(flight.position,this.laser.point)||flight.position.distanceTo(this.laser.point)>7000)) {this.laser.active=false;this.message('LASER MASKED');}
@@ -174,7 +192,7 @@ export class Engagement {
       const expired=missileStep(m,m.target,dt);
       m.mesh.quaternion.setFromUnitVectors(V3(0,0,-1),m.velocity.clone().normalize());
       m.trail+=dt;
-      if(m.age<5.2&&m.trail>.035){m.trail=0;this.effects.spray.spawn({position:m.position.clone(),velocity:V3(1,1,0),size:1.1,alpha:.5,life:2.7});}
+      if(m.age<AAM.burn&&m.trail>.035){m.trail=0;this.effects.spray.spawn({position:m.position.clone(),velocity:V3(1,1,0),size:1.1,alpha:.5,life:2.7});}
       let hit = null;
       if (m.age > .2) for (const target of this.airTargets) {
         if (target.destroyed) continue;
@@ -182,7 +200,7 @@ export class Engagement {
         if (time !== null) { hit = target; m.position.lerpVectors(before, m.position.clone(), time); break; }
       }
       if(hit)this.hitAir(hit,10,m.position);
-      if(expired||hit){if(hit)this.effects.explosion(m.position,.65);this.scene.remove(m.mesh);this.missiles.splice(i,1);}
+      if(expired||hit){m.expired=true;if(hit)this.effects.explosion(m.position,.65);this.scene.remove(m.mesh);this.missiles.splice(i,1);}
     }
     this.audio?.seeker?.(s.enabled,s.locked,!!s.target);
   }

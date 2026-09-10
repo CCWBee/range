@@ -3,14 +3,15 @@
 Two tiers (spec 2026-09-10 section 9). `desktop` writes dist/index.html and RANGE.zip, plus one
 inline script that sends phones to mobile.html. `mobile` writes dist/mobile.html: the settlement
 chunks nearest the airfield inside a byte budget, roads and land cover thinned, textures shrunk,
-the heritage skin left out. Both tiers carry the height grid as a base64 int16 array (0.1 m) in
-place of the JSON text, since physics.js only ever indexes it. With no --tier both are written.
+both skins carried and the heritage one's encoded cost printed. Both tiers carry the height grid
+as a base64 int16 array (0.1 m) in place of the JSON text, since physics.js only ever indexes it,
+and the two Barlow Condensed faces as data URIs. With no --tier both are written.
 
 The library is assets/library.json and library.bin (version 3, tools/pack_library.py). When the
 Blender export beside it is newer, it is packed first.
 """
 from pathlib import Path
-import re, base64, json, zipfile, io, subprocess, argparse, struct, sys
+import re, base64, json, zipfile, io, subprocess, argparse, struct, sys, shutil
 from html.parser import HTMLParser
 from PIL import Image
 root=Path(__file__).resolve().parent.parent
@@ -164,9 +165,13 @@ def bundle_code(manifest,binary,textures,tier):
     return code,[p.stem for p in order]
 
 class DependencyCheck(HTMLParser):
+    # The one relative reference allowed is the home-screen icon, which build() copies beside the
+    # bundles: iOS ignores a data: URL on apple-touch-icon, and a standalone copy of the page loses
+    # nothing but that icon.
+    ALLOWED={'apple-touch-icon.png'}
     def handle_starttag(self,tag,attrs):
         for name,value in attrs:
-            assert not(name in ('src','href') and value and not value.startswith(('data:','#'))),f'External dependency: {value}'
+            assert not(name in ('src','href') and value and not value.startswith(('data:','#')) and value not in self.ALLOWED),f'External dependency: {value}'
 
 def build(tier):
     manifest,binary=library()
@@ -174,25 +179,49 @@ def build(tier):
         assets=select(read_v3(manifest,binary),SETTLEMENT_BUDGET)
         manifest,binary=write_v3(assets,manifest['materials'],manifest.get('pivots',{}),manifest.get('blender',''))
     stems=texture_stems(manifest)
-    if tier=='mobile':stems.discard('raf_typhoon_heritage')
-    textures={};texture_bytes=0
+    textures={};texture_bytes=0;sizes={}
     for stem in sorted(stems):
         path=next((root/'textures'/f'{stem}.{ext}' for ext in ['jpg','png'] if (root/'textures'/f'{stem}.{ext}').exists()),None)
         assert path, f'Missing texture {stem}'
-        textures[stem],size=encode_texture(stem,path,tier);texture_bytes+=size
+        textures[stem],sizes[stem]=encode_texture(stem,path,tier);texture_bytes+=sizes[stem]
     code,order=bundle_code(manifest,binary,textures,tier)
     html=(root/'index.html').read_text(encoding='utf-8')
     entry='<script type="module" src="src/main.js"></script>'
     assert entry in html
     html=html.replace(entry,'<script type="module">'+code.replace('</script','<\\/script')+'</script>')
-    csp='<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data:; connect-src \'none\'; media-src data: blob:; base-uri \'none\'">'
+    # The faces, inlined the way the textures are. DependencyCheck reads only src and href tag
+    # attributes, so a url(assets/fonts/...) left inside the inline <style> would pass it unseen and
+    # the phone would silently render in Arial; the asserts below are what catch that.
+    for path in sorted((root/'assets/fonts').glob('*.woff2')):
+        data=path.read_bytes()
+        assert len(data)<16*1024,f'{path.name} is {len(data)} bytes, over the 16 KB font budget'
+        html=html.replace(f'url(assets/fonts/{path.name})','url(data:font/woff2;base64,'+base64.b64encode(data).decode()+')')
+    # The icon (assets/icon, drawn by tools/icon_planform.py): the SVG favicon inlined like the
+    # faces; the home-screen PNG stays a file next to the bundles, since iOS will not take it as data:.
+    icon=(root/'assets/icon/favicon.svg').read_bytes()
+    html=html.replace('href="assets/icon/favicon.svg"','href="data:image/svg+xml;base64,'+base64.b64encode(icon).decode()+'"')
+    html=html.replace('href="assets/icon/apple-touch-icon.png"','href="apple-touch-icon.png"')
+    assert html.count('data:image/svg+xml;base64,')==1 and 'assets/icon/' not in html,'the icon links were not rewritten'
+    csp='<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; connect-src \'none\'; media-src data: blob:; base-uri \'none\'">'
     html=html.replace('<head>','<head>'+csp+(REDIRECT if tier=='desktop' else ''),1)
+    # Not 'assets/fonts/' flat: the licence comment above the @font-face rules carries the path to
+    # the OFL text and must survive. A url(), quoted or not, must not.
+    assert not re.search(r"url\(\s*['\"]?assets/fonts/",html),'a font url() survived the inlining'
+    assert 'font-src data:' in csp,'the CSP would block the inlined faces'
+    assert html.count('data:font/woff2;base64,')==2,'expected both Barlow Condensed faces inlined'
+    assert 'Barlow Project Authors' in html,'the SIL OFL notice must travel with the faces'
     DependencyCheck().feed(html)
     size=len(html.encode());budget=MOBILE_BUDGET if tier=='mobile' else DESKTOP_BUDGET
     print(f'{tier}: library {len(binary)} bytes, textures {texture_bytes} bytes, page {size} bytes')
+    if tier=='mobile':
+        # Its own line, so a regression in the source PNG cannot quietly eat the budget: the phone
+        # carries the heritage skin now (spec 2026-09-10 touch cockpit, section 10.2).
+        encoded=len(textures['raf_typhoon_heritage'].split(',',1)[1])
+        print(f'heritage skin: {sizes["raf_typhoon_heritage"]} bytes encoded, {encoded} bytes as base64 in the page')
     assert size<budget,f'{tier} bundle exceeds its size budget: {size} bytes'
     out=root/('dist/mobile.html' if tier=='mobile' else 'dist/index.html');out.parent.mkdir(exist_ok=True)
     out.write_text(html,encoding='utf-8',newline='\n')
+    shutil.copyfile(root/'assets/icon/apple-touch-icon.png',out.parent/'apple-touch-icon.png')
     if tier=='desktop':
         with zipfile.ZipFile(root/'RANGE.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
             archive.write(out,'RANGE.html');archive.write(root/'vendor/THREE-LICENSE.txt','THREE-LICENSE.txt')

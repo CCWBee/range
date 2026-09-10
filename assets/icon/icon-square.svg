@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<!-- RANGE: the Typhoon from directly above, traced from assets/RANGE.blend via tools/icon_planform.py; teal #0A6165, orange #FF8A1F. -->
+<rect width="64" height="64" fill="#0A6165"/>
+<path fill="#FF8A1F" d="M32 4L34 4L36 7L36 30L40 50L40 60L36 60L36 56L32 56L28 56L28 60L24 60L24 50L28 30L28 7L30 4ZM30 24L20 24L20 20L30 13ZM34 13L44 20L44 24L34 24ZM32 29L36 29L55 50L55 52L32 52L9 52L9 50L28 29Z"/>
+</svg>

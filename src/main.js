@@ -8,17 +8,20 @@ import { loadLibrary } from './loader.js';
 import { World } from './world.js';
 import { Aircraft } from './aircraft.js';
 import { Effects } from './effects.js';
-import { ChaseCamera } from './camera.js';
+import { ChaseCamera, MunitionCamera } from './camera.js';
 import { Input } from './input.js';
 import { Hud } from './hud.js';
 import { Audio } from './audio.js';
 import { Post } from './post.js';
 import { Engagement } from './engagement.js';
 import { Touch, autoGear, seekerPress, releaseBomb } from './touch.js';
+import { nextPixelRatio } from './quality.js';
 
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const STEP = 1 / 120;
+const munitionCamera = new MunitionCamera();
+let touchFollow = null;
 
 const canvas = $('view');
 let renderer;
@@ -32,7 +35,10 @@ try {
 // The render tier: mobile in touch mode or when asked for (spec 2026-09-10 section 8).
 const touchWanted = Touch.wanted();
 const MOBILE = touchWanted || new URLSearchParams(location.search).get('tier') === 'mobile';
-const basePixelRatio = () => Math.min(devicePixelRatio, MOBILE ? 1 : 1.5);
+// Base 2 on a phone and 1.5 on a desktop looks inverted until the pixels are counted: 844 x 390 at
+// ratio 2 is 1.32 Mpx, a desktop at 2560 x 1080 and ratio 1.5 is 6.22 Mpx. The phone draws a fifth
+// of the pixels on a screen whose physical pixels are a quarter the size.
+const basePixelRatio = () => Math.min(devicePixelRatio, MOBILE ? 2 : 1.5);
 renderer.setPixelRatio(basePixelRatio());
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -62,8 +68,6 @@ const post = new Post(renderer, world.quadGeometry, { samples: MOBILE ? 0 : 4, b
 // switches the intro copy and the HUD layout before the sortie starts.
 const touch = touchWanted ? new Touch(input, canvas) : null;
 if (touch) document.body.classList.add('touch');
-// The mobile bundle carries one skin, so the selector goes with the tier, not the layer.
-if (MOBILE) $('skinControl').classList.add('hidden');
 
 const scene = world.scene;
 const camera = chase.camera;
@@ -75,22 +79,23 @@ let gunTimer = 0;
 let hudTimer = 0;
 let lastFrame = performance.now();
 let stressed = false;
+// A staged frame is held: nothing steps, so a staged weapon state survives to the screenshot.
+// Any genuine pause or resume clears it, because setPauseUi is the one place the state changes.
+let staged = false;
 const frameTimes = [];
 
-// Adaptive resolution: every two seconds of play the pixel ratio steps down by 0.1 (to 0.6) when
-// the p95 frame time is over 20 ms, and back up towards the tier's base when it is under 9 ms. Off
-// while stressed, since that mode fixes the ratio to measure headroom, and idle while paused.
+// Adaptive resolution: every two seconds of play the pixel ratio steps by 0.1 towards whatever
+// src/quality.js decides from the last 120 frames, with a per-tier floor of 1.0 on a phone and 0.6
+// on a desktop. Off while stressed, since that mode fixes the ratio to measure headroom, and idle
+// while paused. The thresholds are measured against the window's own median, not against absolute
+// milliseconds: a 60 Hz phone can never report a p95 under 9 ms, so the old recovery branch was
+// unreachable and the first rough patch took the phone to 0.6 for the rest of the sortie.
 let pixelRatio = basePixelRatio(), ratioTimer = 0;
 function adaptResolution(dt) {
   ratioTimer += dt;
   if (stressed || ratioTimer < 2 || frameTimes.length < 60) return;
   ratioTimer = 0;
-  const recent = frameTimes.slice(-120).sort((a, b) => a - b);
-  const p95 = recent[Math.floor(recent.length * 0.95)];
-  const base = basePixelRatio();
-  let next = pixelRatio;
-  if (p95 > 20 && pixelRatio > 0.6) next = Math.max(0.6, pixelRatio - 0.1);
-  else if (p95 < 9 && pixelRatio < base) next = Math.min(base, pixelRatio + 0.1);
+  const next = nextPixelRatio(frameTimes.slice(-120), pixelRatio, basePixelRatio(), MOBILE ? 1 : 0.6);
   if (next === pixelRatio) return;
   pixelRatio = next;
   renderer.setPixelRatio(pixelRatio);
@@ -131,6 +136,7 @@ function reset() {
 }
 
 function setPauseUi(paused) {
+  staged = false;
   $('pauseButton').textContent = paused ? 'RESUME · CLICK' : 'PAUSE · P';
   if (!running) return;
   audio.update(flight,paused);
@@ -153,10 +159,78 @@ input.on('restart', reset);
 input.on('help', () => hud.toggleHelp());
 input.on('devCamera', () => { input.devCamera = !input.devCamera; input.pendingMouse.set(0,0); engagement.message(input.devCamera ? 'MAP CAMERA · WASD move · Q/E down/up · Shift faster · ` return' : 'FLIGHT CAMERA'); });
 
-$('start').onclick = () => { if (touch) touch.enter(); start(); };
+// One writer for the skin, so the select, the switch and the aircraft cannot disagree. The choice
+// lives in aircraft.skinName for the life of the page: no localStorage, so it is the session and
+// nothing longer. The skinName guard is what makes a drag cheap: the commit fires as the knob
+// crosses the middle, and setSkin at src/aircraft.js caches the cloned texture.
+const SKINS = ['grey', 'heritage'];
+function setSkin(name) {
+  if (!SKINS.includes(name) || name === aircraft.skinName || !aircraft.setSkin(name)) return false;
+  $('skinChoice').value = name;
+  $('skinSwitch').classList.toggle('heritage', name === 'heritage');
+  for (const [id, wanted] of [['skinGrey', 'grey'], ['skinHeritage', 'heritage']]) {
+    $(id).setAttribute('aria-checked', String(name === wanted));
+    $(id).tabIndex = name === wanted ? 0 : -1;
+  }
+  return true;
+}
+
+// The portrait check goes after start(), because the layer's pause handler below needs the sortie
+// running to take it, and a page that loaded in portrait fires no orientation change event.
+$('start').onclick = () => { if (touch) touch.enter(); start(); touch?.pauseIfPortrait(); };
 if (touch) {
-  touch.on('bomb', () => { if (!input.paused && !input.devCamera) releaseBomb(engagement, effects, flight, aircraft, input.aimState); });
-  touch.on('seeker', () => { if (!input.paused) seekerPress(engagement, flight); });
+  // The skin switch: a tap on either legend, a tap anywhere on the 44 px row, or a drag that snaps
+  // to the end the finger has crossed into. The window-level pointer pattern is the throttle's,
+  // which deliberately avoids pointer capture because some browsers refuse it, so a finger that
+  // drifts off the row keeps working and a pointercancel still ends the drag. src/touch.js stays
+  // about flying: it does not learn what a skin is.
+  const skinSwitch = $('skinSwitch'), skinTrack = $('skinTrack');
+  const nearest = (clientX) => {
+    const r = skinTrack.getBoundingClientRect();
+    return clientX < r.left + r.width / 2 ? 'grey' : 'heritage';
+  };
+  let skinSliding = null;
+  skinSwitch.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
+  skinSwitch.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('.skinLegend')) return;   // the legend's own click handles it
+    event.preventDefault();
+    skinSliding = event.pointerId;
+    skinSwitch.classList.add('sliding');
+    setSkin(nearest(event.clientX));
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (skinSliding !== null && event.pointerId === skinSliding) setSkin(nearest(event.clientX));
+  });
+  const endSkinSlide = (event) => {
+    if (event.pointerId !== skinSliding) return;
+    skinSliding = null;
+    skinSwitch.classList.remove('sliding');
+  };
+  window.addEventListener('pointerup', endSkinSlide);
+  window.addEventListener('pointercancel', endSkinSlide);
+  $('skinGrey').onclick = () => setSkin('grey');
+  $('skinHeritage').onclick = () => setSkin('heritage');
+  // The radiogroup pattern rather than a re-invention of it: focus follows the selection with a
+  // roving tabindex, which is what a desktop running ?touch=1 gets.
+  skinSwitch.addEventListener('keydown', (event) => {
+    const back = ['ArrowLeft', 'ArrowUp', 'Home'], on = ['ArrowRight', 'ArrowDown', 'End'];
+    if (!back.includes(event.key) && !on.includes(event.key)) return;
+    event.preventDefault();
+    const name = back.includes(event.key) ? 'grey' : 'heritage';
+    setSkin(name);
+    $(name === 'grey' ? 'skinGrey' : 'skinHeritage').focus();
+  });
+  const watchRelease = (action) => {
+    touchFollow=null;
+    if(input.paused || input.devCamera) return;
+    const previous=effects.lastMunition;
+    action();
+    if(effects.lastMunition!==previous) touchFollow={target:effects.lastMunition,age:0};
+  };
+  touch.on('bomb', () => watchRelease(()=>releaseBomb(engagement, effects, flight, aircraft, input.aimState)));
+  touch.on('seeker', () => watchRelease(()=>seekerPress(engagement, flight)));
+  touch.on('releaseWeapon', () => { touchFollow=null; });
+  window.addEventListener('blur',()=>{touchFollow=null;});
   touch.on('pause', () => { if (running) input.setPaused(true); });
   touch.on('resume', () => { input.setPaused(false); audio.start(); });
   touch.on('notice', (text) => engagement.message(text));
@@ -170,7 +244,7 @@ if (touch) {
 $('helpToggle').onclick = () => hud.toggleHelp();
 $('pauseButton').onclick = () => { input.setPaused(true); input.exitLock(); };
 $('sound').onclick = () => { $('sound').textContent = audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON'; };
-$('skinChoice').onchange = (event) => aircraft.setSkin(event.target.value);
+$('skinChoice').onchange = (event) => setSkin(event.target.value);
 
 window.addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
@@ -212,13 +286,10 @@ function frame(dt, stepSim) {
   elapsed += dt;
 
   chase.update(dt, flight, aim, running, false, input);
-  const munition = effects.lastMunition;
-  if (input.keys.has('KeyU') && munition && !input.devCamera) {
-    const direction = munition.velocity.clone().normalize();
-    camera.position.copy(munition.position).addScaledVector(direction, -20).add(V3(0,6,0));
-    camera.up.set(0,1,0);
-    camera.lookAt(munition.position);
-  }
+  if(touchFollow) touchFollow.age+=dt;
+  const heldTouch=touchFollow && touchFollow.age>=.18 && !input.paused;
+  munitionCamera.update(camera,heldTouch?touchFollow.target:effects.lastMunition,
+    !input.devCamera && (input.keys.has('KeyU') || heldTouch),dt);
   if (input.devCamera) {
     input.devPosition ||= camera.position.clone();
     input.devLook ||= new THREE.Vector2();
@@ -251,9 +322,14 @@ function frame(dt, stepSim) {
   post.render(scene, camera, elapsed, effects.hitFlash);
 }
 
-// The HUD's options: in touch mode the layer supplies the hint wording and the crash copy.
-function hudOptions(paused = input.paused) {
-  return touch?.active ? { paused, touch: true, hint: touch.hint(flight, effects, paused) } : { paused };
+// The HUD's options: in touch mode the layer supplies the hint wording, its voice and the crash
+// copy. The class and the string travel together, so they can never disagree. A staged frame is a
+// presentation still: the sim is stopped so the pose holds, but the HUD is written as if it were
+// flying, or the loop would overwrite the staged hint with the paused one a tenth of a second later.
+function hudOptions(paused = staged ? false : input.paused) {
+  if (!touch?.active) return { paused };
+  const hint = touch.hint(flight, effects, paused);
+  return { paused, touch: true, hint: hint.text, hintVoice: hint.voice };
 }
 
 function loop(now) {
@@ -351,6 +427,11 @@ function stage(name) {
   // A staged frame is a presentation still, so clear the pause overlay that the interactive pause
   // would show. The normal pause text returns as soon as the viewer clicks to take the controls.
   hud.setStatus('');
+  // One writer for the lever. frame() calls touch.update(), which writes the layer's own throttle
+  // back into the flight model, so without this the pose's throttle is overwritten by whatever the
+  // last staged cell left on the slider and every ramp frame photographed a parked aircraft at full
+  // reheat with the gate reading IDLE.
+  if (touch?.active) { touch.throttle = flight.throttle; touch.renderThrottle(); }
   frame(0.001, false);
   return name;
 }
@@ -432,16 +513,44 @@ function stress(on = true) {
 
 // The touch overlay over a staged pose, for the layout screenshot. There is no device, so the
 // neutral pose is injected first and a rolled sample after it, and the slider takes the pose's
-// throttle.
-function touchDemo(name = 'cloud', beta = 50, gamma = 12) {
-  stage(name);
-  if (!touch) return null;
+// throttle from stage() rather than the other way about. The state goes second because
+// tools/qa_touch.mjs calls touchDemo(STAGE, STATE).
+function touchDemo(name = 'cloud', state = 'resting', beta = 50, gamma = 12) {
+  if (!touch) { stage(name); return null; }
+  // Entered before the pose is staged, so the layer is active while stage() paints its frame and
+  // the lever is synced there: one writer for the throttle, and the ramp cell photographs the
+  // resting quadrant the player actually meets.
   touch.enter();
+  stage(name);
+  // A previous QA run's localStorage must not blank the coaching lines in this run's screenshots.
+  touch.veteran = false;
   touch.simulate(beta, 0);
   touch.simulate(beta, gamma);
-  touch.throttle = flight.throttle;
-  touch.renderThrottle();
-  input.setPaused(false);
+  // Set from scratch every time, because these two outlive reset() and would otherwise leak from
+  // the previous cell of the matrix into this one.
+  input.gunHeld = state === 'firing';
+  touch.el.gun.classList.toggle('pressed', state === 'firing');
+  if (state === 'warming' || state === 'searching') {
+    // The seeker powered, cold-soaking and then looking: WARMING is the fringe without the bloom and
+    // SEARCH is the full phosphor ramp, which is the pair section 1.2's amendment turns on.
+    Object.assign(engagement.seeker, { enabled: true, warm: state === 'warming' ? 0.4 : 1, locked: false, target: null });
+    engagement.remaining = 2;
+  } else if (state === 'locked') {
+    // Whether the launch is inhibited is the pose's business: the ramp cell is deliberately a
+    // dimmed cap with a FIRE legend, which is what the shipped build already means.
+    Object.assign(engagement.seeker, { enabled: true, warm: 1, locked: true, target: {} });
+    engagement.remaining = 2;
+  } else if (state === 'reloading') {
+    // Every digit column exercised at once: the three countdowns read 7, 12 and 15.
+    flight.rounds = 0;
+    flight.bombs = 0;
+    engagement.remaining = 0;
+    engagement.reloadTime = 5;
+    effects.reload = { rounds: 5, bombs: 13 };
+  }
+  // Held, not resumed: engagement.update() recomputes the seeker's target from the live air picture
+  // every step, so a staged lock would be gone before the shutter.
+  staged = true;
   hud.setStatus('');
   hud.update(flight, camera, input, instructor, effects, hudOptions(false));
   frame(0.001, false);
@@ -472,7 +581,7 @@ requestAnimationFrame(loop);
 window.range = {
   flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch,
   targets: effects.targets, bombs: effects.bombs,
-  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo,
+  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin,
   dropBomb: () => effects.dropBomb(flight, aircraft),
   fireGun: () => effects.fireGun(flight),
   explosion: (position, strength) => effects.explosion(position, strength),
