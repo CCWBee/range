@@ -77,6 +77,27 @@ let lastFrame = performance.now();
 let stressed = false;
 const frameTimes = [];
 
+// Adaptive resolution: every two seconds of play the pixel ratio steps down by 0.1 (to 0.6) when
+// the p95 frame time is over 20 ms, and back up towards the tier's base when it is under 9 ms. Off
+// while stressed, since that mode fixes the ratio to measure headroom, and idle while paused.
+let pixelRatio = basePixelRatio(), ratioTimer = 0;
+function adaptResolution(dt) {
+  ratioTimer += dt;
+  if (stressed || ratioTimer < 2 || frameTimes.length < 60) return;
+  ratioTimer = 0;
+  const recent = frameTimes.slice(-120).sort((a, b) => a - b);
+  const p95 = recent[Math.floor(recent.length * 0.95)];
+  const base = basePixelRatio();
+  let next = pixelRatio;
+  if (p95 > 20 && pixelRatio > 0.6) next = Math.max(0.6, pixelRatio - 0.1);
+  else if (p95 < 9 && pixelRatio < base) next = Math.min(base, pixelRatio + 0.1);
+  if (next === pixelRatio) return;
+  pixelRatio = next;
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(innerWidth, innerHeight);
+  post.resize();
+}
+
 // ------------------------------------------------------------------------------- actions
 
 function start() {
@@ -246,6 +267,7 @@ function loop(now) {
   // pause state and the lock state impossible to disagree.
   const stepSim = running && !input.paused && input.locked;
   frame(dt, stepSim);
+  if (stepSim) adaptResolution(dt);
   if (running && hudTimer < 0.02 && frameTimes.length > 8) {
     const window90 = frameTimes.slice(-90);
     const mean = window90.reduce((a, b) => a + b, 0) / window90.length;
@@ -280,10 +302,6 @@ function stage(name) {
   flight.gearPosition = flight.gear ? 1 : 0;
   flight.airborneTime = name === 'ramp' ? 0 : 30;
   flight.landed = false;
-  // A pose placed in the air must clear the ground flags before the first step. The model extends
-  // the gear whenever it reads onGround at the top of a step, so a pose left with the parked
-  // onGround true would re-extend the retracted gear on its own on the cloud and bomb frames.
-  if (name !== 'ramp') { flight.onGround = false; flight.grounded = false; }
 
   if (name === 'ramp') {
     // Thirty steps at 120 Hz with the brakes on: the oleos settle, the legs report real loads and
@@ -401,7 +419,8 @@ function benchmark(frames = 240, dt = 1 / 60) {
 // number spec section 7 asks for.
 function stress(on = true) {
   stressed = !!on;
-  renderer.setPixelRatio(stressed ? 2 : basePixelRatio());
+  pixelRatio = stressed ? 2 : basePixelRatio();
+  renderer.setPixelRatio(pixelRatio);
   renderer.setSize(innerWidth, innerHeight);
   post.resize();
   return renderer.getPixelRatio();

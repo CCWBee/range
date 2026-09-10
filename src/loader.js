@@ -1,18 +1,19 @@
-// RANGE asset loader: turns the Blender library (manifest plus binary) and the texture set into
-// three.js geometries and materials. Spec: docs/specs/2026-09-06-range-v2.md sections 4.1 and 5.1.
+// RANGE asset loader: the packed library (assets/library.json plus library.bin, version 3, written
+// by tools/pack_library.py from the Blender export) and the texture set become three.js geometries
+// and materials. Spec: docs/specs/2026-09-06-range-v2.md sections 4.1 and 5.1.
 //
-// Two library formats are accepted. Version 2 is the manifest plus assets/meshes.bin with byte
-// offsets, indexed geometry, vertex ambient occlusion, hinge pivots and a terrain height grid.
-// Version 1 is the older JSON-only export whose assets hold arrays of positions, normals and uv.
-// The version is logged on load. A missing texture falls back to the manifest's flat colour and a
-// missing asset is logged and skipped, because the library moves while this runs.
+// Version 3 quantises positions and uv as uint16 inside each part's bounds, normals as int8 and
+// vertex colour as uint8, with uint16 indices where a part has 65,535 vertices or fewer. Positions
+// and uv are dequantised to float here; normals and colour go to the GPU as normalised integer
+// attributes. A missing texture falls back to the manifest's flat colour and a missing asset is
+// logged and skipped, because the library moves while this runs.
 import * as THREE from '../vendor/three.module.js';
 
 const JPEG_FIRST = ['jpg', 'jpeg', 'png'];
 
 // Textures the renderer itself asks for by stem. Anything a manifest material names is added to
-// this list at load. The bundle supplies them as data URIs on window.RANGE_TEXTURES; the dev page
-// resolves them under textures/ trying .jpg before .png.
+// this list at load. The bundle supplies them as data URIs on window.RANGE_TEXTURES (build.py reads
+// this list); the dev page resolves them under textures/ trying .jpg before .png.
 export const TEXTURE_STEMS = [
   'concrete', 'concrete_normal', 'moor', 'tarmac', 'corrugated', 'grime', 'sky',
   'grass_tuft', 'gorse', 'tree_card', 'cloud_1', 'cloud_2', 'cloud_3',
@@ -50,12 +51,11 @@ export class Library {
   constructor(manifest, binary) {
     this.manifest = manifest;
     this.binary = binary;
-    this.version = manifest.version || 1;
+    this.version = manifest.version || 0;
     this.materials = {};
     this.geometries = {};
     this.pivots = manifest.pivots || {};
     this.textures = {};
-    this.terrain = null;
     this.missing = new Set();
     this.triangles = 0;
   }
@@ -93,10 +93,7 @@ export class Library {
     const parts = this.parts(name);
     if (!parts.length) return null;
     const box = new THREE.Box3();
-    for (const part of parts) {
-      part.geometry.computeBoundingBox();
-      box.union(part.geometry.boundingBox);
-    }
+    for (const part of parts) box.union(part.geometry.boundingBox);
     return box;
   }
 
@@ -125,7 +122,7 @@ function skin(texture, uvScale, maxAnisotropy, colour) {
   return copy;
 }
 
-function buildMaterials(library, renderer) {
+export function buildMaterials(library, renderer) {
   const maxAnisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 1;
   for (const [name, definition] of Object.entries(library.manifest.materials || {})) {
     const material = new THREE.MeshStandardMaterial({
@@ -141,11 +138,9 @@ function buildMaterials(library, renderer) {
     // The grime sampler is read directly in the shader, so it needs repeat wrapping but its own
     // repeat is irrelevant: the coarser scale is applied to the uv there.
     const grime = definition.grimeMap ? skin(library.texture(definition.grimeMap), null, maxAnisotropy, false) : null;
-    if (base) {
-      material.map = base;
-      // The tiling sheet is a light painted panel skin, so the manifest colour stays as the tint
-      // that gives each material its shade rather than being thrown away.
-    }
+    // The tiling sheet is a light painted panel skin, so the manifest colour stays as the tint
+    // that gives each material its shade rather than being thrown away.
+    if (base) material.map = base;
     if (normal) material.normalMap = normal;
     if (definition.bumpMap) {
       material.bumpMap = skin(library.texture(definition.bumpMap), uvScale, maxAnisotropy, false);
@@ -192,39 +187,45 @@ function materialFor(library, name) {
   return library.materials[name] || library.materials.default;
 }
 
-// Version 2: every attribute is a byte offset into the binary blob.
-function buildGeometriesV2(library) {
+// uint16 back to float inside [lo, hi] per component.
+export function dequantise(q, stride, lo, hi) {
+  const out = new Float32Array(q.length);
+  for (let i = 0; i < q.length; i++) {
+    const k = i % stride;
+    out[i] = lo[k] + q[i] / 65535 * (hi[k] - lo[k]);
+  }
+  return out;
+}
+
+// Every attribute is a byte offset into the binary blob, 4-byte aligned.
+export function buildGeometries(library) {
   const buffer = library.binary.buffer;
   const base = library.binary.byteOffset;
   for (const [name, parts] of Object.entries(library.manifest.assets || {})) {
     const built = [];
     for (const part of parts) {
       try {
-        const n = part.vertexCount;
+        const n = part.vertexCount, b = part.bounds;
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(
-          new Float32Array(buffer, base + part.position, n * 3), 3));
+          dequantise(new Uint16Array(buffer, base + part.position, n * 3), 3, b.slice(0, 3), b.slice(3)), 3));
         geometry.setAttribute('normal', new THREE.BufferAttribute(
-          new Float32Array(buffer, base + part.normal, n * 3), 3));
-        if (part.uv !== undefined && part.uv !== null) {
+          new Int8Array(buffer, base + part.normal, n * 3), 3, true));
+        if (part.uv != null) {
+          const u = part.uvBounds;
           geometry.setAttribute('uv', new THREE.BufferAttribute(
-            new Float32Array(buffer, base + part.uv, n * 2), 2));
+            dequantise(new Uint16Array(buffer, base + part.uv, n * 2), 2, u.slice(0, 2), u.slice(2)), 2));
         }
-        if (part.color !== undefined && part.color !== null) {
+        if (part.color != null) {
           // Vertex ambient occlusion baked in Blender, three bytes per vertex, linear.
           geometry.setAttribute('color', new THREE.BufferAttribute(
             new Uint8Array(buffer, base + part.color, n * 3), 3, true));
         }
-        geometry.setIndex(new THREE.BufferAttribute(
-          new Uint32Array(buffer, base + part.index, part.indexCount), 1));
-        if (part.bounds) {
-          const b = part.bounds;
-          geometry.boundingBox = new THREE.Box3(
-            new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
-          geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
-        } else {
-          geometry.computeBoundingSphere();
-        }
+        const Index = part.indexBytes === 2 ? Uint16Array : Uint32Array;
+        geometry.setIndex(new THREE.BufferAttribute(new Index(buffer, base + part.index, part.indexCount), 1));
+        geometry.boundingBox = new THREE.Box3(
+          new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
+        geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
         library.triangles += part.indexCount / 3;
         const material = materialFor(library, part.material);
         if (geometry.hasAttribute('color')) material.vertexColors = true;
@@ -235,35 +236,6 @@ function buildGeometriesV2(library) {
     }
     if (built.length) library.geometries[name] = built;
   }
-  const t = library.manifest.terrain;
-  if (t && t.heights !== undefined) {
-    try {
-      library.terrain = {
-        nx: t.nx, nz: t.nz, originX: t.originX, originZ: t.originZ, spacing: t.spacing,
-        heights: new Float32Array(buffer, base + t.heights, t.nx * t.nz),
-      };
-    } catch (error) {
-      console.warn('RANGE: the terrain height grid failed to decode, generating one instead', error);
-    }
-  }
-}
-
-// Version 1: the older export, arrays of numbers inline in the JSON, no index and no colour.
-function buildGeometriesV1(library) {
-  for (const [name, parts] of Object.entries(library.manifest.assets || {})) {
-    const built = [];
-    for (const part of parts) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(part.positions, 3));
-      geometry.setAttribute('normal', new THREE.Float32BufferAttribute(part.normals, 3));
-      if (part.uv) geometry.setAttribute('uv', new THREE.Float32BufferAttribute(part.uv, 2));
-      geometry.computeBoundingSphere();
-      geometry.computeBoundingBox();
-      library.triangles += part.positions.length / 9;
-      built.push({ geometry, material: materialFor(library, part.material), materialName: part.material });
-    }
-    if (built.length) library.geometries[name] = built;
-  }
 }
 
 // The bundle carries the manifest and binary on window; the dev page fetches them over http.
@@ -271,20 +243,18 @@ function buildGeometriesV1(library) {
 // binary arrives base64 encoded and is decoded with atob.
 async function readLibrary() {
   if (typeof window !== 'undefined' && window.RANGE_MANIFEST) {
-    const manifest = window.RANGE_MANIFEST;
-    const binary = window.RANGE_BIN ? decodeBase64(window.RANGE_BIN) : null;
-    return { manifest, binary, source: 'bundle' };
+    return { manifest: window.RANGE_MANIFEST, binary: decodeBase64(window.RANGE_BIN), source: 'bundle' };
   }
-  const manifest = await fetch('assets/meshes.json').then((r) => r.json());
-  let binary = null;
-  if ((manifest.version || 1) >= 2) {
-    binary = new Uint8Array(await fetch('assets/meshes.bin').then((r) => r.arrayBuffer()));
-  }
+  const manifest = await fetch('assets/library.json').then((r) => r.json());
+  const binary = new Uint8Array(await fetch('assets/library.bin').then((r) => r.arrayBuffer()));
   return { manifest, binary, source: 'http' };
 }
 
 export async function loadLibrary(renderer) {
   const { manifest, binary, source } = await readLibrary();
+  if (manifest.version !== 3) {
+    throw new Error(`RANGE: library version ${manifest.version} is not 3; run python tools/pack_library.py`);
+  }
   const library = new Library(manifest, binary);
   // Everything the renderer wants, plus every map a manifest material names: the library decides
   // its own skin, so a texture stem that only appears there is still fetched.
@@ -299,8 +269,7 @@ export async function loadLibrary(renderer) {
   list.forEach((stem, i) => { if (stems[i]) library.textures[stem] = stems[i]; });
   const absent = list.filter((stem) => !library.textures[stem]);
   buildMaterials(library, renderer);
-  if (library.version >= 2 && binary) buildGeometriesV2(library);
-  else buildGeometriesV1(library);
+  buildGeometries(library);
   console.log(`RANGE: library version ${library.version} from ${source}, `
     + `${Object.keys(library.geometries).length} assets, `
     + `${Math.round(library.triangles / 1000)}k triangles, `

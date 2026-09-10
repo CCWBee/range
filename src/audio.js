@@ -6,13 +6,18 @@ export class Audio {
     this.muted = false;
   }
 
-  // Called from a user gesture, which is what browsers require before audio may start.
+  // Called from a user gesture, which is what browsers require before audio may start. iOS also
+  // mutes Web Audio under the ringer switch unless the page claims a playback session, so that is
+  // asked for here (Safari 17), and the context is resumed explicitly: Safari can hand one over
+  // suspended even inside the gesture.
   start() {
     if (this.context) { this.context.resume(); return; }
     const Context = window.AudioContext || window.webkitAudioContext;
     if (!Context) return;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* not offered */ }
     const context = new Context();
     this.context = context;
+    context.resume();
     this.master = context.createGain();
     this.master.gain.value = 0.5;
     this.master.connect(context.destination);

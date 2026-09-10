@@ -227,9 +227,9 @@ export class Flight {
     const reheatTarget = this.spool > 1 ? clamp((this.spool - 1) / 0.12, 0, 1) : 0;
     this.reheat += (reheatTarget - this.reheat) * (1 - Math.exp(-dt / 0.6));
 
-    // Gear and brakes. The gear cannot be commanded with a wheel on the ground.
+    // Gear and brakes. The gear cannot be commanded with a wheel on the ground: that rule is applied
+    // once this step's contacts are known, at the end, not from the flag the last step left.
     this.brake = !!cmd.brake; this.airbrake = !!cmd.airbrake;
-    if (this.onGround) this.gear = true;
     this.gearPosition += clamp((this.gear ? 1 : 0) - this.gearPosition, -dt / 2.6, dt / 2.6);
     this._airbrakePos += ((this.airbrake ? 1 : 0) - this._airbrakePos) * (1 - Math.exp(-dt / 0.5));
     const gp = this.gearPosition;
@@ -387,6 +387,7 @@ export class Flight {
     } else this.airborneTime += dt;
     this._groundedTime = allContact ? this._groundedTime + dt : 0;
     this.onGround = anyContact;
+    if (this.onGround) this.gear = true;
     this.grounded = allContact && this._groundedTime >= 0.2;
     this.load = force.dot(up) / (mass * G0);
 

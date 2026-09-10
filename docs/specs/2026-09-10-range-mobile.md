@@ -121,20 +121,22 @@ The thesis and the tokens are in `docs/DESIGN.md`. In touch mode:
 
 - `python tools/build.py` writes both bundles: `dist/index.html` plus `RANGE.zip` as before, then
   `dist/mobile.html`. `--tier mobile` or `--tier desktop` writes one.
-- Both tiers carry the height grid as a base64 int16 array (0.1 m) decoded into a `Float32Array`,
-  in place of the 1.5 MB JSON text in `src/jersey.js`; `physics.js` only ever indexes it. The
-  desktop bundle went from 38.1 MB to 37.2 MB on that alone.
+- Both tiers read the packed library (`assets/library.json` and `library.bin`, version 3 from
+  `tools/pack_library.py`): positions and uv as uint16 inside each part's bounds, normals int8,
+  colour uint8, uint16 indices where a part fits; 6.8 MB against the exporter's 15.7 MB, with the
+  terrain block dropped since physics and the world read the grid from `src/jersey.js`. Both tiers
+  also carry that grid as a base64 int16 array (0.1 m) decoded into a `Float32Array` in place of
+  the 1.5 MB JSON text; `physics.js` only ever indexes it. The desktop bundle went from 38.1 MB to
+  25.3 MB on the two together.
 - Asset diet, measured on 10 September: settlement chunks sorted by the distance of their bounds
-  centre from the airfield (0, 0, −900) and kept while the running total stays under 3 MB of
-  geometry (25 of 87 chunks); every other asset kept; the binary repacked with rewritten,
-  4-byte-aligned offsets; the terrain block dropped from the manifest, since only the loader ever
-  read it and nothing reads the loader's copy. Roads: footway, path, steps, track, bridleway,
-  cycleway, raceway, construction, bus stop, busway and service ways dropped (they draw under a
-  pixel on the 2048 road map) and the rest thinned to 8 m (63,655 points to 22,301 in 2,711 ways).
-  Land cover rings thinned to 10 m (35,141 points to 30,589). Textures resized to at most 768
-  (sprites 256), JPEG quality 80 for opaque images, PNG for alpha; the heritage skin dropped.
-  Result: library 5.3 MB, textures 1.5 MB, page 12.5 MB against a 15 MB assert, byte counts
-  printed.
+  centre from the airfield (0, 0, −900) and kept while the running total stays under 1.5 MB of
+  packed geometry (27 of 87 chunks), every other asset kept, the binary repacked by the same
+  writer. Roads: footway, path, steps, track, bridleway, cycleway, raceway, construction, bus stop,
+  busway and service ways dropped (they draw under a pixel on the 2048 road map) and the rest
+  thinned to 8 m (63,655 points to 22,301 in 2,711 ways). Land cover rings thinned to 10 m (35,141
+  points to 30,589). Textures resized to at most 768 (sprites 256), JPEG quality 80 for opaque
+  images, PNG for alpha; the heritage skin dropped. Result: library 2.6 MB, textures 1.5 MB, page
+  8.9 MB against a 15 MB assert, byte counts printed.
 - Redirect: the desktop bundle gets one inline script at the top of head, before the module script,
   that sends coarse-pointer no-hover devices on http(s) to `mobile.html` with the query string;
   `?desktop=1` escapes it; `file://` never redirects.

@@ -91,8 +91,6 @@ export class Hud {
       ? 'GEAR IN TRANSIT' : flight.gear ? 'GEAR DOWN' : 'GEAR UP';
     const engagement=effects.engagement;
     el.weapons.textContent = `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · AIM-9 ${engagement?.remaining ?? 0}`;
-    el.instructor.textContent = instructor.mode === 'manual' ? 'INSTRUCTOR OFF'
-      : instructor.state.stallGuard > 0.05 ? 'STALL GUARD' : 'INSTRUCTOR ON';
     const stallWarning = !flight.onGround && !flight.crashed && (flight.stall || instructor.state.stallGuard > .3);
     el.instructor.textContent = stallWarning ? 'STALL · LOWER NOSE' : 'INSTRUCTOR ON';
     el.instructor.classList.toggle('stall-warning',stallWarning);

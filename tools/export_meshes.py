@@ -87,3 +87,8 @@ manifest['terrain'] = grid
 (ROOT/'assets/meshes.bin').write_bytes(binary)
 (ROOT/'assets/meshes.json').write_text(json.dumps(manifest,separators=(',',':')),encoding='utf-8')
 print(json.dumps({'assets':len(manifest['assets']),'bytes':len(binary),'hinges':len(manifest['pivots']),'jetTriangles':sum(p['indexCount']//3 for k,ps in manifest['assets'].items() if k.startswith('jet') for p in ps)}))
+
+# Pack the export into the runtime library the loader reads (assets/library.json and .bin).
+import subprocess, sys
+try: subprocess.run([sys.executable, str(ROOT/'tools/pack_library.py')], check=True)
+except Exception as error: print('pack_library did not run, do it by hand with python tools/pack_library.py:', error)

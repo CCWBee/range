@@ -1,22 +1,24 @@
-"""Package RANGE's ES modules and Blender library as offline HTML files.
+"""Package RANGE's ES modules and the packed library as offline HTML files.
 
-Two tiers (spec 2026-09-10 section 9). `desktop` writes dist/index.html and RANGE.zip as before,
-plus one inline script that sends phones to mobile.html. `mobile` writes dist/mobile.html: the
-settlement chunks nearest the airfield inside a byte budget, the binary repacked, the unused
-binary terrain block dropped, roads and land cover thinned, textures shrunk, the heritage skin
-left out. Both tiers carry the height grid as a base64 int16 array (0.1 m) in place of the JSON
-text: physics.js only ever indexes it. With no --tier both bundles are written.
+Two tiers (spec 2026-09-10 section 9). `desktop` writes dist/index.html and RANGE.zip, plus one
+inline script that sends phones to mobile.html. `mobile` writes dist/mobile.html: the settlement
+chunks nearest the airfield inside a byte budget, roads and land cover thinned, textures shrunk,
+the heritage skin left out. Both tiers carry the height grid as a base64 int16 array (0.1 m) in
+place of the JSON text, since physics.js only ever indexes it. With no --tier both are written.
+
+The library is assets/library.json and library.bin (version 3, tools/pack_library.py). When the
+Blender export beside it is newer, it is packed first.
 """
 from pathlib import Path
-import re, base64, json, zipfile, io, subprocess, argparse, struct
+import re, base64, json, zipfile, io, subprocess, argparse, struct, sys
 from html.parser import HTMLParser
 from PIL import Image
 root=Path(__file__).resolve().parent.parent
+sys.path.insert(0,str(root/'tools'))
+from pack_library import read_v3, write_v3, select, pack
 
-FIXED_TEXTURES=['concrete','concrete_normal','sky','moor','tarmac','corrugated','grime','grass_tuft','gorse','tree_card','cloud_1','cloud_2','cloud_3','airframe','airframe_normal','raf_typhoon_heritage']
 SPRITES={'grass_tuft','gorse','tree_card','cloud_1','cloud_2','cloud_3'}
-AIRFIELD=(0.0,-900.0)
-SETTLEMENT_BUDGET=3_000_000
+SETTLEMENT_BUDGET=1_500_000
 MOBILE_BUDGET=15_000_000
 DESKTOP_BUDGET=40_000_000
 # Drawn at under a pixel on the 2048 road map, so the phone never sees them.
@@ -39,48 +41,25 @@ three=three[:exports.start()]+'\nreturn {'+','.join(fields)+'};'
 
 # ------------------------------------------------------------------------------- the library
 
-def part_extent(part):
-    """Byte range [start, end) of one part inside the binary."""
-    n=part['vertexCount'];starts=[part['position'],part['normal']];ends=[part['position']+n*12,part['normal']+n*12]
-    if part.get('uv') is not None:starts.append(part['uv']);ends.append(part['uv']+n*8)
-    if part.get('color') is not None:starts.append(part['color']);ends.append(part['color']+n*3)
-    starts.append(part['index']);ends.append(part['index']+part['indexCount']*4)
-    return min(starts),max(ends)
-
-def diet(manifest,binary):
-    """Keep the settlement chunks nearest the airfield inside the budget, repack the binary with
-    4-byte alignment, and drop the terrain block nothing reads."""
-    assets=manifest['assets'];keep={};chunks=[]
-    for name,parts in assets.items():
-        if not name.startswith('settlement_'):keep[name]=parts;continue
-        lo=[min(p['bounds'][i] for p in parts) for i in range(3)];hi=[max(p['bounds'][i+3] for p in parts) for i in range(3)]
-        centre=((lo[0]+hi[0])/2,(lo[2]+hi[2])/2)
-        size=sum(part_extent(p)[1]-part_extent(p)[0] for p in parts)
-        chunks.append((((centre[0]-AIRFIELD[0])**2+(centre[1]-AIRFIELD[1])**2)**.5,size,name,parts))
-    chunks.sort(key=lambda c:c[0]);total=0;kept=0
-    for distance,size,name,parts in chunks:
-        if total+size>SETTLEMENT_BUDGET:continue
-        total+=size;kept+=1;keep[name]=parts
-    print(f'settlement: kept {kept} of {len(chunks)} chunks, {total} bytes of geometry')
-    out=bytearray();new_assets={}
-    def put(start,length):
-        offset=len(out);out.extend(binary[start:start+length])
-        while len(out)%4:out.append(0)
-        return offset
-    for name,parts in keep.items():
-        new_parts=[]
-        for p in parts:
-            n=p['vertexCount'];q=dict(p)
-            q['position']=put(p['position'],n*12);q['normal']=put(p['normal'],n*12)
-            if p.get('uv') is not None:q['uv']=put(p['uv'],n*8)
-            if p.get('color') is not None:q['color']=put(p['color'],n*3)
-            q['index']=put(p['index'],p['indexCount']*4)
-            new_parts.append(q)
-        new_assets[name]=new_parts
-    m=dict(manifest);m['assets']=new_assets;m.pop('terrain',None)
-    return m,bytes(out)
+def library():
+    """The packed library, packed first when the Blender export beside it is newer."""
+    packed=root/'assets/library.bin';export=root/'assets/meshes.bin'
+    if export.exists() and (not packed.exists() or export.stat().st_mtime>packed.stat().st_mtime):
+        print('library: the Blender export is newer, packing it');pack()
+    manifest=json.loads((root/'assets/library.json').read_text(encoding='utf-8'))
+    assert manifest['version']==3,'assets/library.json must be version 3 (python tools/pack_library.py)'
+    return manifest,packed.read_bytes()
 
 # ------------------------------------------------------------------------------- textures
+
+def texture_stems(manifest):
+    """The renderer's own list from loader.js, plus every map a material names."""
+    source=(root/'src/loader.js').read_text(encoding='utf-8')
+    table=re.search(r'TEXTURE_STEMS\s*=\s*\[(.*?)\];',source,re.S)
+    stems=set(re.findall(r"'(\w+)'",table.group(1)))
+    for material in manifest['materials'].values():
+        stems.update(material[key] for key in ('map','normalMap','bumpMap','ormMap','grimeMap') if key in material)
+    return stems
 
 def encode_texture(stem,path,tier):
     image=Image.open(path);data=path.read_bytes();mime='image/jpeg' if path.suffix=='.jpg' else 'image/png'
@@ -118,7 +97,7 @@ def transform_data(stem,body,tier):
     if stem not in ('jersey','roads','landcover'):return body,''
     match=DATA.search(body)
     assert match,f'{stem}.js is not one exported literal'
-    head,name,literal=match.group(1),match.group(2),match.group(3)
+    head,literal=match.group(1),match.group(3)
     comment=body[:match.start()]
     data=json.loads(literal)
     preamble=''
@@ -190,20 +169,17 @@ class DependencyCheck(HTMLParser):
             assert not(name in ('src','href') and value and not value.startswith(('data:','#'))),f'External dependency: {value}'
 
 def build(tier):
-    manifest=json.loads((root/'assets/meshes.json').read_text())
-    assert manifest['version']==2,'Release requires articulated Blender library'
-    binary=(root/'assets/meshes.bin').read_bytes()
-    if tier=='mobile':manifest,binary=diet(manifest,binary)
-    texture_stems=set(FIXED_TEXTURES)
-    if tier=='mobile':texture_stems.discard('raf_typhoon_heritage')
-    for material in manifest['materials'].values():
-        texture_stems.update(material[key] for key in ('map','normalMap','bumpMap','ormMap','grimeMap') if key in material)
+    manifest,binary=library()
+    if tier=='mobile':
+        assets=select(read_v3(manifest,binary),SETTLEMENT_BUDGET)
+        manifest,binary=write_v3(assets,manifest['materials'],manifest.get('pivots',{}),manifest.get('blender',''))
+    stems=texture_stems(manifest)
+    if tier=='mobile':stems.discard('raf_typhoon_heritage')
     textures={};texture_bytes=0
-    for stem in sorted(texture_stems):
+    for stem in sorted(stems):
         path=next((root/'textures'/f'{stem}.{ext}' for ext in ['jpg','png'] if (root/'textures'/f'{stem}.{ext}').exists()),None)
         assert path, f'Missing texture {stem}'
         textures[stem],size=encode_texture(stem,path,tier);texture_bytes+=size
-        print(f'texture {stem}: {size} bytes')
     code,order=bundle_code(manifest,binary,textures,tier)
     html=(root/'index.html').read_text(encoding='utf-8')
     entry='<script type="module" src="src/main.js"></script>'
@@ -216,7 +192,7 @@ def build(tier):
     print(f'{tier}: library {len(binary)} bytes, textures {texture_bytes} bytes, page {size} bytes')
     assert size<budget,f'{tier} bundle exceeds its size budget: {size} bytes'
     out=root/('dist/mobile.html' if tier=='mobile' else 'dist/index.html');out.parent.mkdir(exist_ok=True)
-    out.write_text(html,encoding='utf-8')
+    out.write_text(html,encoding='utf-8',newline='\n')
     if tier=='desktop':
         with zipfile.ZipFile(root/'RANGE.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
             archive.write(out,'RANGE.html');archive.write(root/'vendor/THREE-LICENSE.txt','THREE-LICENSE.txt')

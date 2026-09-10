@@ -1,6 +1,7 @@
 // Behaviour checks for the touch layer, independent of a phone and a DOM.
 // Spec: docs/specs/2026-09-10-range-mobile.md section 10.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as THREE from '../vendor/three.module.js';
 import { Flight } from '../physics.js';
 import { Instructor } from '../control.js';
@@ -170,6 +171,19 @@ globalThis.document ||= new EventTarget();
   input.exitLock();
   assert(input.locked, 'leaving the pointer lock does not touch the virtual one');
   pass('throttle slider, the brake rule and the virtual lock');
+}
+
+{
+  // getElementById returns the first match, so a duplicated id sends listeners to the wrong
+  // element with no error: the touch quadrant once shared "throttle" with the HUD readout.
+  const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const ids = [...page.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  const seen = new Set(), duplicates = ids.filter((id) => seen.size === seen.add(id).size);
+  assert.deepEqual(duplicates, [], `every id in index.html is unique: ${duplicates}`);
+  for (const id of ['quadrant', 'throttleFill', 'throttleLever', 'gunButton', 'bombButton', 'seekerButton', 'pauseTouch', 'recentre']) {
+    assert(ids.includes(id), `the touch layer's ${id} exists`);
+  }
+  pass('page ids are unique and the touch layer has its elements', { ids: ids.length });
 }
 
 console.log('ALL TOUCH CHECKS PASS');

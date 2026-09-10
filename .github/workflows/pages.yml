@@ -22,10 +22,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Check flight and engagement
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pillow numpy
+      - name: Check flight, engagement, touch and the library
         run: node tools/test_flight.mjs
-      - name: Check standalone build
-        run: test -s dist/index.html && test -s dist/mobile.html
+      - name: Build both bundles
+        run: python tools/build.py
+      - name: Ship the zip beside the pages
+        run: cp RANGE.zip dist/RANGE.zip
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

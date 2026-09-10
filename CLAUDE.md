@@ -12,15 +12,19 @@ thesis, tokens and the primitive registry.
 
 ## Layout
 
-- `index.html` loads `src/main.js` (dev). `dist/index.html` is the bundled single file; `RANGE.zip`
-  wraps it with the three.js licence.
+- `index.html` loads `src/main.js` (dev). `dist/index.html` and `dist/mobile.html` are the bundled
+  single files and `RANGE.zip` wraps the first with the three.js licence; all three are build
+  outputs, gitignored, and GitHub Actions (`.github/workflows/pages.yml`) builds and publishes
+  them on every push to `master`.
 - `physics.js`: rigid-body flight model with a rate-command fly-by-wire loop and three wheel
   contacts. `control.js`: the mouse-aim instructor. `src/`: renderer modules (loader, world,
   aircraft, effects, engagement, camera, input, touch, hud, audio, post, main) and the Jersey data
   modules (jersey, roads, landcover, landmarks), which the bundler transforms per tier.
-- `assets/meshes.json` (manifest) + `assets/meshes.bin` (binary library) are exported from
-  `assets/RANGE.blend` by `tools/export_meshes.py`; `tools/model_range.py` authors every mesh.
-  `tools/bake_jet.py` bakes the aircraft atlases (`textures/jet_*`).
+- `assets/RANGE.blend` (Git LFS) is exported by `tools/export_meshes.py` to `assets/meshes.json`
+  plus `meshes.bin` (version 2, untracked), which `tools/pack_library.py` packs into
+  `assets/library.json` plus `library.bin` (version 3, tracked, the one format the loader reads).
+  `tools/model_range.py` and the `model_*.py` and `build_*.py` scripts author the meshes. The
+  abandoned atlas bake lives in `_archive/abandoned-bake/`.
 - `textures/`: generated tiles and sprites (`concepts/prompts.json` records the prompts),
   `tools/textures_fallback.py` writes procedural stand-ins for any that are missing.
 - `concepts/`: the five concept frames the demo is matched against. `screenshots/`: the matching
@@ -40,7 +44,9 @@ no pill labels, no decorative dots, no emoji icons.
   chained; every line prints `PASS`). This is the project's check command.
 - Bundle: `python tools/build.py` (writes `dist/index.html` and `RANGE.zip`, then the lighter
   `dist/mobile.html`; `--tier desktop|mobile` writes one; prints the byte counts, asserts the size
-  budgets and no external references).
+  budgets and no external references; packs the library first when the Blender export is newer).
+- Library: `python tools/pack_library.py` packs the Blender export into `assets/library.json` and
+  `library.bin`; the exporter calls it itself at the end of `tools/export_meshes.py`.
 - Touch layer on a desktop: open either bundle with `?touch=1` (drag aims; no sensors), inject a
   tilt with `window.range.touch.simulate(beta, gamma)`, or stage the overlay with
   `window.range.touchDemo('cloud')`. The layout frame: `node E:\claude-projects\design\tools\qa\shot.mjs --url "file:///E:/claude-projects/range/dist/mobile.html?touch=1" --out screenshots\touch-mobile.png --width 932 --height 430 --wait 3500 --eval "window.range.touchDemo('cloud')"`.
@@ -78,6 +84,11 @@ no pill labels, no decorative dots, no emoji icons.
   touch layer is tested on the Pages URL (or `cloudflared tunnel --url http://127.0.0.1:8099` for
   a local build), never over the LAN http server. iOS also needs
   `DeviceOrientationEvent.requestPermission()` inside the ENTER tap; `src/touch.js` does that.
+- A control that paints but ignores touches: the page has two elements with the same id, and
+  `getElementById` returns the first, so the listeners land on a hidden element with no error
+  (the quadrant and the HUD's throttle readout both had `id="throttle"`). The unique-id check in
+  `tools/test_touch.mjs` catches it; a headless run with synthetic `PointerEvent`s on the built
+  bundle is how it was found.
 - A pure roll of the phone must read as no pitch. Measuring pitch against the screen-up component
   alone shrinks it as the phone rolls; `tiltFromUp` measures it against the whole in-plane
   magnitude, and the test "right edge down is positive roll and no pitch" catches a regression.

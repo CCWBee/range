@@ -137,9 +137,12 @@ export class Touch {
     this.handlers = {};
     this.labels = {};
     const $ = (id) => document.getElementById(id);
+    const value = (id) => $(id).querySelector('.value');
     this.el = {
-      touch: $('touch'), track: $('throttle'), fill: $('throttleFill'), thumb: $('throttleThumb'),
+      touch: $('touch'), track: $('quadrant'), fill: $('throttleFill'), lever: $('throttleLever'),
       throttleLabel: $('throttleLabel'), gun: $('gunButton'), bomb: $('bombButton'), seeker: $('seekerButton'),
+      gunValue: value('gunButton'), bombValue: value('bombButton'),
+      seekerName: $('seekerButton').querySelector('.name'), seekerValue: value('seekerButton'),
       pause: $('pauseTouch'), recentre: $('recentre'),
     };
     this.onOrientation = this.onOrientation.bind(this);
@@ -165,7 +168,25 @@ export class Touch {
     } else listen();
     try { document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.catch?.(() => {}); } catch { /* not offered */ }
     try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch { /* not offered */ }
+    this.unlockAudio();
     this.renderThrottle();
+  }
+
+  // Older iOS keeps Web Audio under the ringer switch until a media element has played, so a
+  // tenth of a second of silence goes through one inside the same tap. The WAV is built here
+  // rather than shipped: eight kHz, eight bit, 800 samples of silence.
+  unlockAudio() {
+    try {
+      const samples = 800, bytes = new Uint8Array(44 + samples), view = new DataView(bytes.buffer);
+      const tag = (offset, text) => { for (let i = 0; i < text.length; i++) bytes[offset + i] = text.charCodeAt(i); };
+      tag(0, 'RIFF'); view.setUint32(4, 36 + samples, true); tag(8, 'WAVE'); tag(12, 'fmt ');
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, 8000, true); view.setUint32(28, 8000, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+      tag(36, 'data'); view.setUint32(40, samples, true); bytes.fill(128, 44);
+      const element = new window.Audio(URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' })));
+      element.setAttribute('playsinline', ''); element.volume = 0.01;
+      element.play()?.catch?.(() => {});
+    } catch { /* no media element, nothing lost */ }
   }
 
   onOrientation(event) {
@@ -206,14 +227,16 @@ export class Touch {
 
   commands(flight) { return throttleCommands(this.throttle, flight); }
 
-  // Labels, from the live state. Only changed strings touch the DOM.
+  // The keys' numeral lines, from the live state. Only changed strings touch the DOM.
   render(flight, effects, engagement) {
     const set = (key, element, text) => { if (this.labels[key] !== text) { this.labels[key] = text; element.textContent = text; } };
-    set('gun', this.el.gun, flight.rounds > 0 ? `GUN ${flight.rounds}` : `RELOAD ${Math.max(1, Math.ceil(12 - (effects.reload?.rounds || 0)))}`);
-    set('bomb', this.el.bomb, flight.bombs > 0 ? `PAVEWAY ${flight.bombs}` : `RELOAD ${Math.max(1, Math.ceil(25 - (effects.reload?.bombs || 0)))}`);
+    const reload = (seconds, elapsed) => `RELOAD ${Math.max(1, Math.ceil(seconds - (elapsed || 0)))}`;
+    set('gun', this.el.gunValue, flight.rounds > 0 ? String(flight.rounds) : reload(12, effects.reload?.rounds));
+    set('bomb', this.el.bombValue, flight.bombs > 0 ? String(flight.bombs) : reload(25, effects.reload?.bombs));
     const label = seekerLabel(engagement.seeker, engagement.remaining, engagement.reloadTime || 0);
-    set('seeker', this.el.seeker, label);
     const locked = label === 'FIRE';
+    set('seekerName', this.el.seekerName, locked ? 'FIRE' : 'SEEKER');
+    set('seekerValue', this.el.seekerValue, locked ? 'LOCKED' : label === 'SEEKER' ? 'OFF' : label);
     if (locked && !this.wasLocked) navigator.vibrate?.(8);
     this.wasLocked = locked;
     this.el.seeker.classList.toggle('locked', locked);
@@ -225,7 +248,7 @@ export class Touch {
   renderThrottle() {
     const pct = this.throttle / 1.12 * 100;
     this.el.fill.style.height = `${pct}%`;
-    this.el.thumb.style.bottom = `${pct}%`;
+    this.el.lever.style.bottom = `${pct}%`;
     this.el.track.classList.toggle('reheat', this.throttle > 1.0);
     this.el.track.setAttribute('aria-valuenow', Math.round(this.throttle * 100));
     this.el.throttleLabel.textContent = `THR ${Math.round(this.throttle * 100)}`;
@@ -263,16 +286,27 @@ export class Touch {
 
   bind() {
     const el = this.el, input = this.input;
+    // Keys and the slider act on pointerdown, release on any pointerup or cancel anywhere (a
+    // finger sliding off a key still lets go), and never depend on pointer capture, which some
+    // browsers refuse. touchmove is cancelled as well so nothing scrolls under a held finger.
+    const swallow = (element) => element.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
     const press = (element, down, up) => {
+      let active = null;
+      swallow(element);
       element.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        element.setPointerCapture?.(event.pointerId);
+        active = event.pointerId;
         element.classList.add('pressed');
         down(event);
       });
-      const release = (event) => { element.classList.remove('pressed'); if (up) up(event); };
-      element.addEventListener('pointerup', release);
-      element.addEventListener('pointercancel', release);
+      const release = (event) => {
+        if (active === null || event.pointerId !== active) return;
+        active = null;
+        element.classList.remove('pressed');
+        if (up) up(event);
+      };
+      window.addEventListener('pointerup', release);
+      window.addEventListener('pointercancel', release);
     };
     press(el.gun, () => { input.gunHeld = true; }, () => { input.gunHeld = false; });
     press(el.bomb, () => this.fire('bomb'));
@@ -280,22 +314,20 @@ export class Touch {
     press(el.pause, () => this.fire('pause'));
     press(el.recentre, () => this.recentre());
 
-    // The slider: the whole track is the target, the thumb follows the finger.
+    // The slider: the whole track is the target, the lever follows the finger, on the window so
+    // it keeps following once the finger has drifted off the track.
     const setThrottle = (event) => {
       const r = el.track.getBoundingClientRect();
       this.throttle = (1 - clamp((event.clientY - r.top) / Math.max(1, r.height), 0, 1)) * 1.12;
       this.renderThrottle();
     };
-    el.track.addEventListener('pointerdown', (event) => {
-      event.preventDefault();
-      el.track.setPointerCapture?.(event.pointerId);
-      this.sliding = true;
-      setThrottle(event);
-    });
-    el.track.addEventListener('pointermove', (event) => { if (this.sliding) setThrottle(event); });
-    const endSlide = () => { this.sliding = false; };
-    el.track.addEventListener('pointerup', endSlide);
-    el.track.addEventListener('pointercancel', endSlide);
+    let sliding = null;
+    swallow(el.track);
+    el.track.addEventListener('pointerdown', (event) => { event.preventDefault(); sliding = event.pointerId; setThrottle(event); });
+    window.addEventListener('pointermove', (event) => { if (sliding !== null && event.pointerId === sliding) setThrottle(event); });
+    const endSlide = (event) => { if (event.pointerId === sliding) sliding = null; };
+    window.addEventListener('pointerup', endSlide);
+    window.addEventListener('pointercancel', endSlide);
 
     // The view: a tap resumes or restarts, a drag aims when there are no sensors.
     let last = null;

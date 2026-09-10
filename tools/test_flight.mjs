@@ -422,5 +422,18 @@ console.log('ALL PASS');
   pass('keyboard priority and camera toggle',{});
 }
 
+{
+  // The gear extends from the contact computed this step, not the flag the last step left, so a
+  // pose placed in the air that still reads onGround from reset keeps its gear up.
+  const f = new Flight(); f.position.set(0, 1500, 0); f.velocity.set(0, 0, -220);
+  f.gear = false; f.gearPosition = 0; f.airborneTime = 30;
+  for (let i = 0; i < 12; i++) f.step(dt, { pitch: 0, roll: 0, yaw: 0, throttle: 0 });
+  assert(!f.gear && f.gearPosition < 0.05 && !f.onGround, 'A pose placed in the air must not re-extend the gear');
+  const parked = new Flight(); parked.gear = false; parked.step(dt, {});
+  assert(parked.gear, 'On the ground the model extends the gear');
+  pass('gear follows this step\'s contact', {});
+}
+
 await import('./test_engagement.mjs');
 await import('./test_touch.mjs');
+await import('./test_library.mjs');

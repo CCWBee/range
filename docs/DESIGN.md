@@ -23,6 +23,18 @@ military, lonely. Nothing on screen competes with the frame.
   Backdrop blur is used on the touch discs only, off under `prefers-reduced-transparency`, with an
   opaque-enough fallback where `backdrop-filter` is unsupported.
 
+## Touch material
+
+The phone controls share one material, the lens: a clear dark tint (`rgba(14,22,28,.34)`) with a
+lit top rim and a shaded bottom edge (inset shadows, one light from above), a hairline, a two-stop
+drop shadow, a faint top sheen, and a low blur (8 px, saturation 150 %) so the ground reads through
+without going to frost. It is not glassmorphism: no milky panels, no glass on glass, no colour
+except on FIRE. Without `backdrop-filter`, and under reduced transparency, the tint goes heavier and
+the blur goes. The throttle is a quadrant in the same material: etched ticks every ten per cent,
+MIL marked at 100, the reheat band tinted above it, and a pale lever with a grip line. The keys
+are rounded squares of one family (GUN larger, the rest equal) with a small-caps name line and a
+numeral line, and press by deepening the tint and shrinking four per cent.
+
 ## Colour semantics
 
 - Ink `#eceded`; secondary `#c4cfd6` and `#c7d1d6`; tertiary `#adbdc7` and `#8f9ea7`.
@@ -67,5 +79,5 @@ military, lonely. Nothing on screen competes with the frame.
 | marker | `#markers` SVG groups | one job each |
 | status text | `#status` | paused, lost |
 | plain text control | `#buttons button`, `#touch .text` | no border, no background |
-| translucent disc | `#touch .disc` | touch only; sizes 56 and 72 |
-| slider | `#touch #throttle` | touch only |
+| lens key | `#touch .key.lens` | touch only; 62 px, GUN 78 px; name line and numeral line |
+| throttle quadrant | `#touch #quadrant.lens` | touch only; ticks, MIL, reheat band, lever |

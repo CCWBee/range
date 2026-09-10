@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en-GB">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#141b20">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#141b20"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>RANGE</title><meta name="description" content="One Typhoon, a wet coastal airbase and the last light of the day. A self-contained flight demo.">
 <style>
 *{box-sizing:border-box}
@@ -71,9 +71,11 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 #flightstate{left:18px;bottom:96px;gap:14px;font-size:10px}
 #hint{left:18px;bottom:132px;width:80%;font-size:12px}
 #location{font-size:10px;right:18px}#help{right:18px}#buttons{right:18px}}
-/* Touch mode (spec 2026-09-10): the intro copy, the reduced HUD and the overlay. Discs and the
-   slider are the only blurred surfaces; they fall back to a heavier tint without backdrop-filter
-   and under reduced transparency. Only FIRE takes colour. */
+/* Touch mode (spec 2026-09-10, docs/DESIGN.md "Touch material"): the intro copy, the reduced HUD
+   and the overlay. The controls share one material, a clear dark lens with a lit top rim rather
+   than frosted glass: low blur, saturation restored, a hairline, a two-stop shadow; a heavier tint
+   without backdrop-filter and under reduced transparency. Only FIRE takes colour. The throttle is
+   a quadrant with etched ticks, MIL at 100 and the reheat band above it. */
 #introTouch{display:none}
 body.touch #introKeys{display:none}
 body.touch #introTouch{display:block}
@@ -83,44 +85,57 @@ body.touch #intro p{font-size:14px;line-height:1.5}
 body.touch #start{margin-top:16px;padding:12px 22px}
 body.touch #intro small{margin-top:12px;line-height:1.6}
 body.touch canvas{cursor:default;touch-action:none}
-body.touch #buttons,body.touch #help,body.touch #skinControl,body.touch #location,body.touch #flightstate,body.touch #systems>:not(#weaponState),body.touch #telemetry div:nth-child(3){display:none}
-body.touch #brand{top:calc(16px + env(safe-area-inset-top));left:calc(18px + env(safe-area-inset-left))}
-body.touch #objective{top:calc(44px + env(safe-area-inset-top));left:calc(18px + env(safe-area-inset-left));font-size:11px}
-body.touch #telemetry{left:calc(18px + env(safe-area-inset-left));bottom:calc(16px + env(safe-area-inset-bottom));gap:18px}
-body.touch #telemetry b{font-size:21px}
-body.touch #telemetry div{min-width:52px}
-body.touch #systems{left:calc(76px + env(safe-area-inset-left));right:auto;bottom:calc(112px + env(safe-area-inset-bottom));text-align:left;max-width:none}
-body.touch #hint{left:calc(76px + env(safe-area-inset-left));bottom:calc(132px + env(safe-area-inset-bottom));max-width:min(52vw,420px);font-size:12px;line-height:1.5}
+body.touch #buttons,body.touch #help,body.touch #skinControl,body.touch #location,body.touch #flightstate,body.touch #systems,body.touch #telemetry div:nth-child(3){display:none}
+body.touch #brand{top:calc(14px + env(safe-area-inset-top));left:calc(18px + env(safe-area-inset-left))}
+body.touch #objective{top:calc(40px + env(safe-area-inset-top));left:calc(18px + env(safe-area-inset-left));font-size:11px}
+body.touch #telemetry{left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom));gap:26px}
+body.touch #telemetry b{font-size:22px}
+body.touch #telemetry div{min-width:56px}
+body.touch #hint{left:50%;transform:translateX(-50%);bottom:calc(68px + env(safe-area-inset-bottom));max-width:min(50vw,460px);font-size:12px;line-height:1.5;text-align:center}
 body.touch #status{font-size:22px}
 body.touch #status small{font-size:12px}
+:root{--lens-tint:rgba(14,22,28,.34);--lens-tint-pressed:rgba(14,22,28,.56);--lens-blur:8px;--lens-line:rgba(214,229,237,.22);
+ --lens-rim:inset 0 1px 0 rgba(236,240,242,.26),inset 1px 0 0 rgba(236,240,242,.08),inset 0 -1px 0 rgba(0,0,0,.30);
+ --lens-shadow:0 1px 2px rgba(0,0,0,.35),0 8px 22px rgba(0,0,0,.32);
+ --lens-sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 45%)}
 #touch{position:absolute;inset:0;pointer-events:none}
 #touch>*{pointer-events:auto}
-#touch button{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:none;font-family:inherit}
-#throttle{position:absolute;left:calc(18px + env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:44px;height:44vh;min-height:150px;border:1px solid rgba(214,229,237,.35);background:rgba(12,22,29,.55);touch-action:none}
-#throttleFill{position:absolute;left:0;right:0;bottom:0;height:0;background:rgba(214,229,237,.22)}
-#throttle.reheat #throttleFill{background:rgba(240,150,118,.32)}
-#throttleTick{position:absolute;left:0;right:0;bottom:89.3%;border-top:1px solid rgba(214,229,237,.5)}
-#throttleThumb{position:absolute;left:-3px;right:-3px;height:14px;margin-bottom:-7px;bottom:0;background:rgba(236,237,237,.88)}
-#throttleLabel{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:8px;font-size:10px;letter-spacing:.12em;color:#c4cfd6;white-space:nowrap}
-#touchWeapons{position:absolute;right:calc(18px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));width:150px;height:150px;pointer-events:none}
-#touchWeapons .disc{pointer-events:auto}
-.disc{position:absolute;border-radius:50%;border:1px solid rgba(214,229,237,.35);background:rgba(12,22,29,.55);color:#c4cfd6;font-size:10px;letter-spacing:.12em;padding:0;line-height:1.3}
-#gunButton{right:0;bottom:0;width:72px;height:72px;font-size:11px}
-#bombButton{right:84px;bottom:8px;width:56px;height:56px}
-#seekerButton{right:8px;bottom:88px;width:56px;height:56px}
-.disc.pressed{background:rgba(12,22,29,.72);color:#eceded}
-.disc.dim{color:#8f9ea7}
-#seekerButton.locked{border-color:#f09676;color:#f09676}
-#seekerButton.locked.pressed{background:rgba(240,150,118,.28)}
+#touch button{-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;touch-action:none;font-family:inherit;color:inherit}
+.lens{border:1px solid var(--lens-line);background:var(--lens-sheen),var(--lens-tint);box-shadow:var(--lens-rim),var(--lens-shadow)}
+#quadrant{position:absolute;left:calc(18px + env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:40px;height:46vh;min-height:170px;border-radius:20px;touch-action:none}
+#throttleTicks{position:absolute;left:8px;right:8px;top:0;bottom:0;border-radius:inherit;background:repeating-linear-gradient(to top,rgba(214,229,237,.34) 0 1px,transparent 1px 8.929%)}
+#throttleReheat{position:absolute;left:0;right:0;top:0;height:10.7%;border-radius:20px 20px 0 0;background:rgba(240,150,118,.12)}
+#throttleFill{position:absolute;left:0;right:0;bottom:0;height:0;border-radius:0 0 20px 20px;background:rgba(214,229,237,.12)}
+#quadrant.reheat #throttleFill{background:rgba(240,150,118,.18)}
+#throttleTick{position:absolute;left:-2px;right:-2px;bottom:89.3%;border-top:1px solid rgba(236,240,242,.55)}
+#throttleLever{position:absolute;left:-7px;right:-7px;height:24px;margin-bottom:-12px;bottom:0;border-radius:12px;background:var(--lens-sheen),rgba(236,240,242,.86);box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -1px 0 rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.4)}
+#throttleLever::after{content:"";position:absolute;left:14px;right:14px;top:11px;height:2px;border-radius:1px;background:rgba(20,27,32,.35)}
+#quadrant .mark{position:absolute;left:100%;margin-left:10px;font-size:9px;letter-spacing:.16em;color:#adbdc7;transform:translateY(50%);white-space:nowrap}
+#quadrant .mark.mil{bottom:89.3%}
+#quadrant .mark.max{bottom:100%}
+#throttleLabel{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:10px;font-size:10px;letter-spacing:.14em;color:#c4cfd6;white-space:nowrap}
+#touchWeapons{position:absolute;right:calc(18px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));width:156px;height:158px;pointer-events:none}
+.key{position:absolute;pointer-events:auto;border-radius:18px;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#dfe6ea;transition:transform .08s ease,background-color .08s ease}
+.key .name{font-size:10px;letter-spacing:.16em}
+.key .value{font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;font-weight:300;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+#gunButton{right:0;bottom:0;width:78px;height:78px;border-radius:22px}
+#bombButton{right:92px;bottom:8px;width:62px;height:62px}
+#seekerButton{right:8px;bottom:94px;width:62px;height:62px}
+.key.pressed{background:var(--lens-sheen),var(--lens-tint-pressed);transform:scale(.96)}
+.key.dim{color:#8f9ea7}
+#seekerButton.locked{border-color:rgba(240,150,118,.6);background:var(--lens-sheen),rgba(240,150,118,.30);color:#fbe3d6}
+#seekerButton.locked.pressed{background:var(--lens-sheen),rgba(240,150,118,.44)}
 #touchTop{position:absolute;top:calc(6px + env(safe-area-inset-top));right:calc(10px + env(safe-area-inset-right));display:flex;gap:4px}
 #touch .text{border:0;background:transparent;color:#c4cfd6;font-size:11px;letter-spacing:.14em;padding:14px 12px;min-height:44px}
 #touch .text.pressed{color:#eceded}
 #rotate{display:none;position:absolute;inset:0;background:rgba(12,22,29,.94);align-items:center;justify-content:center;font-size:14px;letter-spacing:.1em;color:#c4cfd6;text-align:center}
 @media (orientation:portrait){body.touch #rotate{display:flex}}
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-#throttle,.disc{background:rgba(12,22,29,.38);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.disc.pressed{background:rgba(12,22,29,.62)}}
-@media (prefers-reduced-transparency:reduce){#throttle,.disc{background:rgba(12,22,29,.66);-webkit-backdrop-filter:none;backdrop-filter:none}}
+.lens{-webkit-backdrop-filter:blur(var(--lens-blur)) saturate(150%);backdrop-filter:blur(var(--lens-blur)) saturate(150%)}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+:root{--lens-tint:rgba(14,22,28,.62);--lens-tint-pressed:rgba(14,22,28,.78)}}
+@media (prefers-reduced-transparency:reduce){:root{--lens-tint:rgba(14,22,28,.7);--lens-tint-pressed:rgba(14,22,28,.84)}.lens{-webkit-backdrop-filter:none;backdrop-filter:none}}
+@media (prefers-reduced-motion:reduce){.key{transition:none}.key.pressed{transform:none}}
 </style></head>
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
@@ -179,8 +194,8 @@ body.touch #status small{font-size:12px}
 </div>
 <div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">I to show controls</button><button id="pauseButton">PAUSE · P</button></div>
 <div id="touch" class="hidden">
-<div id="throttle" role="slider" aria-label="Throttle" aria-valuemin="0" aria-valuemax="112" aria-valuenow="0" tabindex="0"><div id="throttleFill"></div><div id="throttleTick"></div><div id="throttleThumb"></div><span id="throttleLabel">THR 0</span></div>
-<div id="touchWeapons"><button id="seekerButton" class="disc">SEEKER</button><button id="bombButton" class="disc">PAVEWAY 4</button><button id="gunButton" class="disc">GUN 150</button></div>
+<div id="quadrant" class="lens" role="slider" aria-label="Throttle" aria-valuemin="0" aria-valuemax="112" aria-valuenow="0" tabindex="0"><div id="throttleTicks"></div><div id="throttleReheat"></div><div id="throttleFill"></div><div id="throttleTick"></div><div id="throttleLever"></div><span class="mark mil">MIL</span><span class="mark max">MAX</span><span id="throttleLabel">THR 0</span></div>
+<div id="touchWeapons"><button id="seekerButton" class="key lens"><span class="name">SEEKER</span><span class="value">OFF</span></button><button id="bombButton" class="key lens"><span class="name">PAVEWAY</span><span class="value">4</span></button><button id="gunButton" class="key lens"><span class="name">GUN</span><span class="value">150</span></button></div>
 <div id="touchTop"><button id="recentre" class="text">RECENTRE</button><button id="pauseTouch" class="text">PAUSE</button></div>
 <div id="rotate"><p>Turn the phone sideways.</p></div>
 </div>
