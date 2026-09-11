@@ -10,7 +10,8 @@ military, lonely. Nothing on screen competes with the frame.
 ## Geometry
 
 - Inset 34 px on desktop, 18 px under 700 px wide, 18 px plus the safe-area inset in touch mode.
-  Text blocks anchor to the corners; the centre carries markers only.
+  Text blocks anchor to the corners; the centre carries markers, with a brief target-destruction
+  confirmation above them.
 - Spacing scale 4, 8, 14, 22, 32 on the desktop, 4, 7, 14, 22, 32 on touch. Control height 44 px
   minimum on touch; discs 56 and 72 px.
 - One radius family: text has none; on touch, panels 15 px, caps 10 px, the throttle slot 13 px, the
@@ -119,6 +120,7 @@ transparency to .88 and .80, with the blur off and the grain kept.
 | --- | --- | --- |
 | corner text block | `#telemetry`, `#flightstate`, `#systems` | label, numeral, unit |
 | marker | `#markers` SVG groups | one job each |
+| kill confirmation | `#killConfirmation` | top centre, white lettering over a slightly larger red outline; names air, ground or naval destruction for 2.4 seconds; queued once per target, paired with a short metallic cue through the existing mute control |
 | status text | `#status` | paused, lost; on touch the stop veil is `#hud`'s own background colour, so it dims the render under the HUD's text and under everything `#touch` draws rather than over them |
 | plain text control | `#buttons button`, `#touch .text` | no border, no background |
 | panel | `#quadrant` | touch only; a .72 film over a 14 px blur; radius 15 |

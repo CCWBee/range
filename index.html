@@ -547,6 +547,9 @@ body.touch #skinSwitch{margin:0 0 22px}
  body.touch #skinKnob{transition:none}
  body.touch #hint.warning{animation:none}}
 /* touch:end */
+#killConfirmation{position:absolute;top:clamp(76px,18vh,150px);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 36px);text-align:center;font-size:clamp(18px,2.5vw,26px);font-weight:600;letter-spacing:.06em;color:#fff;line-height:1.2;isolation:isolate;pointer-events:none;text-shadow:0 1px 3px #100503}
+#killConfirmation::before{content:attr(data-text);position:absolute;inset:0;z-index:-1;color:#af332b;-webkit-text-stroke:4px #af332b;paint-order:stroke fill;text-shadow:0 1px 5px #160705}
+body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-weight:500}
 </style></head>
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
@@ -556,6 +559,7 @@ body.touch #skinSwitch{margin:0 0 22px}
 <div id="brand">RANGE</div>
 <div id="location">JERSEY · CHANNEL ISLANDS</div>
 <div id="objective">RUNWAY 08 · DEPARTURE</div>
+<div id="killConfirmation" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <svg id="markers" aria-hidden="true">
  <g id="fpm" fill="none" stroke="#e6ecee" stroke-width="1" opacity="0.9">
   <circle cx="0" cy="0" r="7"></circle>
@@ -582,15 +586,15 @@ body.touch #skinSwitch{margin:0 0 22px}
  <g id="laserMark" visibility="hidden" fill="none" stroke="#e8c78b" stroke-width="1.5"><path d="M-14,-6 V-14 H-6 M6,-14 H14 V-6 M14,6 V14 H6 M-6,14 H-14 V6"/><text y="-23" fill="#e8c78b" stroke="none" text-anchor="middle" font-size="10">LTD</text></g>
 </svg>
 <div id="telemetry">
- <div><label><span class="long">AIRSPEED</span><span class="short">IAS</span></label><b id="speed">0</b><span>KT</span></div>
- <div><label><span class="long">ALTITUDE</span><span class="short">ALT</span></label><b id="alt">0</b><span>FT</span></div>
+ <div><label><span class="long">AIRSPEED</span><span class="short">IAS</span></label><b id="speed">0</b><span>KM/H</span></div>
+ <div><label title="Metres above mean sea level"><span class="long">ALTITUDE</span><span class="short">ALT</span></label><b id="alt">0</b><span>M</span></div>
  <div><label>THROTTLE</label><b id="throttle">0</b><span>%</span></div>
  <div><label><span class="long">HEADING</span><span class="short">HDG</span></label><b id="heading">000</b></div>
 </div>
 <div id="flightstate">
  <div><i>G</i><b id="load">1.0</b></div>
  <div><i>AOA</i><b id="aoa">0</b><span>&deg;</span></div>
- <div><i>V/S</i><b id="vs">0</b><span>FPM</span></div>
+ <div><i>V/S</i><b id="vs">0</b><span>M/S</span></div>
  <div><i>MACH</i><b id="mach">0.00</b></div>
 </div>
 <div id="systems">
@@ -625,8 +629,8 @@ body.touch #skinSwitch{margin:0 0 22px}
 <dt>B</dt><dd>Airbrake, wheel brakes</dd>
 <dt>End / 6 / T</dt><dd>Select target near aim</dd>
 <dt>L / Num Lock / Delete</dt><dd>Laser on / off</dd>
-<dt>Alt + X</dt><dd>ASRAAM seeker on / off</dd>
-<dt>5 or /</dt><dd>Launch locked ASRAAM</dd>
+<dt>Alt + X</dt><dd>Heat-seeking missile sensor on / off</dd>
+<dt>5 or /</dt><dd>Launch locked heat-seeking missile</dd>
 <dt>Hold U</dt><dd>Follow last released munition</dd>
 <dt>Hold Z / right mouse</dt><dd>Zoom</dd>
 <dt>`</dt><dd>Developer map camera: WASD move, Q/E down/up, Shift faster</dd>

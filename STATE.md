@@ -2,14 +2,58 @@
 
 ## Where it stands
 
-11 September 2026. A polish pass continuing the previous session's uncommitted work (it hit a usage
-wall mid-pass). This session carried the spine through to completion and verified it with renders.
-Not yet committed at the time of writing; lands as one commit, then a push (authorised by Charles).
-Live site is still `85a1c7b`.
+11 September 2026. Two passes landed today. The first (`5a50c37`, on `85a1c7b`) is described below.
+The second, authored by Codex against a direct feature request from Charles and reviewed here before
+push, adds HUD units, a kill confirmation, a munition-view tracking fix, and continues the east-coast
+backlog (St Catherine's Breakwater, a Mont Orgueil pivot fix and a new granite material). See
+"Done (second pass)" below; the live site is this second commit once pushed.
 
-Safety: the whole working tree is snapshotted at git tag `range-wip-safety` (refreshed through the
-session) and the untracked files are copied to the session scratchpad `wip-untracked-backup/`. Never
-`git reset --hard` / `git clean` without checking that tag.
+The old safety snapshot tag `range-wip-safety` and the scratchpad backup are superseded by the first
+commit; they can be left or removed.
+
+## Done (second pass, Codex — reviewed and verified before push)
+
+1. **HUD units to metric.** Airspeed is now km/h (`flight.ias * 3.6`, was knots), altitude is metres
+   above mean sea level (`flight.position.y - JERSEY.seaLevel`, was feet), vertical speed is m/s
+   (was fpm). Hints that quoted knots thresholds ("rotate at 140 knots") converted to km/h. Verified:
+   `tools/qa_hud_feedback.mjs` asserts exact converted values against a staged flight state and
+   screenshots the readouts.
+2. **Kill confirmation.** `#killConfirmation`: white text over its own slightly larger red outline
+   (a `::before` sharing the string via `data-text`, stroked, `z-index:-1`), top centre, one of
+   AIR/GROUND/NAVAL TARGET DESTROYED! for 2.4 s, queued so simultaneous kills don't clobber each
+   other's text. A short three-partial metallic chime (`audio.confirmKill()`) plays with it, gated
+   through the existing mute control. Fires from both `Effects.destroyTarget` (ground/naval) and
+   `Engagement.hitAir` (air). Verified: `tools/test_engagement.mjs` (event kind, one per kill, cleared
+   on reset), `tools/qa_hud_feedback.mjs` (rendered banner at 4 viewport widths, chime waveform
+   decoded and asserted to decay to silence).
+3. **Munition-view tracking bug — FIXED.** The locked-target marker (`#seekerHead`) was projected
+   from a direction fixed relative to the aircraft nose, which is correct for the cockpit view but
+   wrong once the munition camera moves away from the aircraft: the marker held its old
+   aircraft-relative screen position instead of following the actual target, so a followed missile
+   or bomb "flew past" a marker that never moved. Fixed in `src/hud.js`: `updateEngagement` now takes
+   `detachedView`/`munition` and, when set, projects the tracked contact's real world position under
+   whatever camera is current, using the munition's own target rather than the aircraft seeker's
+   fixed ray. `updateMarkers` also suppresses the aircraft-relative flight instruments (reticle, nose
+   cross, pipper, bomb diamond) in a detached view, since they describe the stick, not the weapon
+   being watched. Verified: `tools/qa_hud_feedback.mjs` moves a real camera through 8 position/FOV
+   combinations while following a released bomb and a launched missile, and asserts the marker's
+   screen position against the target's true projection to under 0.1 px; also checks the flight
+   instruments go hidden and the laser marker holds its own world anchor through a detached view.
+4. **East-coast backlog continued** (from the prior pass's audit): St Catherine's Breakwater modelled
+   and added to `LANDMARKS` (`landmark_6`); Mont Orgueil Castle's vertical placement corrected
+   (`-70.85` to `-54.6`, a pivot fix so the castle sits on its rock rather than partly into it); a new
+   `gorey_rock` cliff-face shader (fbm-driven exposure banding) and `gorey_granite`/
+   `catherine_masonry` materials. Verified: `tools/qa_east_coast.mjs` renders both landmarks from
+   plan, harbour and sea approaches; `tools/test_library.mjs` gained a geographic-placement check that
+   decodes each mesh's actual world vertices and asserts they fall inside Gorey's and St Catherine's
+   real lat/lon boxes, independent of the scene's own labels.
+
+**Flag for Charles, not folded in silently:** the HUD/hint text and keybind list now say "IR MISSILE"
+/ "MISSILE" / "HEAT LOCK" where they said "ASRAAM" (the internal model, `AAM.name` and the MBDA
+datasheet citation in `src/engagement.js`, is unchanged). This wasn't asked for. It's defensible
+(keeps a specific real weapon's name out of the HUD) but it departs from how the rest of the project
+names real hardware (the MiG-15, the Typhoon, Paveway are all named plainly), so it is a judgement
+call worth confirming rather than assuming. Say if you want "ASRAAM" back in the UI.
 
 ## Done this session (verified by render + tests)
 
@@ -59,10 +103,12 @@ shared-CSS change — see result before committing.
 
 From the read-only env audit (workflow wf_2a11f0ea-633; full result in the run's journal):
 - **Landmarks are already good** (Fort Regent, Mont Orgueil, Elizabeth Castle, La Corbière, St
-  Aubin's Fort all recognisable silhouettes). Gaps: **St Catherine's Breakwater absent** (clipped by
-  the OSM extract bbox at lon -2.0 in `tools/extract_coastal_airport.py`), **Noirmont absent** (only
-  a generic building), **Fort Henry** a weak 6m slab, and **landmark_granite is a flat grey-brown**
-  (`tools/model_landmarks.py:16`) where Jersey granite reads pink-orange — a quick-js retint in the
+  Aubin's Fort all recognisable silhouettes). **St Catherine's Breakwater is now modelled** (second
+  pass, above). Remaining gaps: **Noirmont absent** (only a generic building), **Fort Henry** a weak
+  6m slab, and **landmark_granite is still a flat grey-brown** (`tools/model_landmarks.py:16`) on the
+  original landmark set (Elizabeth Castle etc.) where Jersey granite reads pink-orange — the new
+  `gorey_granite`/`catherine_masonry` materials got the right colour from the start rather than a
+  retint, so this is still open for the pre-existing landmarks. A quick-js retint in the
   `src/world.js` material hook is the cheapest recognisability win (taste call, so left for Charles).
 - **Generic buildings**: plain boxes, no pitched-roof/granite vocabulary (settlement coverage is
   good). **Cliffs/coast**: check slope-based rock exposure and geographic colour variation. **Sea
@@ -90,10 +136,21 @@ Blender launch when needed:
 - Verify visual work by rendering the built bundle via `design\tools\qa\shot.mjs` (SwiftShader
   software GL — some artefacts, e.g. the contact-shadow square, are worse there than on real HW).
   Full `file://` URLs keep a query string; the path form escapes the `?`.
+- A screen-space marker held in a fixed direction relative to the aircraft (rather than projected
+  from the tracked object's real world position) desyncs the moment the camera stops being the
+  aircraft's own chase camera. Any future detached-camera view (munition follow, a replay camera,
+  the developer map camera) must project from the target's world position under the *current*
+  camera, never from a ray cached in the aircraft's frame. `tools/qa_hud_feedback.mjs` is the
+  regression check: it moves a real camera through several positions/FOVs while following a live
+  munition and asserts sub-pixel agreement with the target's true projection.
+- `tools/test_library.mjs` now decodes packed mesh vertices back to lat/lon and checks them against
+  each landmark's real site, independent of the scene's own position labels — this catches a
+  rotation, recentre or double translation that `LANDMARKS` alone would not.
 
 ## Resume
 
-Read this file first. If not yet committed: run `node tools/test_flight.mjs` and
-`python tools/build.py`, confirm the touch contrast matrix is clean, then `git add -A` and one
-commit covering the whole pass, then push. Next substantive work is the Blender-heavy environment
-backlog above (start with the granite retint quick-win and St Catherine's Breakwater).
+Read this file first. Both passes are committed and pushed; working tree is clean once the second
+pass lands (see the top of this file for its commit hash once written). Next substantive work is the
+Blender-heavy environment backlog above. Cheapest wins first: the granite retint on the original
+landmark set (a taste call, confirm with Charles) and Noirmont. The gear/pylon/canopy geometry audit
+needs Blender running (launch line above).

@@ -317,8 +317,10 @@ function frame(dt, stepSim) {
   world.update(dt, flight, camera, elapsed);
 
   if (running) {
-    hud.updateMarkers(flight, camera, input, effects);
-    hud.updateEngagement(flight, camera, input, engagement);
+    const detachedView = !!munitionCamera.target || input.devCamera;
+    hud.updateMarkers(flight, camera, input, effects, detachedView);
+    hud.updateEngagement(flight, camera, input, engagement, detachedView, munitionCamera.target);
+    hud.updateKillConfirmation(input.paused ? 0 : dt, effects);
     if (touch?.active) touch.render(flight, effects, engagement);
   }
 

@@ -57,7 +57,23 @@ export class Hud {
 
   setStatus(html) { this.el.status.innerHTML = html || ''; }
 
-  reset() { this.crashShown = false; this.setStatus(''); }
+  reset() { this.crashShown = false; this.setStatus(''); this.killTime = 0; this.killQueue = []; $('killConfirmation').hidden = true; }
+
+  updateKillConfirmation(dt, effects) {
+    this.killQueue ||= [];
+    this.killQueue.push(...effects.killEvents.splice(0));
+    this.killTime = Math.max(0, (this.killTime || 0) - dt);
+    const el = $('killConfirmation');
+    if (!this.killTime && this.killQueue.length) {
+      const event = this.killQueue.shift();
+      const text = `${event.kind.toUpperCase()} TARGET DESTROYED!`;
+      el.textContent = text;
+      el.dataset.text = text;
+      el.hidden = false;
+      this.killTime = 2.4;
+    }
+    if (!this.killTime) el.hidden = true;
+  }
 
   // Place an SVG marker group, or hide it when the point is behind the camera or off screen.
   place(group, point, visible = true) {
@@ -86,26 +102,26 @@ export class Hud {
     const { forward } = flight.basis();
     const speed = flight.velocity.length();
 
-    el.speed.textContent = Math.round(flight.ias * 1.94384);
-    el.alt.textContent = Math.max(0, Math.round((flight.position.y - 1.645) * 3.28084));
+    el.speed.textContent = Math.round(flight.ias * 3.6);
+    el.alt.textContent = Math.max(0, Math.round(flight.position.y - JERSEY.seaLevel));
     el.throttle.textContent = Math.round(flight.throttle * 100);
     const heading = (Math.atan2(forward.x, -forward.z) * 180 / Math.PI + JERSEY.bearing + 360) % 360;
     el.heading.textContent = Math.round(heading % 360).toString().padStart(3, '0');
     el.load.textContent = flight.load.toFixed(1);
     el.aoa.textContent = Math.round(flight.alpha * 180 / Math.PI);
-    el.vs.textContent = Math.round(flight.verticalSpeed * 196.85 / 10) * 10;
+    el.vs.textContent = Math.round(flight.verticalSpeed);
     el.mach.textContent = flight.mach.toFixed(2);
 
     el.gear.textContent = flight.gearPosition > 0.01 && flight.gearPosition < 0.99
       ? 'GEAR IN TRANSIT' : flight.gear ? 'GEAR DOWN' : 'GEAR UP';
     const engagement=effects.engagement;
-    el.weapons.textContent = `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · ASRAAM ${engagement?.remaining ?? 0}`;
+    el.weapons.textContent = `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · IR MISSILE ${engagement?.remaining ?? 0}`;
     const stallWarning = !flight.onGround && !flight.crashed && (flight.stall || instructor.state.stallGuard > .3);
     el.instructor.textContent = stallWarning ? 'STALL · LOWER NOSE' : 'INSTRUCTOR ON';
     el.instructor.classList.toggle('stall-warning',stallWarning);
     if (flight.bombs === 0) el.weapons.textContent += ` · BOMBS ${Math.ceil(25-(effects.reload?.bombs||0))}s`;
     if (flight.rounds === 0) el.weapons.textContent += ` · GUN ${Math.ceil(12-(effects.reload?.rounds||0))}s`;
-    if (engagement?.remaining === 0) el.weapons.textContent += ` · ASRAAM ${Math.ceil(20-(engagement.reloadTime||0))}s`;
+    if (engagement?.remaining === 0) el.weapons.textContent += ` · MISSILES ${Math.ceil(20-(engagement.reloadTime||0))}s`;
 
     this.updateObjective(flight, effects, options);
     this.updateHint(flight, input, effects, options);
@@ -165,7 +181,7 @@ export class Hud {
     } else if (flight.onGround && !flight.landed) {
       if (speed < 3) hint = 'Line up on 08. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
       else if (knots < 130) hint = 'Accelerating. Keep the nose wheel straight with Q and E.';
-      else if (knots < 145) hint = 'Rotate at 140 knots: raise the circle above the centre and hold it there.';
+      else if (knots < 145) hint = 'Rotate at 260 km/h: raise the circle above the centre and hold it there.';
       else hint = 'Airborne shortly. Press G once the wheels are clear.';
     } else if (flight.gear && flight.position.y > 60) {
       hint = 'Press G to raise the gear, then climb away on the runway heading.';
@@ -177,7 +193,7 @@ export class Hud {
       hint = 'Bombs gone. Turn back to the airfield on 180.';
     } else if (effects && (effects.rangeHit > 0 || flight.bombs === 0)) {
       const height = flight.position.y;
-      if (!flight.gear && height < 700) hint = 'Gear down at 180 knots with G, then hold the threshold in the circle.';
+      if (!flight.gear && height < 700) hint = 'Gear down at 335 km/h with G, then hold the threshold in the circle.';
       else if (flight.gear && height < 60) hint = 'Flare: bring the circle to the horizon and let the speed decay onto the runway.';
       else hint = 'Return to runway 08. Descend on the approach bars, B slows you down.';
     } else if (flight.position.x > 900) {
@@ -200,12 +216,18 @@ export class Hud {
     if(input.devCamera)this.el.hint.textContent='MAP CAMERA · WASD move · Q/E down/up · Shift faster · ` return';
   }
 
-  updateMarkers(flight, camera, input, effects) {
+  updateMarkers(flight, camera, input, effects, detachedView = false) {
     const el = this.el;
     const width = window.innerWidth, height = window.innerHeight;
     el.markers.setAttribute('viewBox', `0 0 ${width} ${height}`);
     el.markers.setAttribute('width', width);
     el.markers.setAttribute('height', height);
+
+    // These guides describe the aircraft's controls, not the weapon being watched.
+    if (detachedView) {
+      for (const group of [el.reticle, el.nose, el.fpm, el.pipper, el.bombAim]) this.place(group, null, false);
+      return;
+    }
 
     // The reticle sits at the cursor, and the instructor steers the flight-path marker to it.
     const cursor = input.cursorScreen();
@@ -274,7 +296,7 @@ export class Hud {
 
   setFps(text) { this.el.fps.textContent = text; }
 
-  updateEngagement(flight,camera,input,e){
+  updateEngagement(flight,camera,input,e,detachedView=false,munition=null){
     const svg=this.el.markers,ns='http://www.w3.org/2000/svg';
     for(const t of [...e.effects.targets,...e.airTargets]){
       let g=this.targetMarks.get(t);
@@ -286,16 +308,22 @@ export class Hud {
       // Anchor at the rendered object's world origin. Keep the label's gap in screen pixels:
       // adding world Y makes it drift sideways relative to the object when the view rotates.
       const anchor = t.mesh ? t.mesh.getWorldPosition(V3()) : t.position;
-      const distance=flight.position.distanceTo(anchor),p=this.project(anchor,camera);
-      const visible=!t.destroyed&&distance<7500&&p&&p.x>25&&p.x<innerWidth-25&&p.y>110&&p.y<innerHeight-180&&clearSight(flight.position,t.position.clone().add(V3(0,2,0)));
+      const observer = detachedView ? camera.position : flight.position;
+      const distance=observer.distanceTo(anchor),p=this.project(anchor,camera);
+      const visible=!t.destroyed&&distance<7500&&p&&p.x>25&&p.x<innerWidth-25&&p.y>80&&p.y<this.markerFloor()&&clearSight(camera.position,t.position.clone().add(V3(0,2,0)));
       this.place(g,p,!!visible);
       if(visible){g.children[0].setAttribute('d',`M-${8*t.hp/t.maxHp},-14 H${8*t.hp/t.maxHp}`);g.children[1].textContent=t.name;g.children[2].textContent=`${(distance/1000).toFixed(2)} KM`;g.setAttribute('opacity',t===e.selected?'1':'.64');}
     }
     const s=e.seeker,nose=this.project(flight.position.clone().addScaledVector(flight.basis().forward,1000),camera);
-    this.place($('seekerEnvelope'),nose,!!nose&&s.enabled&&!input.freeLook);
-    const head=this.project(flight.position.clone().addScaledVector(s.direction,1000),camera);
-    this.place($('seekerHead'),head,!!head&&s.enabled&&!input.freeLook);
-    $('seekerHead').setAttribute('stroke',s.locked?'#f09676':'#e5dfcd');
+    this.place($('seekerEnvelope'),nose,!!nose&&s.enabled&&!input.freeLook&&!detachedView);
+    // Project the actual contact. A fixed point along the aircraft's seeker ray has incorrect
+    // parallax once a munition camera moves away from the aircraft or passes that point.
+    const tracked = munition ? munition.target : s.target;
+    const contact = tracked && !tracked.destroyed ? tracked : null;
+    const anchor = contact?.mesh ? contact.mesh.getWorldPosition(V3()) : contact?.position;
+    const head=this.project(anchor || flight.position.clone().addScaledVector(s.direction,1000),camera);
+    this.place($('seekerHead'),head,!!head&&(s.enabled||!!munition)&&(!input.freeLook||!!contact)&&(!detachedView||!!contact));
+    $('seekerHead').setAttribute('stroke',(munition ? !!contact : s.locked)?'#f09676':'#e5dfcd');
     $('seekerEnvelope').querySelector('circle').setAttribute('r',Math.tan(28*Math.PI/180)/Math.tan(camera.fov*Math.PI/360)*innerHeight/2);
     const laser=this.project(e.laser.point,camera);this.place($('laserMark'),laser,!!laser&&e.laser.active);
     $('weaponState').textContent=s.enabled?(s.status || 'NO SEEKER CONTACT'):e.laser.active?'LASER ON':'WEAPONS READY';

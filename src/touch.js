@@ -416,7 +416,7 @@ export class Touch {
     if (range < RANGE_LEG_RADIUS) return say('Turn back to the airfield.');
     if (returnLeg(flight, effects)) {
       const height = flight.position.y;
-      if (!flight.gear && height < 700) return say('Slow to 215 knots for the gear.');
+      if (!flight.gear && height < 700) return say('Slow to 400 km/h for the gear.');
       if (flight.gear && height < 60) return say('Level the phone and let it settle.');
       return say('Throttle back to descend.');
     }

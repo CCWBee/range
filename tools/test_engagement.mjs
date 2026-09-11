@@ -273,4 +273,20 @@ delete globalThis.window;delete globalThis.document;
   fx.reset();assert.equal(fx.rocketGlow.live.length,0);assert.equal(fx.launchGlow,null);
   pass('ASRAAM good and poor launch outcomes, ignition and reset',results);
 }
+{
+  const scene=new THREE.Scene(),library={has:()=>true,asset:()=>new THREE.Group()};
+  let chimes=0;
+  const fx=new Effects(library,scene,new THREE.PlaneGeometry(1,1),{confirmKill(){chimes++;},burst(){}});
+  const ground=fx.targets.find(t=>!t.ship),ship=fx.targets.find(t=>t.ship);
+  fx.destroyTarget(ground);fx.destroyTarget(ground);fx.destroyTarget(ship);fx.destroyTarget(ship);
+  const aircraft={resetMissiles(){}};
+  const engagement=new Engagement(library,scene,fx,aircraft,null),target=engagement.airTargets[0];
+  // A non-fatal hit is not a kill. Repeated damage to an existing wreck must not repeat feedback.
+  engagement.hitAir(target,1,target.position);assert.equal(chimes,2);
+  engagement.hitAir(target,10,target.position);engagement.hitAir(target,10,target.position);
+  assert.deepEqual(fx.killEvents.map(e=>e.kind),['ground','naval','air']);
+  assert.equal(chimes,3);
+  fx.reset();assert.equal(fx.killEvents.length,0);
+  pass('one confirmation per destroyed air, ground and naval target, cleared on restart');
+}
 console.log('ALL ENGAGEMENT CHECKS PASS');

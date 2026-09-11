@@ -126,25 +126,25 @@ export class Engagement {
   launch(flight){
     const s=this.seeker;
     if(flight.onGround||flight.crashed||flight.velocity.length()<45){this.message('LAUNCH INHIBITED');return false;}
-    if(this.remaining<=0){this.message('ASRAAM EXPENDED');return false;}
+    if(this.remaining<=0){this.message('MISSILES EXPENDED');return false;}
     if(!s.locked||!s.target){this.message('NO HEAT LOCK');return false;}
     const mesh=this.library.asset('asraam');
     const position=this.aircraft.releaseMissile(2-this.remaining);mesh.position.copy(position);mesh.quaternion.copy(flight.attitude);this.scene.add(mesh);
     this.missiles.push({mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,30),target:s.target,age:0,trail:0});
     this.effects.lastMunition=this.missiles[this.missiles.length-1];
     this.effects.missileLaunch?.(position,flight.velocity,flight.basis().forward);
-    this.remaining--;s.locked=false;s.dwell=0;this.message('ASRAAM AWAY · hold U to follow');return true;
+    this.remaining--;s.locked=false;s.dwell=0;this.message('MISSILE AWAY · hold U to follow');return true;
   }
   hitAir(target,damage,point){
     if(target.destroyed)return;
     target.hp-=damage;
     this.effects.sparksAt(point,target.velocity,10);
-    if(target.hp<=0){target.destroyed=true;target.engine=0;target.fall.copy(target.velocity);target.age=0;target.impacted=false;this.effects.explosion(target.position,1,target.velocity);this.message('AIR TARGET DESTROYED');}
+    if(target.hp<=0){target.destroyed=true;target.engine=0;target.fall.copy(target.velocity);target.age=0;target.impacted=false;this.effects.explosion(target.position,1,target.velocity);this.effects.confirmKill(target);}
   }
   update(dt,flight,aim){
     if (this.remaining === 0 && !flight.crashed) {
       this.reloadTime = (this.reloadTime || 0) + dt;
-      if (this.reloadTime >= 20) { this.remaining=2; this.reloadTime=0; this.aircraft.resetMissiles(); this.message('ASRAAM RELOADED'); }
+      if (this.reloadTime >= 20) { this.remaining=2; this.reloadTime=0; this.aircraft.resetMissiles(); this.message('MISSILES RELOADED'); }
     }
     this.elapsed+=dt;this.noticeTime=Math.max(0,this.noticeTime-dt);
     for(const target of this.airTargets) {
@@ -183,7 +183,7 @@ export class Engagement {
       const target=candidates.sort((a,b)=>heatSignature(b,flight.position)-heatSignature(a,flight.position))[0]||null;
       if(target!==s.target)s.dwell=0;
       s.target=target;s.dwell=target&&s.warm===1?Math.min(1,s.dwell+dt/.65):0;s.locked=s.dwell===1;
-      s.status=s.warm<1?'SEEKER WARMING':s.locked?'ASRAAM LOCK':target?'ACQUIRING':
+      s.status=s.warm<1?'SEEKER WARMING':s.locked?'HEAT LOCK':target?'ACQUIRING':
         visible.length?'IR TOO WEAK · CLOSE OR CHANGE ASPECT':inCone.length?'TARGET MASKED':'NO SEEKER CONTACT';
       if(target)s.direction.copy(target.position).sub(flight.position).normalize();
     }

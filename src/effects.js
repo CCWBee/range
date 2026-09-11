@@ -81,6 +81,7 @@ export class Effects {
     this.shots = [];
     this.blasts = [];
     this.targets = [];
+    this.killEvents = [];
     this.hitFlash = 0;
     this.rangeHit = 0;
     this.craterCount = 0;
@@ -251,6 +252,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   destroyTarget(target) {
     if (target.destroyed) return;
     target.destroyed = true;
+    this.confirmKill(target);
     this.rangeHit++;
     if (target.ship) { target.smokeSource=true;target.sinkTime=0;return; }
     target.mesh.visible = false;
@@ -262,6 +264,11 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
       target.wreck = wreck;
     }
     target.smokeSource = true;
+  }
+
+  confirmKill(target) {
+    this.killEvents.push({ kind: target.ship ? 'naval' : target.kind === 'air' ? 'air' : 'ground' });
+    this.audio?.confirmKill?.();
   }
 
   dropBomb(flight, aircraft) {
@@ -533,6 +540,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     this.craterMesh.count = 0;
     this.rangeHit = 0;
     this.hitFlash = 0;
+    this.killEvents.length = 0;
     for (const target of this.targets) {
       target.destroyed = false;
       target.smokeSource = false;

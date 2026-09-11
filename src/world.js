@@ -607,8 +607,22 @@ void main(){
       group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
       this.scene.add(group);
     }
+    const headlandRock = this.library.materials.gorey_rock;
+    if (headlandRock) {
+      headlandRock.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 rockP;')
+          .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nrockP=(modelMatrix*vec4(transformed,1.)).xyz;');
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying vec3 rockP;${NOISE_GLSL}`)
+          .replace('#include <color_fragment>', `#include <color_fragment>
+ float rockDetail=fbm(vec2(rockP.x*.7+rockP.y*.31,rockP.z*.7-rockP.y*.48));
+ diffuseColor.rgb*=mix(.55,1.3,rockDetail);
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.07,.10,.025),smoothstep(.60,.78,rockDetail)*.45);
+ `);
+      };
+      headlandRock.customProgramCacheKey=()=> 'gorey-rock';
+    }
     // World-scale masonry and sash windows stay consistent across the merged OSM footprints.
-    for (const name of Object.keys(this.library.materials).filter(n=>n.startsWith('jersey_render') || ['landmark_granite','jersey_roof'].includes(n))) {
+    for (const name of Object.keys(this.library.materials).filter(n=>n.startsWith('jersey_render') || ['landmark_granite','jersey_roof','gorey_granite','catherine_masonry'].includes(n))) {
       const material=this.library.materials[name];if(!material)continue;
       material.customProgramCacheKey=()=>`jersey-surface-${name}`;
       material.roughness=.94;

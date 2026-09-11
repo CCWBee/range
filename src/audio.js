@@ -152,6 +152,26 @@ export class Audio {
     source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};
   }
 
+  // A short metallic confirmation, mixed through the same mute control as the aircraft.
+  confirmKill() {
+    if (!this.context) return;
+    const context = this.context, now = context.currentTime;
+    // Limit simultaneous blast kills to one chime, without losing their separate text events.
+    if (now - (this.lastKillSound ?? -1) < .12) return;
+    this.lastKillSound = now;
+    for (const [frequency, level, length] of [[1850,.26,.16],[2960,.12,.10],[4210,.06,.065]]) {
+      const oscillator = context.createOscillator(), gain = context.createGain();
+      oscillator.frequency.setValueAtTime(frequency, now);
+      oscillator.frequency.exponentialRampToValueAtTime(frequency * .87, now + length);
+      gain.gain.setValueAtTime(.001, now);
+      gain.gain.linearRampToValueAtTime(level, now + .002);
+      gain.gain.exponentialRampToValueAtTime(.001, now + length);
+      oscillator.connect(gain).connect(this.master);
+      oscillator.start(now); oscillator.stop(now + length + .01);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    }
+  }
+
   // A soft thump for a touchdown, scaled by the sink rate.
   touchdown(strength) {
     if (!this.context) return;

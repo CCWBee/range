@@ -47,4 +47,23 @@ for (const name of names) {
 assert(worstNormal < 0.02, `int8 normals stay unit length, worst ${worstNormal}`);
 assert(zeroed <= 30, `source zero normals stay rare, ${zeroed} sampled`);
 pass('packed library decodes', { assets: names.length, triangles: library.triangles, sampledVertices: checked, worstNormalError: Number(worstNormal.toFixed(4)), sourceZeroNormals: zeroed });
+// Geographic placement is baked into these meshes. Check it independently of the scene labels
+// so an accidental rotation, recentering or double translation cannot move Gorey to St Catherine's.
+const a=82.8*Math.PI/180;
+for(const [name,latMin,latMax,lonMin,lonMax] of [
+  ['landmark_2',49.1985,49.2005,-2.021,-2.018],
+  ['landmark_6',49.2218,49.2252,-2.021,-2.010],
+]) {
+  assert(library.has(name),`${name} must be in both render tiers`);
+  for(const part of library.geometries[name]) {
+    const p=part.geometry.getAttribute('position');
+    for(let i=0;i<p.count;i++) {
+      const x=p.getX(i),z=p.getZ(i)+1100;
+      const lat=49.2080555556+(-x*Math.sin(a)-z*Math.cos(a))/(111320*.85);
+      const lon=-2.1955555556+(x*Math.cos(a)-z*Math.sin(a))/(73000*.85);
+      assert(lat>=latMin&&lat<=latMax&&lon>=lonMin&&lon<=lonMax,`${name} remains on its mapped site`);
+    }
+  }
+}
+pass('Gorey and St Catherine geometry remains on the correct geographic sites');
 console.log('ALL LIBRARY CHECKS PASS');
