@@ -83,6 +83,27 @@ export class Aircraft {
     return true;
   }
 
+  setType(type) {
+    if (!['typhoon','wyvern'].includes(type)) return false;
+    if (!this.typhoonChildren) this.typhoonChildren=[...this.root.children];
+    if (type==='wyvern' && !this.wyvern) {
+      this.wyvern=new THREE.Group();this.root.add(this.wyvern);
+      this.wyvern.add(this.library.asset('wyvern_body'));
+      this.wyvernGear=this.library.asset('wyvern_gear');this.wyvern.add(this.wyvernGear);
+      this.props=[-1,1].map(sign=>{const p=this.library.asset('wyvern_prop');p.position.z=-6.4+sign*.22;this.wyvern.add(p);return p;});
+      this.rockets=[];
+      for(let j=0;j<8;j++)for(const side of [-1,1]){
+        const r=this.library.asset('rp3');r.position.set(side*(2.3+(j%4)*.86),-.55-Math.floor(j/4)*.32,.1);this.wyvern.add(r);this.rockets.push(r);
+      }
+      this.torpedo=this.library.asset('torpedo17');this.torpedo.position.set(0,-1.35,.2);this.wyvern.add(this.torpedo);
+      this.wyvern.traverse(o=>{if(o.isMesh){o.castShadow=o.material!==this.library.materials.fleet_glass;o.receiveShadow=o.castShadow;}});
+    }
+    this.type=type;
+    for(const child of this.typhoonChildren)child.visible=type==='typhoon';
+    if(this.wyvern)this.wyvern.visible=type==='wyvern';
+    return true;
+  }
+
   addPart(name, parent = this.root) {
     if (!this.library.has(name)) return null;
     const group = this.library.asset(name);
@@ -316,6 +337,15 @@ export class Aircraft {
   update(dt, flight, camera, elapsed) {
     this.root.position.copy(flight.position);
     this.root.quaternion.copy(flight.attitude);
+    if(this.type==='wyvern'){
+      this.props.forEach((p,i)=>p.rotation.z+=dt*(8+flight.spool*65)*(i?1:-1));
+      this.wyvernGear.visible=flight.gearPosition>.02;
+      this.wyvernGear.rotation.z=(1-flight.gearPosition)*Math.PI*.48;
+      this.contactShadow.visible=false;
+      if(this.reheatLight)this.reheatLight.intensity=0;
+      if(this.landingLight)this.landingLight.intensity=0;
+      return;
+    }
     const s = flight.surfaces;
 
     this.setHinge('jet_canard_l', s.canardL);
@@ -407,13 +437,16 @@ export class Aircraft {
 
   // Drop the store that goes with the next bomb, returning its world position.
   releaseStore(index) {
+    if(this.type==='wyvern'){this.torpedo.visible=false;return this.torpedo.getWorldPosition(V3());}
     const store = this.stores[index];
     if (!store) return this.root.localToWorld(V3(0, -0.7, 0.3));
     store.visible = false;
     return store.getWorldPosition(new THREE.Vector3());
   }
 
-  resetStores() { for (const store of this.stores) store.visible = true; }
+  resetStores() { for (const store of this.stores) store.visible = this.type!=='wyvern'; if(this.torpedo)this.torpedo.visible=true; }
+  releaseRocket(index){const r=this.rockets[index];r.visible=false;return r.getWorldPosition(V3());}
+  resetRockets(){for(const r of this.rockets||[])r.visible=true;}
   releaseMissile(index){const store=this.missileStores[index];if(!store)return this.root.localToWorld(V3(0,-1,0));store.visible=false;return store.getWorldPosition(V3());}
   resetMissiles(){for(const store of this.missileStores||[])store.visible=true;}
 }

@@ -60,7 +60,7 @@ for feature_index,(feature,ground) in enumerate(zip(features,heights)):
     chunk=f'settlement_{math.floor(cx/1200)}_{math.floor(cz/1200)}'
     if feature['kind']=='building':
         if any(math.hypot(cx-point[0],cz-point[1])<replacement_radii[name] for name,point in replaced.items()):continue
-        base=max(-83.6,min(ground)-1);top=max(-80.6,max(ground))+feature['height']
+        base=max(-79.7,min(ground)-.35);top=max(base,max(ground))+feature['height']
         clean=points[:-1] if points[0]==points[-1] else points
         area=abs(sum(clean[i][0]*clean[(i+1)%len(clean)][1]-clean[(i+1)%len(clean)][0]*clean[i][1] for i in range(len(clean)))/2)
         family=int(abs(cx*7+cz*13))%5
@@ -69,7 +69,10 @@ for feature_index,(feature,ground) in enumerate(zip(features,heights)):
         prism(clean,base,top,chunk,pitched=pitched,wall_index=wall_index)
         # Keep density across the whole island on phones, rather than an empty island outside
         # a few full-detail chunks near the runway. Large navigation features always survive.
-        if feature_index%6==0 or area>1200:
+        a=math.radians(82.8);lon=-2.1955555556+(cx*math.cos(a)-(cz+1100)*math.sin(a))/(73000*.85)
+        lat=49.2080555556+(-cx*math.sin(a)-(cz+1100)*math.cos(a))/(111320*.85)
+        town=(-2.178<lon<-2.157 and 49.184<lat<49.201) or (-2.13<lon<-2.08 and 49.174<lat<49.204)
+        if feature_index%(2 if town else 6)==0 or area>1200:
             desktop_chunks=chunks;chunks=mobile_chunks
             prism(clean,base,top,'mobile_'+chunk,pitched=pitched,wall_index=wall_index)
             chunks=desktop_chunks

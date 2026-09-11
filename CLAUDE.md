@@ -1,9 +1,12 @@
 # RANGE
 
 A self-contained three.js flight demo: one Eurofighter Typhoon over Jersey at a wet dusk (Jersey
-Airport, OpenStreetMap roads, buildings and harbour, a MiG to chase), a short sortie (take off,
-fly the coast, gun, Paveways and Sidewinders, land). Every mesh is authored in Blender, textures
-are generated or baked, and the deliverable is one HTML file with no external assets. Started
+Airport, OpenStreetMap roads, buildings, harbour, sea walls and landmarks), a short sortie (take
+off, fly the coast, gun, Paveways and IR missiles, land). Since 12 September 2026 a Westland Wyvern
+S.4 (sixteen RP-3 rockets, a torpedo) is the alternative aircraft, and the practice traffic is a
+MiG-15, a Tu-95 and a Mi-24 on scripted loops (`src/traffic.js`), all of which respawn. Every mesh
+is authored in Blender, textures are generated or baked, and the deliverable is one HTML file with
+no external assets. Started
 5 September 2026 in the Codex app, moved here on 6 September 2026. Public at
 https://ccwbee.github.io/range/ (Pages deploys on every push to master); the phone version is
 `mobile.html` beside it. The specs live in `docs/specs/`: `2026-09-06-range-v2.md` is the base,
@@ -40,8 +43,13 @@ no pill labels, no decorative dots, no emoji icons.
 
 ## Run
 
-- Tests: `node tools/test_flight.mjs` (physics, instructor, engagement and touch acceptance tests,
-  chained; every line prints `PASS`). This is the project's check command.
+- Tests: `node tools/test_flight.mjs` (physics, instructor, engagement, touch, library and fleet
+  acceptance tests, chained; every line prints `PASS`). This is the project's check command.
+- Browser harnesses against the built desktop bundle, each asserting zero console errors:
+  `node tools/qa_fleet.mjs` (Wyvern renders, rocket and torpedo release, the coastal views, into
+  `_archive/expansion-qa/`), `node tools/qa_hud_feedback.mjs` (metric readouts, the kill
+  confirmation at four widths, the chime's waveform, munition-view marker tracking) and
+  `node tools/qa_east_coast.mjs` (Gorey and St Catherine views).
 - Bundle: `python tools/build.py` (writes `dist/index.html` and `RANGE.zip`, then the lighter
   `dist/mobile.html`; `--tier desktop|mobile` writes one; prints the byte counts, asserts the size
   budgets and no external references; packs the library first when the Blender export is newer).
@@ -71,7 +79,9 @@ no pill labels, no decorative dots, no emoji icons.
   frames that photograph a lit legend.
 - The intro pass, which stages nothing because the intro is what the page shows before `start()`,
   and photographs the skin switch in both positions in the same run:
-  `node tools/qa_touch.mjs --out screenshots\qa\intro --intro --states grey,heritage --stage-expr "window.range.setSkin(STATE)"`.
+  `node tools/qa_touch.mjs --out screenshots\qa\intro --intro --states grey,heritage --stage-expr "window.range.setSkin(STATE)"`,
+  and the Wyvern intro (the skin switch absent) into its own folder:
+  `node tools/qa_touch.mjs --out screenshots\qa\intro-wyvern --intro --states wyvern --stage-expr "window.range.setAircraft(STATE)"`.
   `--intro` probes `#intro` and `#loading` instead of the HUD; `--probe-roots` sets that by hand.
   Two more states worth staging by hand, neither of them in the 27-cell product, both of which have
   failed the contrast gate before: the stop screens,
@@ -147,3 +157,12 @@ no pill labels, no decorative dots, no emoji icons.
   specificity, so moving the cap material into an id-scoped rule silently kills every state the caps
   have. The material lives on `.key` itself, which is why the ENTER cap shares that selector rather
   than repeating the declarations.
+- The desktop intro's skin switch painted but ignored clicks for a day, with no error. The cause:
+  its bindings sat inside `if (touch) {}` in `src/main.js`, and `touch` is null on a desktop, while
+  the hidden `<select>` kept working so nothing failed loudly. Intro controls bind outside that
+  block (`bindSwitch`, one binding for every switch). The check: load `dist/index.html` headless
+  with no touch layer, call `.click()` on a legend and read `range.aircraft.type` or the switch's
+  `on` class.
+- A new instructor test that leaves the aircraft on the runway at 85 m/s with crash `terrain` and
+  no lift-off has almost certainly passed `{direction}` without `active: true`: the ground law only
+  rotates for a live aim. The check is the `aimAt` helper at `tools/test_flight.mjs` line 228.

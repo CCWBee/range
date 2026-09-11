@@ -7,6 +7,7 @@
 import * as THREE from './vendor/three.module.js';
 import { JERSEY } from './src/jersey.js';
 import { AIRPORT } from './src/airport.js';
+import { shoreHeight } from './src/shore.js';
 
 const clamp = THREE.MathUtils.clamp;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -123,7 +124,7 @@ export function terrainHeight(x, z) {
   const dist = pavementDistance(x, z);
   if (dist === 0) return 0;
   const airfieldDistance = Math.hypot(Math.max(-35-x,0,x-450),Math.max(-1880-z,0,z+350));
-  const h = -0.34 + (naturalHeight(x,z)+0.34)*smoothstep(airfieldDistance,0,140);
+  const h = -0.34 + (shoreHeight(x,z,naturalHeight(x,z),JERSEY.seaLevel)+0.34)*smoothstep(airfieldDistance,0,140);
   return dist >= 120 ? h : h * smoothstep(dist, 0, 120);
 }
 
@@ -186,7 +187,7 @@ export class Flight {
     this.alpha = 0; this.beta = 0; this.load = 1; this.mach = 0; this.ias = 0;
     this.verticalSpeed = 0; this.buffet = 0; this.condensation = 0; this.stall = false;
     this.qbar = 0; this.rho = RHO0;
-    this.bombs = 4; this.rounds = 150; this.airborneTime = 0; this.elapsed = 0;
+    this.bombs = this.airframe==='wyvern'?1:4; this.rounds = this.airframe==='wyvern'?400:150; this.airborneTime = 0; this.elapsed = 0;
     this.mass = MASS_FULL; this.impact = 0;
     this.stallSpeed = Math.sqrt(2 * this.mass * G0 / (RHO0 * WING_AREA * 1.14));
     this.surfaces = { canardL: -0.35, canardR: -0.35, elevonL: 0, elevonR: 0, rudder: 0, airbrake: 0, nozzle: 0, steering: 0 };
@@ -240,7 +241,7 @@ export class Flight {
     this._airbrakePos += ((this.airbrake ? 1 : 0) - this._airbrakePos) * (1 - Math.exp(-dt / 0.5));
     const gp = this.gearPosition;
 
-    this.mass = MASS_FULL - 250 * (4 - this.bombs);
+    this.mass = this.airframe==='wyvern'?9500+850*this.bombs:MASS_FULL - 250 * (4 - this.bombs);
     const mass = this.mass;
     const inertiaScale = mass / MASS_FULL;
     // Inertia in the three.js body frame: pitch about x, yaw about y, roll about z.
@@ -300,7 +301,7 @@ export class Flight {
     let CL = aa <= 0.32 ? 0.05 + 3.4 * alpha : sgnAlpha * Math.max(0.6, 1.14 - (aa - 0.32) * 1.8);
     CL += 0.35 * de;
     const wave = smoothstep(mach, 0.88, 1.10);
-    const CD0 = 0.021 + 0.025 * gp + 0.07 * this._airbrakePos + 0.004 * this.bombs;
+    const CD0 = (this.airframe==='wyvern'?.035:.021) + 0.025 * gp + 0.07 * this._airbrakePos + 0.004 * this.bombs;
     const CD = CD0 * (1 + 2 * wave) + 0.16 * CL * CL * (1 + 1.5 * wave) + 0.4 * Math.max(0, aa - 0.28);
     const CY = -0.85 * beta + 0.18 * dr;
     const Cl = -0.06 * beta - 0.32 * ph + 0.10 * rh + 0.11 * da;
@@ -316,7 +317,9 @@ export class Flight {
     force.addScaledVector(velDir, -qS * CD);
     force.addScaledVector(right, qS * CY);
     const thrustScale = Math.pow(rho / RHO0, 0.75);
-    const thrust = 120000 * (0.04 + 0.96 * Math.min(this.spool, 1)) * thrustScale * (1 + 0.25 * mach)
+    const thrust = this.airframe==='wyvern'
+      ? Math.min(42000,2700000/Math.max(40,speed))*(.015+.985*Math.min(1,this.spool))*thrustScale
+      : 120000 * (0.04 + 0.96 * Math.min(this.spool, 1)) * thrustScale * (1 + 0.25 * mach)
       + 60000 * this.reheat * thrustScale * (1 + 0.4 * mach);
     force.addScaledVector(forward, thrust);
     const airframeLoad = force.dot(up) / (mass * G0);

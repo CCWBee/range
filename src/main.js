@@ -161,7 +161,7 @@ input.on('start', start);
 input.on('bomb', () => { if (input.locked && !input.paused && !input.devCamera) effects.dropBomb(flight, aircraft); });
 input.on('gear', () => { if (!flight.onGround && !flight.crashed) flight.gear = !flight.gear; });
 input.on('camera', () => chase.toggle());
-input.on('seeker',()=>{if(input.locked&&!input.paused)engagement.toggleSeeker();});
+input.on('seeker',()=>{if(input.locked&&!input.paused)flight.airframe==='wyvern'?engagement.launchRocket(flight):engagement.toggleSeeker();});
 input.on('missile',()=>{if(input.locked&&!input.paused)engagement.launch(flight);});
 input.on('target',()=>{if(input.locked&&!input.paused)engagement.select(flight,input.aimState);});
 input.on('laser',()=>{if(input.locked&&!input.paused)engagement.designate(flight,input.aimState);});
@@ -174,62 +174,86 @@ input.on('devCamera', () => { input.devCamera = !input.devCamera; input.pendingM
 // nothing longer. The skinName guard is what makes a drag cheap: the commit fires as the knob
 // crosses the middle, and setSkin at src/aircraft.js caches the cloned texture.
 const SKINS = ['grey', 'heritage'];
+const SKIN_LEGENDS = [['skinGrey', 'grey'], ['skinHeritage', 'heritage']];
 function setSkin(name) {
   if (!SKINS.includes(name) || name === aircraft.skinName || !aircraft.setSkin(name)) return false;
   $('skinChoice').value = name;
-  $('skinSwitch').classList.toggle('heritage', name === 'heritage');
-  for (const [id, wanted] of [['skinGrey', 'grey'], ['skinHeritage', 'heritage']]) {
-    $(id).setAttribute('aria-checked', String(name === wanted));
-    $(id).tabIndex = name === wanted ? 0 : -1;
-  }
+  setSwitch('skinSwitch', SKIN_LEGENDS, name);
   return true;
 }
+
+// One writer for the airframe, on the same terms. It is an intro decision: the switch is inert
+// once the sortie runs, and the skin switch hides for the Wyvern, whose paint is its own.
+const AIRFRAMES = ['typhoon', 'wyvern'];
+const AIRFRAME_LEGENDS = [['aircraftTyphoon', 'typhoon'], ['aircraftWyvern', 'wyvern']];
+function setAircraft(type) {
+  if (running || !AIRFRAMES.includes(type) || type === (aircraft.type || 'typhoon') || !aircraft.setType(type)) return false;
+  flight.airframe = type; reset();
+  setSwitch('aircraftSwitch', AIRFRAME_LEGENDS, type);
+  $('skinSwitch').style.display = type === 'wyvern' ? 'none' : '';
+  return true;
+}
+
+// The knob's position is the state (`on` puts it at the second legend), aria-checked carries it,
+// and focus follows it with a roving tabindex.
+function setSwitch(id, legends, value) {
+  $(id).classList.toggle('on', value === legends[1][1]);
+  for (const [legendId, wanted] of legends) {
+    $(legendId).setAttribute('aria-checked', String(value === wanted));
+    $(legendId).tabIndex = value === wanted ? 0 : -1;
+  }
+}
+
+// A switch: a click on either legend, a press anywhere on the 44 px row, or a drag that snaps to
+// the end the pointer has crossed into. The window-level pointer pattern is the throttle's, which
+// deliberately avoids pointer capture because some browsers refuse it, so a finger that drifts off
+// the row keeps working and a pointercancel still ends the drag. It binds on both tiers, outside
+// the touch block below: the first desktop switch shipped with this binding inside that block, and
+// its legends did nothing under a mouse while the hidden select still worked. src/touch.js stays
+// about flying: it does not learn what a skin or an airframe is.
+function bindSwitch(id, trackId, legends, set) {
+  const root = $(id), track = $(trackId);
+  const nearest = (clientX) => {
+    const r = track.getBoundingClientRect();
+    return clientX < r.left + r.width / 2 ? legends[0][1] : legends[1][1];
+  };
+  let sliding = null;
+  root.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
+  root.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('.switchLegend')) return;   // the legend's own click handles it
+    event.preventDefault();
+    sliding = event.pointerId;
+    root.classList.add('sliding');
+    set(nearest(event.clientX));
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (sliding !== null && event.pointerId === sliding) set(nearest(event.clientX));
+  });
+  const endSlide = (event) => {
+    if (event.pointerId !== sliding) return;
+    sliding = null;
+    root.classList.remove('sliding');
+  };
+  window.addEventListener('pointerup', endSlide);
+  window.addEventListener('pointercancel', endSlide);
+  for (const [legendId, value] of legends) $(legendId).onclick = () => set(value);
+  // The radiogroup pattern rather than a re-invention of it: focus follows the selection.
+  root.addEventListener('keydown', (event) => {
+    const back = ['ArrowLeft', 'ArrowUp', 'Home'], on = ['ArrowRight', 'ArrowDown', 'End'];
+    if (!back.includes(event.key) && !on.includes(event.key)) return;
+    event.preventDefault();
+    const [legendId, value] = legends[back.includes(event.key) ? 0 : 1];
+    set(value);
+    $(legendId).focus();
+  });
+}
+bindSwitch('skinSwitch', 'skinTrack', SKIN_LEGENDS, setSkin);
+bindSwitch('aircraftSwitch', 'aircraftTrack', AIRFRAME_LEGENDS, setAircraft);
 
 // The portrait check goes after start(), because the layer's pause handler below needs the sortie
 // running to take it, and a page that loaded in portrait fires no orientation change event.
 $('start').onclick = () => { if (touch) touch.enter(); start(); touch?.pauseIfPortrait(); };
 if (touch) {
-  // The skin switch: a tap on either legend, a tap anywhere on the 44 px row, or a drag that snaps
-  // to the end the finger has crossed into. The window-level pointer pattern is the throttle's,
-  // which deliberately avoids pointer capture because some browsers refuse it, so a finger that
-  // drifts off the row keeps working and a pointercancel still ends the drag. src/touch.js stays
-  // about flying: it does not learn what a skin is.
-  const skinSwitch = $('skinSwitch'), skinTrack = $('skinTrack');
-  const nearest = (clientX) => {
-    const r = skinTrack.getBoundingClientRect();
-    return clientX < r.left + r.width / 2 ? 'grey' : 'heritage';
-  };
-  let skinSliding = null;
-  skinSwitch.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
-  skinSwitch.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('.skinLegend')) return;   // the legend's own click handles it
-    event.preventDefault();
-    skinSliding = event.pointerId;
-    skinSwitch.classList.add('sliding');
-    setSkin(nearest(event.clientX));
-  });
-  window.addEventListener('pointermove', (event) => {
-    if (skinSliding !== null && event.pointerId === skinSliding) setSkin(nearest(event.clientX));
-  });
-  const endSkinSlide = (event) => {
-    if (event.pointerId !== skinSliding) return;
-    skinSliding = null;
-    skinSwitch.classList.remove('sliding');
-  };
-  window.addEventListener('pointerup', endSkinSlide);
-  window.addEventListener('pointercancel', endSkinSlide);
-  $('skinGrey').onclick = () => setSkin('grey');
-  $('skinHeritage').onclick = () => setSkin('heritage');
-  // The radiogroup pattern rather than a re-invention of it: focus follows the selection with a
-  // roving tabindex, which is what a desktop running ?touch=1 gets.
-  skinSwitch.addEventListener('keydown', (event) => {
-    const back = ['ArrowLeft', 'ArrowUp', 'Home'], on = ['ArrowRight', 'ArrowDown', 'End'];
-    if (!back.includes(event.key) && !on.includes(event.key)) return;
-    event.preventDefault();
-    const name = back.includes(event.key) ? 'grey' : 'heritage';
-    setSkin(name);
-    $(name === 'grey' ? 'skinGrey' : 'skinHeritage').focus();
-  });
   const watchRelease = (action) => {
     touchFollow=null;
     if(input.paused || input.devCamera) return;
@@ -238,7 +262,7 @@ if (touch) {
     if(effects.lastMunition!==previous) touchFollow={target:effects.lastMunition,age:0};
   };
   touch.on('bomb', () => watchRelease(()=>releaseBomb(engagement, effects, flight, aircraft, input.aimState)));
-  touch.on('seeker', () => watchRelease(()=>seekerPress(engagement, flight)));
+  touch.on('seeker', () => watchRelease(()=>flight.airframe==='wyvern'?engagement.launchRocket(flight):seekerPress(engagement, flight)));
   touch.on('releaseWeapon', () => { touchFollow=null; });
   window.addEventListener('blur',()=>{touchFollow=null;});
   touch.on('pause', () => { if (running) input.setPaused(true); });
@@ -593,7 +617,7 @@ requestAnimationFrame(loop);
 window.range = {
   flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch,
   targets: effects.targets, bombs: effects.bombs,
-  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin,
+  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft,
   dropBomb: () => effects.dropBomb(flight, aircraft),
   fireGun: () => effects.fireGun(flight),
   explosion: (position, strength) => effects.explosion(position, strength),

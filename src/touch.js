@@ -116,9 +116,9 @@ export function autoGear(flight) {
 // release. The Paveway still releases ballistically when the designator finds nothing.
 export function releaseBomb(engagement, effects, flight, aircraft, aim) {
   if (flight.crashed || flight.onGround || flight.bombs <= 0) return false;
-  if (!engagement.laser.active) engagement.designate(flight, aim);
+  if (flight.airframe!=='wyvern' && !engagement.laser.active) engagement.designate(flight, aim);
   const released = effects.dropBomb(flight, aircraft);
-  if (released) engagement.message(engagement.laser.active ? 'PAVEWAY AWAY · LASER ON' : 'PAVEWAY AWAY · NO LASER TARGET');
+  if (released && flight.airframe!=='wyvern') engagement.message(engagement.laser.active ? 'PAVEWAY AWAY · LASER ON' : 'PAVEWAY AWAY · NO LASER TARGET');
   return released;
 }
 
@@ -345,7 +345,8 @@ export class Touch {
     const set = (key, element, text) => { if (this.labels[key] !== text) { this.labels[key] = text; element.textContent = text; } };
     set('gun', this.el.gunValue, flight.rounds > 0 ? String(flight.rounds) : countdown(12, effects.reload?.rounds));
     set('bomb', this.el.bombValue, flight.bombs > 0 ? String(flight.bombs) : countdown(25, effects.reload?.bombs));
-    const seeker = seekerParts(engagement.seeker, engagement.remaining, engagement.reloadTime || 0);
+    const seeker = flight.airframe==='wyvern' ? {legend:'ROCKET',value:engagement.rocketsRemaining>0?String(engagement.rocketsRemaining):countdown(20,engagement.rocketReload),state:'resting'} : seekerParts(engagement.seeker, engagement.remaining, engagement.reloadTime || 0);
+    this.el.bomb.querySelector('.name').textContent=flight.airframe==='wyvern'?'TORPEDO':'BOMB';
     set('seekerName', this.el.seekerName, seeker.legend);
     set('seekerValue', this.el.seekerValue, seeker.value);
     const locked = seeker.state === 'locked';

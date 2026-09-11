@@ -2,6 +2,7 @@
 // The seeker and steering are tuned for readable gameplay, not a real weapon performance model.
 import * as THREE from '../vendor/three.module.js';
 import { groundHeight, bombStep } from '../physics.js';
+import { TRAFFIC, trafficPose } from './traffic.js';
 
 const V3=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const clamp=THREE.MathUtils.clamp;
@@ -96,10 +97,17 @@ export class Engagement {
     this.laser={active:false,point:V3(),target:null};
     this.seeker={enabled:false,warm:0,dwell:0,target:null,locked:false,direction:V3(0,0,-1)};
     this.notice='';this.noticeTime=0;
-    if(library.has('mig15')) {
-      const mesh=library.asset('mig15');scene.add(mesh);
+    for(const route of TRAFFIC) if(library.has(route.asset)) {
+      const mesh=library.asset(route.asset);scene.add(mesh);
       mesh.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
-      this.airTargets.push({kind:'air',name:'MiG-15',mesh,position:mesh.position,velocity:V3(),engine:1,throttle:.9,afterburner:false,hp:6,maxHp:6,destroyed:false,age:0,fall:V3()});
+      const rotors=[];
+      if(route.asset==='tu95') for(const x of [-14,-7,7,14]) for(const sign of [-1,1]) {
+        const rotor=library.asset('bear_prop');rotor.position.set(x,.2,-4+sign*.35);mesh.add(rotor);rotors.push({mesh:rotor,axis:'z',sign});
+      }
+      if(route.asset==='hind') {
+        const rotor=library.asset('hind_rotor');rotor.position.set(0,2.1,-.5);mesh.add(rotor);rotors.push({mesh:rotor,axis:'y',sign:1});
+      }
+      this.airTargets.push({route,rotors,kind:'air',name:route.name,mesh,position:mesh.position,velocity:V3(),engine:route.heat,throttle:.9,afterburner:false,hp:route.hp,maxHp:route.hp,destroyed:false,age:0,fall:V3()});
     }
     effects.engagement=this;
     for(const [i,t] of effects.targets.entries())Object.assign(t,{kind:'ground',name:t.name||`RANGE ${i+1}`,maxHp:t.maxHp||3});
@@ -124,6 +132,7 @@ export class Engagement {
     this.message('LASER ON · MAINTAIN LINE OF SIGHT');
   }
   launch(flight){
+    if(flight.airframe==='wyvern')return this.launchRocket(flight);
     const s=this.seeker;
     if(flight.onGround||flight.crashed||flight.velocity.length()<45){this.message('LAUNCH INHIBITED');return false;}
     if(this.remaining<=0){this.message('MISSILES EXPENDED');return false;}
@@ -135,6 +144,15 @@ export class Engagement {
     this.effects.missileLaunch?.(position,flight.velocity,flight.basis().forward);
     this.remaining--;s.locked=false;s.dwell=0;this.message('MISSILE AWAY · hold U to follow');return true;
   }
+  launchRocket(flight){
+    if(flight.onGround||flight.crashed||this.rocketsRemaining<=0)return false;
+    const mesh=this.library.asset('rp3');mesh.position.copy(this.aircraft.releaseRocket(16-this.rocketsRemaining));
+    mesh.quaternion.copy(flight.attitude);this.scene.add(mesh);
+    const rocket={mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,25),age:0,rocket:true,trail:0};
+    this.missiles.push(rocket);this.effects.lastMunition=rocket;this.rocketsRemaining--;
+    this.effects.missileLaunch?.(rocket.position,rocket.velocity,flight.basis().forward);
+    this.message('ROCKET AWAY · hold U to follow');return true;
+  }
   hitAir(target,damage,point){
     if(target.destroyed)return;
     target.hp-=damage;
@@ -142,6 +160,10 @@ export class Engagement {
     if(target.hp<=0){target.destroyed=true;target.engine=0;target.fall.copy(target.velocity);target.age=0;target.impacted=false;this.effects.explosion(target.position,1,target.velocity);this.effects.confirmKill(target);}
   }
   update(dt,flight,aim){
+    if(flight.airframe==='wyvern'&&this.rocketsRemaining===0){
+      this.rocketReload=(this.rocketReload||0)+dt;
+      if(this.rocketReload>=20){this.rocketsRemaining=16;this.rocketReload=0;this.aircraft.resetRockets();this.message('ROCKETS RELOADED');}
+    }
     if (this.remaining === 0 && !flight.crashed) {
       this.reloadTime = (this.reloadTime || 0) + dt;
       if (this.reloadTime >= 20) { this.remaining=2; this.reloadTime=0; this.aircraft.resetMissiles(); this.message('MISSILES RELOADED'); }
@@ -151,6 +173,15 @@ export class Engagement {
       target.previousPosition = target.position.clone();
       if(target.destroyed){
         target.age+=dt;
+        if(target.age>=45){
+          target.destroyed=false;target.hp=target.maxHp;target.engine=target.route.heat;target.impacted=false;target.age=0;target.mesh.visible=true;
+          // A previous missile must not acquire this new life through a stale object reference.
+          for(const m of this.missiles)if(m.target===target)m.target=null;
+          if(this.seeker.target===target){this.seeker.target=null;this.seeker.locked=false;this.seeker.dwell=0;}
+          trafficPose(target,this.elapsed);target.previousPosition.copy(target.position);
+          this.message(`${target.name.toUpperCase()} BACK ON THE RANGE`);
+          continue;
+        }
         if (!target.impacted) {
           target.fall.y-=9.81*dt;target.fall.multiplyScalar(Math.exp(-dt*.04));
           target.position.addScaledVector(target.fall,dt);target.mesh.rotateZ(dt*.65);target.mesh.rotateX(dt*.24);
@@ -162,12 +193,10 @@ export class Engagement {
         this.effects.burningTrail(target,target.fall,dt);
         continue;
       }
-      const phase=this.elapsed*.095,old=target.position.clone();
-      target.position.set(-700+Math.sin(phase)*2100,1050+Math.sin(phase*.7)*90,-4400+Math.cos(phase)*2100);
-      target.velocity.copy(target.position).sub(old).divideScalar(Math.max(dt,.001));
-      if(target.velocity.length()>400)target.velocity.set(Math.cos(phase)*199.5,Math.cos(phase*.7)*6,-Math.sin(phase)*199.5);
+      trafficPose(target,this.elapsed);
+      for(const rotor of target.rotors)rotor.mesh.rotation[rotor.axis]+=dt*35*rotor.sign;
       const forward=target.velocity.clone().normalize(),right=forward.clone().cross(V3(0,1,0)).normalize(),up=right.clone().cross(forward);
-      const matrix=new THREE.Matrix4().makeBasis(right,up,forward.clone().negate());target.mesh.quaternion.setFromRotationMatrix(matrix);target.mesh.rotateZ(-.32);
+      const matrix=new THREE.Matrix4().makeBasis(right,up,forward.clone().negate());target.mesh.quaternion.setFromRotationMatrix(matrix);target.mesh.rotateZ(target.route.bank);
     }
     const s=this.seeker;
     if(s.enabled){
@@ -190,27 +219,35 @@ export class Engagement {
     if(this.laser.active && (!clearSight(flight.position,this.laser.point)||flight.position.distanceTo(this.laser.point)>7000)) {this.laser.active=false;this.message('LASER MASKED');}
     for(let i=this.missiles.length-1;i>=0;i--){
       const m=this.missiles[i],before=m.position.clone();
-      const expired=missileStep(m,m.target,dt);
+      let expired;
+      if(m.rocket){
+        m.age+=dt;
+        if(m.age<1.1)m.velocity.addScaledVector(m.velocity.clone().normalize(),220*dt);
+        m.velocity.multiplyScalar(Math.exp(-dt*.018));m.velocity.y-=9.81*dt;m.position.addScaledVector(m.velocity,dt);
+        expired=m.age>18||m.position.y<=Math.max(-82.6,groundHeight(m.position.x,m.position.z));
+      } else expired=missileStep(m,m.target,dt);
       m.mesh.quaternion.setFromUnitVectors(V3(0,0,-1),m.velocity.clone().normalize());
       m.trail+=dt;
-      if(m.age<AAM.burn) this.effects.missilePlume?.(m,dt);
+      if(m.age<(m.rocket?1.1:AAM.burn)) this.effects.missilePlume?.(m,dt);
       let hit = null;
       if (m.age > .2) for (const target of this.airTargets) {
         if (target.destroyed) continue;
-        const time = proximityPass(before, m.position, target.previousPosition || target.position, target.position);
+        const time = proximityPass(before, m.position, target.previousPosition || target.position, target.position,m.rocket?3:18);
         if (time !== null) { hit = target; m.position.lerpVectors(before, m.position.clone(), time); break; }
       }
       if(hit)this.hitAir(hit,10,m.position);
-      if(expired||hit){m.expired=true;if(hit)this.effects.explosion(m.position,.65);this.scene.remove(m.mesh);this.missiles.splice(i,1);}
+      if(m.rocket)for(const t of this.effects.targets)if(!t.destroyed&&proximityPass(before,m.position,t.position,t.position,t.ship?20:7)!==null){expired=true;break;}
+      if(expired||hit){m.expired=true;if(hit||m.rocket)this.effects.explosion(m.position,m.rocket?.55:.65);this.scene.remove(m.mesh);this.missiles.splice(i,1);}
     }
     this.audio?.seeker?.(s.enabled,s.locked,!!s.target);
   }
   reset(){
+    this.rocketsRemaining=16;this.rocketReload=0;this.aircraft.resetRockets?.();
     this.reloadTime=0;
     this.remaining=2;this.selected=null;this.elapsed=0;this.laser.active=false;
     Object.assign(this.seeker,{enabled:false,warm:0,dwell:0,target:null,locked:false,status:''});
     for(const m of this.missiles)this.scene.remove(m.mesh);this.missiles.length=0;
-    for(const t of this.airTargets){t.destroyed=false;t.hp=t.maxHp;t.engine=1;t.mesh.visible=true;t.age=0;t.position.set(-700,1050,-2300);t.velocity.set(199.5,6,0);}
+    for(const t of this.airTargets){t.destroyed=false;t.hp=t.maxHp;t.engine=t.route.heat;t.mesh.visible=true;t.age=0;t.impacted=false;trafficPose(t,0);}
     this.aircraft.resetMissiles?.();this.notice='';this.noticeTime=0;
   }
 }

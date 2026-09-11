@@ -2,7 +2,7 @@
 <html lang="en-GB">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><meta name="theme-color" content="#141b20"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>RANGE</title><meta name="description" content="One Typhoon, a wet coastal airbase and the last light of the day. A self-contained flight demo.">
+<title>RANGE</title><meta name="description" content="Fly around Jersey, see the sights and blow up practice targets. A self-contained flight demo.">
 <link rel="icon" type="image/svg+xml" href="assets/icon/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="assets/icon/apple-touch-icon.png">
 <style>
 *{box-sizing:border-box}
@@ -309,8 +309,8 @@ body.touch #status{left:0;right:0;transform:none;font-size:22px;font-weight:400;
 body.touch #status small{font-size:12px;letter-spacing:.02em;color:var(--ink)}
 body.touch:has(#status:not(:empty)) #hud{background-color:var(--stop-veil)}
 
-/* ---- the intro. Five items in the screen's rank order: the title, one line of prose, the ENTER
-   cap, the skin switch and one placard line. The veil is the intro's surface and the intro's
+/* ---- the intro. Six items in the screen's rank order: the title, one line of prose, the ENTER
+   cap, the aircraft switch, the skin switch and one placard line. The veil is the intro's surface and the intro's
    backdrop is the brightest region in the demo, so it holds its alpha flat for the width the text
    occupies, exactly as the canopy bands do. */
 body.touch #veil{background:linear-gradient(90deg,var(--veil-intro) 0,var(--veil-intro) 260px,var(--veil-clear) 420px)}
@@ -326,41 +326,46 @@ body.touch #start{display:inline-flex;align-items:center;justify-content:center;
 body.touch #intro #introTouch{margin:0;font-size:9px;font-weight:500;letter-spacing:.14em;line-height:1.5;color:var(--ink)}
 body.touch #loading{left:var(--inset-left);bottom:calc(22px + var(--sab));font-size:12px;color:var(--ink)}
 
-/* ---- the skin switch: the quadrant in miniature. A slot cut into the veil with a machined knob at
-   one end or the other and the two legends etched either side. Monochrome, because a skin is not a
-   running system and the intro is the one screen where nothing is running at all; the knob's
-   position is the state, aria-checked carries it, and the live legend's weight is a third channel
-   rather than the channel. */
-/* The switch is the one skin control on both tiers: the native select is hidden and this glass
-   switch shows in the intro, which hides on start, so it needs no flight-mode rule. Only its margin
-   differs between the roomier desktop intro and the compact touch one; the machined parts below are
-   shared, so a future change to the material reaches both. */
+/* ---- the switches: the quadrant in miniature. A slot cut into the veil with a machined knob at
+   one end or the other and the two legends etched either side. Monochrome, because a skin or an
+   airframe is not a running system and the intro is the one screen where nothing is running at
+   all; the knob's position is the state, aria-checked carries it, and the live legend's weight is
+   a third channel rather than the channel. */
+/* There are two, the aircraft switch and the skin switch, one primitive (`.switch`) on both tiers:
+   the skin's native select is hidden and the glass switches show in the intro, which hides on
+   start, so they need no flight-mode rule. Only the margins differ between the roomier desktop
+   intro and the compact touch one; the machined parts below are shared, so a change to the
+   material reaches every switch. The first legend takes a fixed width so the two slots stand in
+   one column. */
 #skinControl{display:none}
-#skinSwitch{display:flex;align-items:center;gap:10px;min-height:44px;margin:20px 0 0;
+.switch{display:flex;align-items:center;gap:10px;min-height:44px;margin:20px 0 0;
  touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-body.touch #skinSwitch{margin:0 0 22px}
-.skinLegend{border:0;background:transparent;padding:0 2px;min-height:44px;color:var(--ink);
+.switch+.switch{margin-top:8px}
+body.touch .switch{margin:0 0 22px}
+body.touch .switch+.switch{margin-top:-8px}
+.switchLegend{border:0;background:transparent;padding:0 2px;min-height:44px;color:var(--ink);
  font-size:10px;font-weight:400;letter-spacing:.14em;white-space:nowrap}
-.skinLegend[aria-checked="true"]{font-weight:500}
-.skinLegend:active{color:var(--ink-pressed)}
-.skinLegend:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.switch .switchLegend:first-child{min-width:68px;text-align:right}
+.switchLegend[aria-checked="true"]{font-weight:500}
+.switchLegend:active{color:var(--ink-pressed)}
+.switchLegend:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 /* 60 px wide, not the 56 the spec sizes it at, and the knob travels 4 to 30 rather than 2 to 28: a
    radius-5 knob at 2 px inside a radius-13 track hung 3 to 4 px outside the slot's rounded ends, so
    it read as a metal tile laid on a dark pill rather than a knob sitting in a slot. */
-#skinTrack{position:relative;flex:0 0 auto;width:60px;height:26px;border-radius:13px;
+.switchTrack{position:relative;flex:0 0 auto;width:60px;height:26px;border-radius:13px;
  background:var(--slot-tint);
  box-shadow:inset 0 2px 3px var(--slot-shade),inset 1px 0 2px var(--slot-shade-side),inset 0 -1px 0 var(--slot-lip)}
-#skinKnob{position:absolute;top:2px;left:4px;width:26px;height:22px;border-radius:5px;
+.switchKnob{position:absolute;top:2px;left:4px;width:26px;height:22px;border-radius:5px;
  background:var(--metal-face);
  box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
   inset 0 -1px 0 var(--metal-shade),0 2px 5px var(--metal-drop);
  transition:left .12s var(--e-out)}
-#skinKnob::after{content:"";position:absolute;left:8px;right:8px;top:7px;height:8px;
+.switchKnob::after{content:"";position:absolute;left:8px;right:8px;top:7px;height:8px;
  background:var(--knurl)}
-#skinSwitch.heritage #skinKnob{left:30px}
+.switch.on .switchKnob{left:30px}
 /* The shadow deepens from two stops to three while a finger is on it, which is the lift a lever
    takes when it is held. A metal lever under a thumb does not change colour and does not shrink. */
-#skinSwitch.sliding #skinKnob{transition:none;
+.switch.sliding .switchKnob{transition:none;
  box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
   inset 0 -1px 0 var(--metal-shade),0 3px 7px var(--metal-drop-held)}
 
@@ -544,7 +549,7 @@ body.touch #skinSwitch{margin:0 0 22px}
  .key{transition:none}
  .key.pressed{transform:none}
  #throttleValue{transition:none}
- body.touch #skinKnob{transition:none}
+ body.touch .switchKnob{transition:none}
  body.touch #hint.warning{animation:none}}
 /* touch:end */
 #killConfirmation{position:absolute;top:clamp(76px,18vh,150px);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 36px);text-align:center;font-size:clamp(18px,2.5vw,26px);font-weight:600;letter-spacing:.06em;color:#fff;line-height:1.2;isolation:isolate;pointer-events:none;text-shadow:0 1px 3px #100503}
@@ -554,7 +559,7 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
 <div id="veil"></div>
-<div id="intro"><h1>RANGE</h1><p><span class="long">One Typhoon over Jersey.<br>Fly the coast, see the island,<br>flatten the range.</span><span class="short">One Typhoon over Jersey. Fly, look, flatten the range.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="skinSwitch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="skinLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" aria-hidden="true"><span id="skinKnob"></span></span><button type="button" id="skinHeritage" class="skinLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
+<div id="intro"><h1>RANGE</h1><p><span class="long">Fly around Jersey.<br>See the sights.<br>Blow up the targets.</span><span class="short">Fly around, see Jersey, blow up the targets.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="aircraftSwitch" class="switch" role="radiogroup" aria-label="Aircraft"><button type="button" id="aircraftTyphoon" class="switchLegend" role="radio" aria-checked="true" tabindex="0">TYPHOON</button><span id="aircraftTrack" class="switchTrack" aria-hidden="true"><span id="aircraftKnob" class="switchKnob"></span></span><button type="button" id="aircraftWyvern" class="switchLegend" role="radio" aria-checked="false" tabindex="-1">WYVERN</button></div><div id="skinSwitch" class="switch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="switchLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" class="switchTrack" aria-hidden="true"><span id="skinKnob" class="switchKnob"></span></span><button type="button" id="skinHeritage" class="switchLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
 <div id="hud" class="hidden">
 <div id="brand">RANGE</div>
 <div id="location">JERSEY · CHANNEL ISLANDS</div>

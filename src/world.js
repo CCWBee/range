@@ -648,7 +648,7 @@ void main(){
     // Real footprints are merged in Blender into spatial chunks, allowing ordinary frustum
     // culling without one draw call per building. No downloaded tiles are needed at runtime.
     for (const name of Object.keys(this.library.manifest.assets)) {
-      if (!name.startsWith('settlement_')) continue;
+      if (!name.startsWith('settlement_') && name!=='coastal_defences') continue;
       const group=this.library.asset(name);
       group.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=true;}});
       this.scene.add(group);

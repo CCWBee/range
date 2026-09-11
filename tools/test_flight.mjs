@@ -439,3 +439,4 @@ console.log('ALL PASS');
 await import('./test_engagement.mjs');
 await import('./test_touch.mjs');
 await import('./test_library.mjs');
+await import('./test_fleet.mjs');

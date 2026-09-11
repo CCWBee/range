@@ -252,6 +252,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   destroyTarget(target) {
     if (target.destroyed) return;
     target.destroyed = true;
+    target.respawnTime=0;
     this.confirmKill(target);
     this.rangeHit++;
     if (target.ship) { target.smokeSource=true;target.sinkTime=0;return; }
@@ -273,11 +274,12 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
 
   dropBomb(flight, aircraft) {
     if (flight.crashed || flight.onGround || flight.bombs <= 0) return false;
-    const index = 4 - flight.bombs;
+    const torpedo=flight.airframe==='wyvern';
+    const index = (torpedo?1:4) - flight.bombs;
     const origin = aircraft.releaseStore(index);
     flight.bombs--;
-    const mesh = this.library.has('bomb')
-      ? this.library.asset('bomb')
+    const mesh = this.library.has(torpedo?'torpedo17':'bomb')
+      ? this.library.asset(torpedo?'torpedo17':'bomb')
       : new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 2, 8), new THREE.MeshStandardMaterial({ color: 0x2c2f2c }));
     mesh.position.copy(origin);
     mesh.quaternion.copy(flight.attitude);
@@ -286,10 +288,10 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     this.bombs.push({
       mesh, position: mesh.position,
       velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
-      guided: true, age: 0,
+      guided: !torpedo, torpedo, age: 0,
     });
     this.lastMunition = this.bombs[this.bombs.length-1];
-    this.engagement?.message('PAVEWAY AWAY · hold U to follow · L controls the laser');
+    this.engagement?.message(torpedo?'TORPEDO AWAY · drop low and level towards a ship':'PAVEWAY AWAY · hold U to follow · L controls the laser');
     return true;
   }
 
@@ -318,8 +320,16 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
   }
 
   update(dt, flight, camera, elapsed) {
+    for(const t of this.targets)if(t.destroyed){
+      t.respawnTime=(t.respawnTime||0)+dt;
+      if(t.respawnTime>=60){
+        t.destroyed=false;t.hp=t.maxHp||3;t.smokeSource=false;t.mesh.visible=true;t.respawnTime=0;
+        if(t.wreck){this.scene.remove(t.wreck);t.wreck=null;}
+        if(t.ship){t.mesh.position.copy(t.home);t.mesh.rotation.set(0,0,0);t.position.copy(t.home).add(V3(0,4,0));t.sinkTime=0;}
+      }
+    }
     this.reload ||= { bombs: 0, rounds: 0 };
-    if (!flight.crashed) for (const [kind, capacity, seconds] of [['bombs',4,25],['rounds',150,12]]) {
+    if (!flight.crashed) for (const [kind, capacity, seconds] of [['bombs',flight.airframe==='wyvern'?1:4,25],['rounds',flight.airframe==='wyvern'?400:150,12]]) {
       if (flight[kind] === 0) {
         this.reload[kind] += dt;
         if (this.reload[kind] >= seconds) {
@@ -356,7 +366,25 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     // Bombs: the mesh points along its velocity, so a fin-stabilised bomb noses over as it falls.
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
-      if (guidedBombStep(bomb, this.engagement?.laser, dt)) {
+      let impact;
+      if(bomb.torpedo){
+        bomb.age+=dt;
+        if(!bomb.inWater){
+          bomb.velocity.y-=9.81*dt;bomb.position.addScaledVector(bomb.velocity,dt);
+          if(bomb.position.y<=-82.6){
+            const valid=terrainHeight(bomb.position.x,bomb.position.z)<-82.6&&Math.abs(bomb.velocity.y)<48&&bomb.velocity.length()<150;
+            if(valid){bomb.inWater=true;bomb.velocity.y=0;bomb.velocity.setLength(21);bomb.position.y=-83.1;}
+            else impact=true;
+          } else if(bomb.position.y<=groundHeight(bomb.position.x,bomb.position.z))impact=true;
+        }else{
+          bomb.position.addScaledVector(bomb.velocity,dt);
+          if(terrainHeight(bomb.position.x,bomb.position.z)>-83.2||bomb.age>100)impact=true;
+          bomb.wake=(bomb.wake||0)+dt;
+          if(bomb.wake>.1){bomb.wake=0;this.spray.spawn({position:bomb.position.clone().setY(-82.4),velocity:V3(0,.1,0),size:2,alpha:.6,life:2});}
+          for(const t of this.targets)if(t.ship&&!t.destroyed&&t.position.distanceTo(bomb.position)<25){this.destroyTarget(t);impact=true;}
+        }
+      } else impact=guidedBombStep(bomb, this.engagement?.laser, dt);
+      if (impact) {
         bomb.expired = true;
         this.explosion(bomb.position, 1.2);
         this.addCrater(bomb.position, 16);
