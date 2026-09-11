@@ -133,8 +133,7 @@ export class Aircraft {
       canopy.metalness = 0;
       canopy.depthWrite = false;
       canopy.side = THREE.FrontSide;
-      // Glass is not an opaque shadow receiver. PCF self-shadow samples on this thin shell
-      // produced a grid over the reflected sky; rendering both faces also doubled its tint.
+      // Keep opaque shadow filtering off the transparent shell, and render one glass face.
       this.parts.jet_canopy?.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false;}});
     }
     // The tyre of each gear leg turns about body X through the centre of its rubber part.
@@ -156,6 +155,13 @@ export class Aircraft {
         spinner = hub;
       }
       if (spinner) this.wheels[index] = spinner;
+      entry.compressionMeshes=[];
+      for(const mesh of leg.children){
+        if(!mesh.isMesh)continue;
+        mesh.geometry=mesh.geometry.clone();
+        entry.compressionMeshes.push({mesh,base:mesh.geometry.attributes.position.array.slice()});
+      }
+      if(spinner)spinner.userData.restY=spinner.position.y;
       // Leg length below the hinge, for the oleo squash.
       const bounds = this.library.bounds(name);
       const pivot = this.library.pivot(name);
@@ -336,14 +342,20 @@ export class Aircraft {
       this.parts.gear.visible = gp > 0.01;
       this.parts.gear.scale.y = Math.max(0.01, gp);
     }
-    // Wheels turn with their ground speed, and the oleo squashes under load.
+    // Lower strut geometry slides into the upper sleeve. Wheels retain their circular shape.
     for (let i = 0; i < 3; i++) {
       const leg = flight.legs[i];
       if (this.wheels[i]) this.wheels[i].rotation.x += leg.spin * dt;
       const name = ['jet_gear_nose', 'jet_gear_main_l', 'jet_gear_main_r'][i];
       const entry = this.pivoted[name];
       if (entry && entry.legLength) {
-        entry.group.scale.y = 1 - clamp(leg.compression * 0.35 / entry.legLength, 0, 0.4);
+        const travel=clamp(leg.compression*.35,0,.28);
+        if(this.wheels[i])this.wheels[i].position.y=this.wheels[i].userData.restY+travel;
+        for(const {mesh,base} of entry.compressionMeshes || []){
+          const attribute=mesh.geometry.attributes.position;
+          for(let v=0;v<attribute.count;v++)attribute.array[v*3+1]=base[v*3+1]+travel*THREE.MathUtils.smoothstep(-base[v*3+1],.15,.55);
+          attribute.needsUpdate=true;
+        }
       }
     }
 

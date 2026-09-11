@@ -2,111 +2,98 @@
 
 ## Where it stands
 
-10 September 2026. RANGE is public at https://ccwbee.github.io/range/ (desktop, 25 MB) with the
-tilt-to-fly phone version beside it at `mobile.html` (8.9 MB). GitHub Actions builds both bundles
-from source on every push to `master` and ships `RANGE.zip` next to them; nothing built is
-committed. The runtime library is `assets/library.json` plus `library.bin` (version 3, quantised,
-6.8 MB), packed by `tools/pack_library.py` from the Blender export, which is no longer tracked;
-`assets/RANGE.blend` is in Git LFS. History was rewritten on 10 September to drop the build
-outputs, the export, the old blend versions, the raw textures and the old screenshots; the
-pre-rewrite history is kept in `_archive/range-history-before-slim-20260910.bundle`.
+11 September 2026. A polish pass continuing the previous session's uncommitted work (it hit a usage
+wall mid-pass). This session carried the spine through to completion and verified it with renders.
+Not yet committed at the time of writing; lands as one commit, then a push (authorised by Charles).
+Live site is still `85a1c7b`.
 
-The phone version: tilt is the aim (azimuth relative to the path, elevation absolute above the
-horizon), a throttle quadrant with MIL and the reheat band, GUN, PAVEWAY and one SEEKER key that
-reads FIRE on lock; gear, brakes and the laser are automatic; the controls share the lens material
-in `docs/DESIGN.md`. Sound claims a playback session on iOS so the ringer switch does not mute it.
-`node tools/test_flight.mjs` runs five suites (physics and instructor, engagement, touch, the
-packed library, the page's unique ids); all pass. Headless frames: `screenshots/touch.png` and
-`screenshots/touch-mobile.png`.
+Safety: the whole working tree is snapshotted at git tag `range-wip-safety` (refreshed through the
+session) and the untracked files are copied to the session scratchpad `wip-untracked-backup/`. Never
+`git reset --hard` / `git clean` without checking that tag.
 
-## Open threads
+## Done this session (verified by render + tests)
 
-- The phone check after this push: sound plays with the ringer switch either way; the quadrant
-  follows the finger; the layout sits (brand and objective top left, hint and the three numerals
-  centred at the bottom, quadrant left, keys right); the keys read as one material. Tilt already
-  works. Report the feel: the tilt constants are the first lines of `src/touch.js`.
-- Owner decisions: a licence file for the code (no public repo of yours has one except
-  design-library, MIT); whether the Crown-copyright Typhoon adaptation may stay in a public repo
-  (the RAF site refused automated reading of its terms, so nothing there was verified); whether the
-  old Codex folder should still be mirrored now that Codex commits here.
-- Desktop frame rate, measured 10 September in Brave on the RTX 5070 Ti with the GPU finished
-  each frame: 1.5 to 1.9 ms a frame at 2559 × 925 (cloud 678 fps, bomb run 613, ramp 520) and 1.8
-  to 2.4 ms at pixel ratio 2 (4654 × 1682); the live loop is vsync-bound at 144 Hz, so the 60 fps
-  target holds by a factor of ten. The phone's frame rate is still unmeasured.
+1. **Airport chrome-mirror — FIXED.** Root cause: the terrain shader discards fragments under the
+   AIRPORT polygon, but the Blender-baked `pavement` asset's triangulation
+   (`shapely.triangulate` + `covers()` in prepare_airport.py) left the 08 threshold with zero
+   triangles, so the discarded terrain showed the reflected sky/ocean through the gap. Fix in
+   `src/world.js` `buildAirportSurface()`: the pavement is now built in-engine from
+   `AIRPORT.pavement` (the same polygons the discard uses, faces reversed to face up) and the six
+   range pads as boxes; the gappy library `pavement` asset is no longer loaded. Verified ground +
+   air: proper wet runway, no mirror.
+2. **Black square at intro on the mobile tier — FIXED.** It was the aircraft contact shadow: with
+   no MSAA on the mobile half-float post target the normal-blended shadow quad renders as a hard
+   black square instead of a soft falloff (starkest under headless software GL / SwiftShader, and a
+   risk on GPUs without half-float blend). **Observed, not explained:** every shader-level fix tried
+   on the shadow failed (texture map, premultiplied alpha, polygon offset, multiply-blended texture);
+   the only variable that resolved it was the sample count, so the exact mechanism is not isolated.
+   Fix in `src/main.js`: the mobile post target now carries `samples: 2` (was 0), which also resolves
+   the aliased alpha clutter the phone tier was drawing jagged. The shadow itself is back to its
+   original clean form. **Perf note for Charles:** 2x MSAA is a modest mobile cost, cheap on the
+   tile-based GPUs the touch build targets; confirm phone fps on-device, and if any device struggles
+   it can drop back to 0 (the square is a software-GL artefact there anyway).
+3. **Desktop UI parity with the mobile Liquid Glass system — DONE (core).** The shared tokens were
+   already global; the divergence was in the desktop element rules (flat old generation). Now
+   consolidated onto the shared system without disturbing the tuned `body.touch` rules:
+   - Intro: glass ENTER cap (the shared `.key` material, with a mouse hover lift), ink text, the
+     glass skin **switch** replacing the native `<select>` (the switch styles were un-gated from
+     `body.touch` so both tiers share them), and new copy (below).
+   - HUD: ink colour + `--halo` shadow + the token state ramp (advisory / lock); desktop keeps its
+     fuller layout and the secondary readouts the phone hides.
+   - `#help` is now a glass panel; `#buttons` are ink legends with hover; `#status` uses the shared
+     stop veil (screen dims on pause, text stays lit).
+   Verified at 1920, 1366 and the mobile 932/844 widths; mobile cockpit + intro unregressed.
+4. **Intro copy rewritten** (Charles's request): "One Typhoon over Jersey. Fly the coast, see the
+   island, flatten the range." (short: "One Typhoon over Jersey. Fly, look, flatten the range.")
+   Replaces the "Clearing skies / Bring it home" copy.
+5. **Verified the previous session's four other in-progress systems in-game:** water low-pass wake
+   (restrained aft disturbance over sea, correct), missile-launch FX (compact glow + exhaust, not an
+   explosion), gear compression (passes tests, sits correctly on the ground), settlement coverage
+   (rural field patchwork + buildings render).
 
-## Next action
+`node tools/test_flight.mjs` green (56 PASS); `python tools/build.py` green (desktop 28.7 MB, mobile
+9.24 MB, 0 network assets). Mobile touch contrast matrix (`tools/qa_touch.mjs`) re-run after the
+shared-CSS change — see result before committing.
 
-In flight (10 September, evening): the touch layer's design pass. Charles's verdict on the phone
-build: rough, text overflows, too many words on a small screen, white text on a light background,
-and the register is wrong: not plain liquid glass but liquid glass fused with the Thrustmaster
-HOTAS Warthog cockpit look (matte black, white condensed legends, backlit green). Reference
-opened and read on 10 September. Plan: a design-panel workflow writes
-`docs/specs/2026-09-10-range-touch-cockpit.md`; a second workflow implements it (index.html touch
-CSS, `src/touch.js` copy, `src/hud.js` touch objective, `tools/build.py` font inlining and
-`font-src data:`, `docs/DESIGN.md` amendments) and verifies with a shot matrix (667×375, 844×390,
-932×430; cloud, ramp, landing; resting, locked, reload states), pixel-sampled contrast, `scan.mjs`
-and `test_flight.mjs`. Design panel: run `wf_9667800f-32a`, script
-`C:\Users\Charles\.claude\projects\E--claude-projects-range\9d648607-248d-4ebf-8b97-8563727faad4\workflows\scripts\range-touch-cockpit-design-wf_9667800f-32a.js`
-(resume with `Workflow({scriptPath, resumeFromRunId: "wf_9667800f-32a"})`): done, the spec is
-written, with section 10 added afterwards for Charles's four additions (intro clean-up, the skin
-switch, the wake lock, the render scale). Taste rulings on the spec's open calls: reheat lights
-green, the cap reads BOMB, the airspeed legend is IAS not SPEED, the range leg is TARGETS not
-COASTAL RANGE, the skin switch stays monochrome. Implementation workflow: two writers on disjoint
-files (fonts and build.py; the touch UI, tests and DESIGN.md), then verify (build, tests,
-`tools/qa_touch.mjs` matrix with `tools/contrast.py`, scan), three refuting reviewers, one fixer,
-looped until dry: run `wf_f92f4738-095`, script
-`C:\Users\Charles\.claude\projects\E--claude-projects-range\9d648607-248d-4ebf-8b97-8563727faad4\workflows\scripts\range-touch-cockpit-build-wf_f92f4738-095.js`
-(resume with `Workflow({scriptPath, resumeFromRunId: "wf_f92f4738-095"})`). Favicon (Charles, 10
-September evening: an orange top-down Typhoon silhouette on a teal rounded square, traced from
-the mesh): run `wf_f1484e8c-f82`, script
-`C:\Users\Charles\.claude\projects\E--claude-projects-range\9d648607-248d-4ebf-8b97-8563727faad4\workflows\scripts\range-favicon-wf_f1484e8c-f82.js`,
-writing only `assets/icon/` and `tools/icon_planform.py`; the wiring (`<link rel="icon">` as a data:
-URI in `index.html`, `build.py` inlining plus a DependencyCheck exemption for `rel="apple-touch-icon"`,
-and `pages.yml` copying `assets/icon/apple-touch-icon.png` into `dist/`) waits until the build run
-has released those files. Charles's verdict on the first build (21:10): the weapons caps are a box
-in a box, too dark, and skewed; then "equal, in a row single file along the side". Written as spec
-section 11 (bezel gone, three equal 62 px caps in a column down the right edge with their own .48
-glass at 8 px blur, the quadrant film to .48 to match). Section 11 is now built (10 September,
-22:30): the bezel is gone, `#touchWeapons` is a flex column of three 62 x 62 caps at radius 10, each
-its own glass, and the film is .52 rather than .48 on both the caps and the quadrant, because at .48
-the locked legend measured 4.56:1 against the 4.5 floor and section 11.3 names .52 as the figure to
-fall back to. Also in that pass: the reheat fill lights green, ENTER AIRCRAFT takes the cap glass,
-the stop veil moved to `#hud`'s background colour so the paused screen no longer dims every
-instrument to 2.2:1, the bomb diamond is hidden rather than clamped below the coaming, and the stall
-flash dips to .72 rather than .35. Gates: `test_flight.mjs` exit 0, `build.py` exit 0, the 27-cell
-matrix 561 boxes 0 failures, the scan clean. The build run was stopped by hand at 22:54 after its second fix pass, before a third
-review round, to get the result in front of Charles; the icon is wired (`index.html` links,
-`build.py` inlines `favicon.svg` and copies `apple-touch-icon.png` into `dist/`, `DependencyCheck`
-allows that one href), the desktop intro placard leak (`#intro small` outranking `#introTouch`) is
-fixed, and the gate re-run by hand at 23:00: tests exit 0 (56 PASS), build exit 0 (mobile 9.24 MB,
-desktop 28.7 MB), matrix 27 cells 561 boxes 0 failures. Then Charles's five corrections on the second build, done by hand as spec section 12 (23:20 to
-23:45): throttle panel film .72, objective line hidden on touch, pitch down to 55 degrees against
-25 up (`ELEVATION_DOWN` in `src/touch.js`), swipe-to-look on the view with tilt still steering
-(`input.touchLook`, the C-key return decay), and the two canopy bands replaced by a text halo,
-with the QA probe now keeping the shadow so the matrix measures ink against halo. Final gate on the pushed bundle (10 September, 23:30): tests exit 0, build exit 0 (mobile
-9.24 MB, desktop 28.7 MB), matrix 27 cells 534 text boxes 0 failures with the sampler now judging
-under the strokes. Pushed to master at Charles's instruction with the concurrent model pass
-included. Left: Charles's phone checks (frame cost with four blur layers is unmeasured, since
-headless Chrome freezes rAF; the swipe look and the 55-degree push are untested by hand; the
-black square at the intro on the mobile tier belongs to the model pass). Separately, a Codex
-session started at 22:00 on 10 September edited the model and world (`assets/RANGE.blend`,
-`library.bin`, `src/aircraft.js`, `camera.js`, `effects.js`, `engagement.js`, `world.js`, the
-model tools); with that model, the mobile render tier draws a black square beside the aircraft at
-the intro pose (`dist/index.html?tier=mobile&touch=0` at 844 x 390 shows it, `?tier=desktop` does
-not, and the pre-22:00 model did not), which is that session's to resolve.
-Baseline evidence: `screenshots/qa-before/contrast.md` (88 of 198
-text boxes under 4.5:1), now un-ignored in `.gitignore` so the frames the documents cite can reach
-the repo. Pushing to master deploys Pages, so the push waits for Charles.
+## Backlog (audit-and-refine; NOT done this pass — mostly Blender-heavy, and Blender was not running)
 
-Then: test on the phone as above, then settle the licence and the Typhoon question.
+From the read-only env audit (workflow wf_2a11f0ea-633; full result in the run's journal):
+- **Landmarks are already good** (Fort Regent, Mont Orgueil, Elizabeth Castle, La Corbière, St
+  Aubin's Fort all recognisable silhouettes). Gaps: **St Catherine's Breakwater absent** (clipped by
+  the OSM extract bbox at lon -2.0 in `tools/extract_coastal_airport.py`), **Noirmont absent** (only
+  a generic building), **Fort Henry** a weak 6m slab, and **landmark_granite is a flat grey-brown**
+  (`tools/model_landmarks.py:16`) where Jersey granite reads pink-orange — a quick-js retint in the
+  `src/world.js` material hook is the cheapest recognisability win (taste call, so left for Charles).
+- **Generic buildings**: plain boxes, no pitched-roof/granite vocabulary (settlement coverage is
+  good). **Cliffs/coast**: check slope-based rock exposure and geographic colour variation. **Sea
+  walls** (St Ouen's, St Aubin's) and **harbour refinement**: per the brief.
+- **Aircraft gear / pylons / canopy**: the deeper reference-based geometry audit (underside/side,
+  clipping, pivots, track width) needs Blender; the compression rework is sound. Canopy: no obvious
+  dot-patch seen in renders this pass; re-check on-device.
+- **HUD altitude reads 0 FT over open sea** (pre-existing) — minor, worth a look.
+- Owner decisions still pending: a code licence file; the Crown-copyright Typhoon question.
 
-## Gotchas
+Blender launch when needed:
+`"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" --python tools\start_blender.py`
 
-- Two elements shared `id="throttle"` (the quadrant and the HUD readout), so the quadrant's
-  listeners went to the hidden readout with no error. `tools/test_touch.mjs` asserts unique ids.
-- The exporter runs `tools/pack_library.py` at the end; if `assets/meshes.bin` is newer than
-  `library.bin`, `build.py` packs again. The dev page and the bundles read the packed library only.
-- Phone sensors need HTTPS: test on the Pages URL, never on the LAN http server.
-- A pure roll must read as zero pitch: `tiltFromUp` measures pitch against the in-plane magnitude.
+## Gotchas (this pass)
 
-The dated notes from 6 to 10 September are in `docs/notes/state-history.md`.
+- Airport pavement is engine-built now (like roads/terrain/landcover), from `AIRPORT.pavement`.
+  `THREE.ShapeUtils.triangulateShape` winds clockwise when x,z map straight to the ground, so faces
+  must be reversed or the surface back-face culls into the same sky/ocean hole.
+- A normal-blended transparent quad (the contact shadow) renders as a hard fill, not a soft
+  falloff, on a non-MSAA half-float post target. Mechanism not isolated: shader-level fixes on the
+  quad all failed and only the sample count moved it, so mobile post now carries `samples: 2`.
+- The design tokens live at bare `:root` inside the `/* touch:start */`..`/* touch:end */` region,
+  which ships in BOTH bundles; build.py does not strip it. So desktop can use every token; only the
+  touch INPUT surfaces (`#touch`, `#quadrant`, `#touchWeapons`, `#rotate`) stay gated on `body.touch`.
+- Verify visual work by rendering the built bundle via `design\tools\qa\shot.mjs` (SwiftShader
+  software GL — some artefacts, e.g. the contact-shadow square, are worse there than on real HW).
+  Full `file://` URLs keep a query string; the path form escapes the `?`.
+
+## Resume
+
+Read this file first. If not yet committed: run `node tools/test_flight.mjs` and
+`python tools/build.py`, confirm the touch contrast matrix is clean, then `git add -A` and one
+commit covering the whole pass, then push. Next substantive work is the Blender-heavy environment
+backlog above (start with the granite retint quick-win and St Catherine's Breakwater).

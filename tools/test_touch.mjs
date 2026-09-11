@@ -1,6 +1,7 @@
 // Behaviour checks for the touch layer, independent of a phone and a DOM.
 // Spec: docs/specs/2026-09-10-range-mobile.md section 10.
 import assert from 'node:assert/strict';
+import { AIRPORT } from '../src/airport.js';
 import { readFileSync } from 'node:fs';
 import * as THREE from '../vendor/three.module.js';
 import { Flight } from '../physics.js';
@@ -141,7 +142,7 @@ globalThis.document ||= new EventTarget();
   assert.equal(autoGear(f), false, 'climbing clear of the ground raises the gear');
   f.gear = true; f.airborneTime = 1;
   assert.equal(autoGear(f), true, 'not within three seconds of leaving the ground');
-  f.airborneTime = 40; f.gear = false; f.position.y = 150; f.ias = 90; f.verticalSpeed = -3;
+  f.airborneTime = 40; f.gear = false; f.position.set(AIRPORT.spawn[0],150,-900); f.ias = 90; f.verticalSpeed = -3;
   assert.equal(autoGear(f), true, 'slow, low and descending lowers the gear');
   f.gear = false; f.ias = 150;
   assert.equal(autoGear(f), false, 'fast and low keeps it up');

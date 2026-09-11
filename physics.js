@@ -6,6 +6,7 @@
 // q pitch nose up, r yaw nose right; q = omega.x, r = -omega.y, p = -omega.z.
 import * as THREE from './vendor/three.module.js';
 import { JERSEY } from './src/jersey.js';
+import { AIRPORT } from './src/airport.js';
 
 const clamp = THREE.MathUtils.clamp;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -29,35 +30,40 @@ function smoothstep(x, a, b) {
 
 const rect = (name, x0, z0, x1, z1) => ({ name, x0, z0, x1, z1 });
 export const PAVEMENT = [
-  rect('runway', -31, -2500, 31, 300),
-  rect('apron', -290, -245, -10, 125),
-  rect('parallel taxiway', -200, -2250, -180, -50),
-  rect('link taxiway north', -180, -259.5, 0, -240.5),
-  rect('link taxiway middle', -180, -1109.5, 0, -1090.5),
-  rect('link taxiway south', -180, -2059.5, 0, -2040.5),
-  rect('perimeter road west', -664.5, -2700, -655.5, 400),
-  rect('perimeter road north', -665, 285.5, 415, 294.5),
-  rect('perimeter road south', -665, -2634.5, 415, -2625.5),
-  rect('dispersal taxiway', -200, -1000, -180, -50),
-  rect('hangar arch apron A', -460, -200, -200, -60),
-  rect('hangar arch apron B', -460, -380, -200, -240),
-  ...[-620, -740, -860, -980].map((z, i) => rect(`HAS hardstand ${i + 1}`, -470, z - 30, -380, z + 30)),
-  rect('HAS spur', -380, -1010, -200, -590),
-  ...[[-330, -130], [-450, -130], [-330, -460], [-450, -460], [-330, -790], [-450, -790]]
-    .map(([x, z], i) => rect(`service hardstand ${i + 1}`, x - 29, z - 13, x + 29, z + 93)),
   ...[[-950, -3900], [-1090, -4050], [-800, -4170], [-1040, -4300], [-1220, -4190], [-860, -4430]]
     .map(([x, z], i) => rect(`range hardstand ${i + 1}`, x - 17.5, z - 22.5, x + 17.5, z + 22.5)),
-  rect('fuel farm', -620, -1020, -550, -940),
 ];
+
+function insideRing(x,z,points){
+  let inside=false;
+  for(let i=0,j=points.length-1;i<points.length;j=i++){
+    const a=points[i],b=points[j];
+    if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+  }
+  return inside;
+}
+
+function insideAirport(x,z,p){return insideRing(x,z,p.points)&&!p.holes.some(h=>insideRing(x,z,h));}
 
 export function onPavement(x, z) {
   for (const r of PAVEMENT) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true;
+  for(const p of AIRPORT.pavement){const [x0,z0,x1,z1]=p.bounds;if(x>=x0&&x<=x1&&z>=z0&&z<=z1&&insideAirport(x,z,p))return true;}
   return false;
 }
 
 // Distance from (x, z) to the nearest pavement edge, 0 when inside a rectangle.
 function pavementDistance(x, z) {
   let best = Infinity;
+  for(const p of AIRPORT.pavement){
+    const [x0,z0,x1,z1]=p.bounds;
+    if(Math.hypot(Math.max(x0-x,0,x-x1),Math.max(z0-z,0,z-z1))>120)continue;
+    if(insideAirport(x,z,p))return 0;
+    for(const ring of [p.points,...p.holes])for(let i=0;i<ring.length;i++){
+      const a=ring[i],b=ring[(i+1)%ring.length],dx=b[0]-a[0],dz=b[1]-a[1];
+      const t=clamp(((x-a[0])*dx+(z-a[1])*dz)/Math.max(1e-9,dx*dx+dz*dz),0,1);
+      best=Math.min(best,Math.hypot(x-a[0]-dx*t,z-a[1]-dz*t));
+    }
+  }
   for (const r of PAVEMENT) {
     const dx = Math.max(r.x0 - x, 0, x - r.x1);
     const dz = Math.max(r.z0 - z, 0, z - r.z1);
@@ -116,7 +122,7 @@ function naturalHeight(x,z) {
 export function terrainHeight(x, z) {
   const dist = pavementDistance(x, z);
   if (dist === 0) return 0;
-  const airfieldDistance = Math.hypot(Math.max(-700-x,0,x-140),Math.max(-2650-z,0,z-340));
+  const airfieldDistance = Math.hypot(Math.max(-35-x,0,x-450),Math.max(-1880-z,0,z+350));
   const h = -0.34 + (naturalHeight(x,z)+0.34)*smoothstep(airfieldDistance,0,140);
   return dist >= 120 ? h : h * smoothstep(dist, 0, 120);
 }
@@ -168,7 +174,7 @@ export class Flight {
   constructor() { this.reset(); }
 
   reset() {
-    this.position = V3(0, REST_HEIGHT, 85);
+    this.position = V3(AIRPORT.spawn[0], REST_HEIGHT, AIRPORT.spawn[1]);
     this.velocity = V3();
     this.attitude = new THREE.Quaternion();
     this.omega = V3();

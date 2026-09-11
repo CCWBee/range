@@ -16,55 +16,75 @@ select:focus-visible{outline:2px solid #d7e5ed;outline-offset:3px}
 #skinChoice{font:inherit;color:#eceded;background:#18232b;border:1px solid #64727a;padding:5px 8px}
 #buttons #skinControl{margin:0}
 .hidden{display:none!important}
-#veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(9,17,22,.6),transparent 58%)}
-#intro{position:absolute;top:12%;left:6%;width:min(380px,85vw)}
-h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0 0 24px;line-height:1}
-#intro p{font-size:16px;line-height:1.65;color:#c1cbd0;max-width:310px}
-#start{display:block;margin-top:30px;border:1px solid #9eabb2;background:rgba(22,32,40,.7);padding:14px 24px;letter-spacing:.13em;font-size:14px}
-#start:hover{background:#62727c}
-#intro small{display:block;margin-top:22px;font-size:12px;line-height:1.8;color:#a7b5bd}
-#hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 1px 3px #0008;font-variant-numeric:tabular-nums}
-#brand{position:absolute;top:28px;left:34px;font-size:18px;letter-spacing:.3em}
-#location{position:absolute;top:32px;right:32px;font-size:12px;letter-spacing:.13em;color:#c7d1d6}
-#objective{position:absolute;top:77px;left:34px;font-size:12px;letter-spacing:.06em;color:#c7d1d6}
+#veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,var(--veil-intro),var(--veil-clear) 58%)}
+#intro{position:absolute;top:12%;left:6%;width:min(400px,85vw)}
+h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0 0 22px;line-height:1;color:var(--ink)}
+#intro p{font-size:16px;line-height:1.6;color:var(--ink);max-width:330px;margin:0 0 4px}
+/* ENTER takes the shared cap material from the .key rule below; the desktop side sizes it for the
+   mouse and adds a hover lift, one of the affordances the phone build has no use for. */
+#start{display:inline-flex;align-items:center;justify-content:center;margin:26px 0 0;padding:0 26px;min-height:46px;font-size:14px;font-weight:500;letter-spacing:.14em}
+#start:hover:not(:disabled){transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),0 0 0 1px var(--cut),0 2px 3px var(--panel-contact),0 10px 22px var(--cap-glass-drop)}
+#intro small{display:block;margin-top:22px;font-size:12px;line-height:1.7;letter-spacing:.04em;color:var(--ink);opacity:.82}
+/* The HUD shares the touch build's ink, halo and state ramp so the two read as one product; the
+   desktop side keeps its screen-edge vignette (below) and its fuller layout, showing the secondary
+   readouts the phone hides. */
+#hud{position:absolute;inset:0;pointer-events:none;text-shadow:var(--halo);font-variant-numeric:tabular-nums;color:var(--ink)}
+#brand{position:absolute;top:28px;left:34px;font-size:18px;letter-spacing:.3em;color:var(--ink)}
+#location{position:absolute;top:32px;right:32px;font-size:12px;letter-spacing:.13em;color:var(--ink);opacity:.82}
+#objective{position:absolute;top:77px;left:34px;font-size:12px;letter-spacing:.06em;color:var(--ink);opacity:.82}
 #telemetry{position:absolute;bottom:34px;left:34px;display:flex;gap:32px}
 #telemetry div{min-width:70px}
-#telemetry label{display:block;font-size:11px;letter-spacing:.18em;margin-bottom:8px;color:#adbdc7}
-#telemetry b{font-size:26px;font-weight:400}
-#telemetry span{font-size:11px;margin-left:5px;color:#bdc7ce}
-#flightstate{position:absolute;bottom:116px;left:34px;display:flex;gap:26px;font-size:12px;letter-spacing:.1em;color:#c2ccd2}
-#flightstate i{font-style:normal;color:#8f9ea7;margin-right:7px}
-#systems{position:absolute;bottom:36px;right:34px;font-size:12px;line-height:1.9;text-align:right;letter-spacing:.05em}
-#instructor{color:#d8cbb0}
-#instructor.stall-warning{color:#ff9d72;animation:stall-flash .7s steps(2,end) infinite}
+#telemetry label{display:block;font-size:11px;letter-spacing:.18em;margin-bottom:8px;color:var(--ink);opacity:.72}
+#telemetry b{font-size:26px;font-weight:400;color:var(--ink)}
+#telemetry span{font-size:11px;margin-left:5px;color:var(--ink);opacity:.78}
+#flightstate{position:absolute;bottom:116px;left:34px;display:flex;gap:26px;font-size:12px;letter-spacing:.1em;color:var(--ink);opacity:.9}
+#flightstate i{font-style:normal;color:var(--ink);opacity:.62;margin-right:7px}
+#systems{position:absolute;bottom:36px;right:34px;font-size:12px;line-height:1.9;text-align:right;letter-spacing:.05em;color:var(--ink)}
+#instructor{color:var(--advisory)}
+#instructor.stall-warning{color:var(--lock);animation:stall-flash .7s steps(2,end) infinite}
 @keyframes stall-flash{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#instructor.stall-warning{animation:none}}
-#hint{position:absolute;bottom:157px;left:34px;font-size:14px;color:#e3ddd0;max-width:620px;line-height:1.6}
+#hint{position:absolute;bottom:157px;left:34px;font-size:14px;color:var(--ink);max-width:620px;line-height:1.6}
 #markers{position:absolute;inset:0;pointer-events:none}
-#help{position:absolute;top:80px;right:30px;width:320px;padding:22px;background:#101b24ed;font-size:14px;line-height:1.8}
-#help p{margin:0 0 14px;color:#aebdc6}
+#help{position:absolute;top:80px;right:30px;width:320px;padding:22px;font-size:14px;line-height:1.8}
+#help p{margin:0 0 14px;color:var(--ink);opacity:.82}
 #help dl{display:grid;grid-template-columns:128px 1fr;margin:0;gap:6px}
 #help dd{margin:0}
-#help dt{color:#f1d4a6}
-#buttons{position:absolute;top:60px;right:32px;display:flex;gap:14px}
-#buttons button{border:0;background:transparent;font-size:12px;padding:6px;color:#c4cfd6}
-#status{position:absolute;top:29%;left:50%;transform:translateX(-50%);text-align:center;font-size:28px;letter-spacing:.08em;line-height:1.6;pointer-events:none}
-#status small{display:block;font-size:14px;letter-spacing:.02em;color:#bcc7cd}
+#help dt{color:var(--advisory)}
+#help details{margin-top:10px}
+#help summary{color:var(--ink);opacity:.7;cursor:pointer}
+#buttons{position:absolute;top:60px;right:32px;display:flex;gap:10px}
+/* Plain ink legends on the canopy, the same treatment as the touch build's RECENTRE and PAUSE, with
+   a mouse hover the phone has no use for. */
+#buttons button{border:0;background:transparent;font-size:11px;font-weight:500;letter-spacing:.13em;padding:8px 6px;color:var(--ink);opacity:.82;text-shadow:var(--halo)}
+#buttons button:hover{opacity:1}
+#status{position:absolute;top:29%;left:50%;transform:translateX(-50%);text-align:center;font-size:28px;letter-spacing:.08em;line-height:1.6;pointer-events:none;color:var(--ink)}
+#status small{display:block;font-size:14px;letter-spacing:.02em;color:var(--ink);opacity:.82}
+/* Paused, the whole screen dims to the stop veil, as it does on the touch build: the veil is #hud's
+   own background so the render dims while the HUD text and the status line stay lit. */
+body:not(.touch):has(#status:not(:empty)) #hud{background:var(--stop-veil)}
 #loading{position:absolute;bottom:30px;left:6%;font-size:14px}
 #error{position:absolute;inset:20%;background:#18232b;padding:30px;line-height:1.6}
 #fps{color:#b7c5c8}
 .target-mark{fill:#ec8874;stroke:#ec8874;stroke-width:2}
 .target-mark text{stroke:none;font-size:11px;letter-spacing:.10em}
 .target-mark .target-distance{font-size:10px;letter-spacing:.03em}
-#weaponState{color:#d8cbb0;letter-spacing:.13em;font-size:11px;margin-bottom:4px}
-#weaponState.locked{color:#f09676}
-#laserState{color:#9faeb6;font-size:10px}
+#weaponState{color:var(--advisory);letter-spacing:.13em;font-size:11px;margin-bottom:4px}
+#weaponState.locked{color:var(--lock)}
+#laserState{color:var(--ink);opacity:.7;font-size:10px}
 #hud{background:linear-gradient(0deg,rgba(7,14,19,.43),transparent 22%,transparent 87%,rgba(7,14,19,.21))}
 #brand{font-size:15px;letter-spacing:.22em}
 #telemetry{gap:38px}#telemetry b{font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;font-size:30px;font-weight:300}
-#telemetry label{font-size:10px;color:#b2c0c7;letter-spacing:.12em}
+#telemetry label{font-size:10px;color:var(--ink);opacity:.72;letter-spacing:.12em}
 #systems{max-width:380px;font-size:11px;line-height:2}
-#help{width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 120px);overflow:auto;background:rgba(12,22,29,.97);font-size:12px;line-height:1.4;padding:18px;scrollbar-width:thin}
+/* The controls sheet is a glass panel, the same material as the touch cockpit's, sized wider on the
+   desktop it lives on. */
+#help{width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 120px);overflow:auto;border-radius:15px;
+ background:var(--light-panel),var(--panel-tint);
+ box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 18px 44px var(--panel-drop);
+ font-size:12px;line-height:1.4;padding:20px;scrollbar-width:thin;color:var(--ink)}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+ #help{-webkit-backdrop-filter:var(--panel-backdrop);backdrop-filter:var(--panel-backdrop)}}
 #help dl{grid-template-columns:140px 1fr;gap:5px}
 @media(max-width:700px){
 #telemetry{gap:12px;left:18px;bottom:22px}#telemetry b{font-size:21px}#telemetry div{min-width:52px}
@@ -311,31 +331,36 @@ body.touch #loading{left:var(--inset-left);bottom:calc(22px + var(--sab));font-s
    running system and the intro is the one screen where nothing is running at all; the knob's
    position is the state, aria-checked carries it, and the live legend's weight is a third channel
    rather than the channel. */
-#skinSwitch{display:none}
-body.touch #skinSwitch{display:flex;align-items:center;gap:10px;min-height:44px;margin:0 0 22px;
+/* The switch is the one skin control on both tiers: the native select is hidden and this glass
+   switch shows in the intro, which hides on start, so it needs no flight-mode rule. Only its margin
+   differs between the roomier desktop intro and the compact touch one; the machined parts below are
+   shared, so a future change to the material reaches both. */
+#skinControl{display:none}
+#skinSwitch{display:flex;align-items:center;gap:10px;min-height:44px;margin:20px 0 0;
  touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-body.touch .skinLegend{border:0;background:transparent;padding:0 2px;min-height:44px;color:var(--ink);
+body.touch #skinSwitch{margin:0 0 22px}
+.skinLegend{border:0;background:transparent;padding:0 2px;min-height:44px;color:var(--ink);
  font-size:10px;font-weight:400;letter-spacing:.14em;white-space:nowrap}
-body.touch .skinLegend[aria-checked="true"]{font-weight:500}
-body.touch .skinLegend:active{color:var(--ink-pressed)}
-body.touch .skinLegend:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+.skinLegend[aria-checked="true"]{font-weight:500}
+.skinLegend:active{color:var(--ink-pressed)}
+.skinLegend:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
 /* 60 px wide, not the 56 the spec sizes it at, and the knob travels 4 to 30 rather than 2 to 28: a
    radius-5 knob at 2 px inside a radius-13 track hung 3 to 4 px outside the slot's rounded ends, so
    it read as a metal tile laid on a dark pill rather than a knob sitting in a slot. */
-body.touch #skinTrack{position:relative;flex:0 0 auto;width:60px;height:26px;border-radius:13px;
+#skinTrack{position:relative;flex:0 0 auto;width:60px;height:26px;border-radius:13px;
  background:var(--slot-tint);
  box-shadow:inset 0 2px 3px var(--slot-shade),inset 1px 0 2px var(--slot-shade-side),inset 0 -1px 0 var(--slot-lip)}
-body.touch #skinKnob{position:absolute;top:2px;left:4px;width:26px;height:22px;border-radius:5px;
+#skinKnob{position:absolute;top:2px;left:4px;width:26px;height:22px;border-radius:5px;
  background:var(--metal-face);
  box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
   inset 0 -1px 0 var(--metal-shade),0 2px 5px var(--metal-drop);
  transition:left .12s var(--e-out)}
-body.touch #skinKnob::after{content:"";position:absolute;left:8px;right:8px;top:7px;height:8px;
+#skinKnob::after{content:"";position:absolute;left:8px;right:8px;top:7px;height:8px;
  background:var(--knurl)}
-body.touch #skinSwitch.heritage #skinKnob{left:30px}
+#skinSwitch.heritage #skinKnob{left:30px}
 /* The shadow deepens from two stops to three while a finger is on it, which is the lift a lever
    takes when it is held. A metal lever under a thumb does not change colour and does not shrink. */
-body.touch #skinSwitch.sliding #skinKnob{transition:none;
+#skinSwitch.sliding #skinKnob{transition:none;
  box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
   inset 0 -1px 0 var(--metal-shade),0 3px 7px var(--metal-drop-held)}
 
@@ -366,14 +391,14 @@ body.touch #skinSwitch.sliding #skinKnob{transition:none;
    the player touches is the material the sortie is built from. The states are declared resting, lit,
    locked, pressed, dim: press and dim are properties of the control and both outrank the lock's own
    wash. */
-.key,body.touch #start,body.touch #start:hover{border:0;border-radius:10px;color:var(--ink);
+.key,#start{border:0;border-radius:10px;color:var(--ink);
  background:var(--light-cap),var(--cap-glass);
  box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),
   0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 6px 16px var(--cap-glass-drop);
  transform:translateZ(0);
  transition:transform .07s var(--e-out),background-color .07s var(--e-out),box-shadow .07s var(--e-out)}
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
- .key,body.touch #start{-webkit-backdrop-filter:var(--cap-backdrop);backdrop-filter:var(--cap-backdrop)}}
+ .key,#start{-webkit-backdrop-filter:var(--cap-backdrop);backdrop-filter:var(--cap-backdrop)}}
 .key{position:relative;pointer-events:auto;padding:0 5px;display:flex;flex-direction:column;
  align-items:center;justify-content:center;gap:4px}
 .key .name{font-size:10px;font-weight:500;letter-spacing:.14em}
@@ -395,7 +420,7 @@ body.touch #skinSwitch.sliding #skinKnob{transition:none;
    surface under the same light. The cut edge stays, or a pressed cap loses its outline over bright
    cloud. scale(.985), not .96: a four per cent shrink on a 62 px cap is a 2.5 px jump that reads as a
    web button. */
-.key.pressed,body.touch #start:active{background:var(--light-cap-press),var(--cap-glass-press);
+.key.pressed,#start:active{background:var(--light-cap-press),var(--cap-glass-press);
  box-shadow:inset 0 2px 3px var(--slot-shade),inset 0 -1px 0 var(--slot-lip),0 0 0 1px var(--cut);
  transform:translateY(1px) scale(.985)}
 .key.pressed .name{color:var(--ink-pressed)}
@@ -409,7 +434,7 @@ body.touch #skinSwitch.sliding #skinKnob{transition:none;
 .key.locked.pressed .name{color:var(--lock-core);text-shadow:var(--lock-glow)}
 /* Dim: the cap darkens, the legend does not. Unavailable is a property of the control, not of the
    word on it, and the ink stays where it was. */
-.key.dim,body.touch #start:disabled{background:var(--light-cap-dim),var(--cap-glass-dim);
+.key.dim,#start:disabled{background:var(--light-cap-dim),var(--cap-glass-dim);
  box-shadow:inset 0 1px 0 var(--cap-rim-top-dim),inset 0 -1px 0 var(--rim-bottom),
   0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 6px 16px var(--cap-glass-drop)}
 /* The amber is the countdown and only the countdown: scoped to .reloading rather than to .dim,
@@ -526,7 +551,7 @@ body.touch #skinSwitch.sliding #skinKnob{transition:none;
 <body>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
 <div id="veil"></div>
-<div id="intro"><h1>RANGE</h1><p><span class="long">Jersey. Clearing skies.<br>One aircraft. A short sortie.<br>Bring it home.</span><span class="short">Jersey. A short sortie. Bring it home.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="skinSwitch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="skinLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" aria-hidden="true"><span id="skinKnob"></span></span><button type="button" id="skinHeritage" class="skinLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
+<div id="intro"><h1>RANGE</h1><p><span class="long">One Typhoon over Jersey.<br>Fly the coast, see the island,<br>flatten the range.</span><span class="short">One Typhoon over Jersey. Fly, look, flatten the range.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="skinSwitch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="skinLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" aria-hidden="true"><span id="skinKnob"></span></span><button type="button" id="skinHeritage" class="skinLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
 <div id="hud" class="hidden">
 <div id="brand">RANGE</div>
 <div id="location">JERSEY · CHANNEL ISLANDS</div>

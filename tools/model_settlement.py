@@ -4,8 +4,10 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
 bpy.context.window.scene=bpy.data.scenes['RANGE']
 features=json.loads((ROOT/'assets/settlement.json').read_text())['features']
+airport_file=ROOT/'assets/airport_geometry.json'
+airport_ids={f['id'] for f in json.loads(airport_file.read_text())['buildings']} if airport_file.exists() else set()
 sites=json.loads((ROOT/'assets/landmarks.json').read_text()) if (ROOT/'assets/landmarks.json').exists() else []
-replacement_radii={"Saint Aubin's Fort":30,'Elizabeth Castle':80,'Mont Orgueil Castle':46,'Corbière Lighthouse':20,'Fort Henry':30,'Fort Regent':75}
+replacement_radii={"Saint Aubin's Fort":30,'Elizabeth Castle':80,'Mont Orgueil Castle':46,'Corbière Lighthouse':20,'Fort Henry':30,'Fort Regent':135}
 replaced={}
 for site in sites:
     if site['name'] in replacement_radii and site['name'] not in replaced:replaced[site['name']]=site['point']
@@ -16,7 +18,7 @@ heights=json.loads(subprocess.check_output(['node','--input-type=module','-e',sc
 stamp=datetime.datetime.now().strftime('%Y%m%d-%H%M%S');archive=ROOT/'_archive';archive.mkdir(exist_ok=True)
 shutil.copy2(ROOT/'assets/RANGE.blend',archive/f'RANGE-before-settlement-{stamp}.blend')
 for collection in list(bpy.context.scene.collection.children):
-    if collection.name.startswith('settlement_'):
+    if collection.name.startswith(('settlement_','mobile_settlement_')):
         collection.name=f'archive_{collection.name}_{stamp}';collection.hide_render=True;collection.hide_viewport=True
 
 def material(name,colour):
@@ -27,6 +29,7 @@ wall=material('jersey_render',(.58,.55,.48));roof=material('jersey_roof',(.24,.2
 palette=[material('jersey_render_granite',(.40,.33,.28)),material('jersey_render_cream',(.64,.59,.46)),
          material('jersey_render_ochre',(.53,.40,.28)),material('jersey_render_grey',(.41,.43,.41))]
 chunks={}
+mobile_chunks={}
 def prism(points,base,top,chunk,harbour=False,pitched=False,wall_index=0):
     if len(points)<3:return
     area=sum(points[i][0]*points[(i+1)%len(points)][1]-points[(i+1)%len(points)][0]*points[i][1] for i in range(len(points)))
@@ -51,7 +54,8 @@ def prism(points,base,top,chunk,harbour=False,pitched=False,wall_index=0):
     for i in range(n):
         j=(i+1)%n;faces.append((offset+i,offset+n+i,offset+n+j,offset+j));materials.append(2 if harbour else wall_index)
 
-for feature,ground in zip(features,heights):
+for feature_index,(feature,ground) in enumerate(zip(features,heights)):
+    if feature['id'] in airport_ids:continue
     points=feature['points'];cx=sum(p[0] for p in points)/len(points);cz=sum(p[1] for p in points)/len(points)
     chunk=f'settlement_{math.floor(cx/1200)}_{math.floor(cz/1200)}'
     if feature['kind']=='building':
@@ -63,11 +67,20 @@ for feature,ground in zip(features,heights):
         wall_index=0 if family==0 else 2+family
         pitched=len(clean)==4 and area<700 and feature['height']<13
         prism(clean,base,top,chunk,pitched=pitched,wall_index=wall_index)
+        # Keep density across the whole island on phones, rather than an empty island outside
+        # a few full-detail chunks near the runway. Large navigation features always survive.
+        if feature_index%6==0 or area>1200:
+            desktop_chunks=chunks;chunks=mobile_chunks
+            prism(clean,base,top,'mobile_'+chunk,pitched=pitched,wall_index=wall_index)
+            chunks=desktop_chunks
         if pitched and area<250 and family%2==0:
             px,pz=clean[0];px=px*.3+cx*.7;pz=pz*.3+cz*.7
             prism([[px-.5,pz-.4],[px+.5,pz-.4],[px+.5,pz+.4],[px-.5,pz+.4]],top,top+3.8,chunk,wall_index=wall_index)
     elif feature['closed']:
         prism(points,-85.6,-79.6,chunk,True)
+        desktop_chunks=chunks;chunks=mobile_chunks
+        prism(points,-85.6,-79.6,'mobile_'+chunk,True)
+        chunks=desktop_chunks
     else:
         width=8 if feature['kind']=='breakwater' else 2.2
         for a,b in zip(points,points[1:]):
@@ -75,7 +88,10 @@ for feature,ground in zip(features,heights):
             if length<.1:continue
             rx=-dz/length*width/2;rz=dx/length*width/2
             prism([[a[0]+rx,a[1]+rz],[b[0]+rx,b[1]+rz],[b[0]-rx,b[1]-rz],[a[0]-rx,a[1]-rz]],-85.6,-79.6,chunk,True)
-for name,(vertices,faces,materials) in chunks.items():
+            desktop_chunks=chunks;chunks=mobile_chunks
+            prism([[a[0]+rx,a[1]+rz],[b[0]+rx,b[1]+rz],[b[0]-rx,b[1]-rz],[a[0]-rx,a[1]-rz]],-85.6,-79.6,'mobile_'+chunk,True)
+            chunks=desktop_chunks
+for name,(vertices,faces,materials) in {**chunks,**mobile_chunks}.items():
     collection=bpy.data.collections.new(name);bpy.context.scene.collection.children.link(collection)
     mesh=bpy.data.meshes.new(name);mesh.from_pydata(vertices,[],faces);mesh.update()
     for m in [wall,roof,quay]+palette:mesh.materials.append(m)

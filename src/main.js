@@ -16,6 +16,7 @@ import { Post } from './post.js';
 import { Engagement } from './engagement.js';
 import { Touch, autoGear, seekerPress, releaseBomb } from './touch.js';
 import { nextPixelRatio } from './quality.js';
+import { AIRPORT } from './airport.js';
 
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -63,7 +64,17 @@ const aircraft = new Aircraft(library, world.scene, world.quadGeometry);
 const effects = new Effects(library, world.scene, world.quadGeometry, audio);
 const engagement = new Engagement(library,world.scene,effects,aircraft,audio);
 effects.world=world;
-const post = new Post(renderer, world.quadGeometry, { samples: MOBILE ? 0 : 4, bloomDivisor: MOBILE ? 4 : 3 });
+// The mobile tier carries two samples, not none. Observed: with no MSAA on the half-float post
+// target the aircraft's normal-blended contact shadow renders as a hard black square instead of a
+// soft falloff (starkest under headless software GL; treat it as a risk on GPUs without half-float
+// blend too). Every shader-level fix tried on the shadow itself failed (texture map, premultiplied
+// alpha, polygon offset, a multiply-blended texture); the only variable that resolved it was the
+// sample count, so the mechanism is not isolated, but two samples fix it and also clean up the
+// alpha-tested clutter the phone tier was otherwise drawing aliased. Two rather than the desktop's
+// four keeps the phone cost modest; it is cheap on the tile-based mobile GPUs the touch build
+// targets. Confirm phone fps on-device; if a device struggles this can drop back to 0 (the square
+// is a software-GL artefact there anyway).
+const post = new Post(renderer, world.quadGeometry, { samples: MOBILE ? 2 : 4, bloomDivisor: MOBILE ? 4 : 3 });
 // The touch layer exists only on a coarse-pointer device or under ?touch=1; the class on body
 // switches the intro copy and the HUD layout before the sortie starts.
 const touch = touchWanted ? new Touch(input, canvas) : null;
@@ -112,7 +123,6 @@ function start() {
   $('intro').classList.add('hidden');
   $('veil').classList.add('hidden');
   $('buttons').classList.remove('hidden');
-  $('buttons').prepend($('skinControl'));
   hud.show();
   audio.start();
   chase.update(1 / 60, flight, null, true, true);
@@ -357,11 +367,11 @@ function loop(now) {
 // Poses unchanged from the first pass, with the seeding the rigid-body model needs so that legs,
 // surfaces and the canard droop are real in the frame rather than left at their reset values.
 const POSES = {
-  ramp: [0, null, 85, 0, 0],
-  takeoff: [0, 12, -800, 0.12, 92],
+  ramp: [AIRPORT.spawn[0], null, AIRPORT.spawn[1], 0, 0],
+  takeoff: [AIRPORT.spawn[0], 12, -950, 0.12, 92],
   cloud: [1600, 1000, -2600, 0.035, 200],
   bomb: [-980, 270, -3300, -0.12, 155],
-  landing: [0, 32, 590, 0.055, 84],
+  landing: [AIRPORT.spawn[0], 32, -100, 0.055, 84],
 };
 
 function stage(name) {
@@ -588,4 +598,5 @@ window.range = {
   setPaused: (value) => input.setPaused(value),
   resume: () => input.setPaused(false),
   get paused() { return input.paused; },
+  get followingMunition() { return munitionCamera.target; },
 };

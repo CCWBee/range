@@ -10,6 +10,7 @@ import { LANDCOVER } from './landcover.js';
 import { LANDMARKS } from './landmarks.js';
 import { JERSEY } from './jersey.js';
 import { ROADS } from './roads.js';
+import { AIRPORT } from './airport.js';
 import { tiled } from './loader.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -71,23 +72,16 @@ function placements() {
   const list = [];
   const add = (asset, places, options = {}) => list.push({ asset, places, ...options });
 
-  add('hangar_arch', [[-330, -130, 90], [-330, -310, 90]], { tall: true });
-  add('has', [-620, -740, -860, -980].map((z) => [-425, z, 90]), { tall: true });
-  add('tower', [[-260, 170, 0]], { tall: true });
-  add('fire_station', [[-120, 150, 180]], { tall: true });
-  add('service_block', Array.from({ length: 7 }, (_, i) => [-525, -230 - 83 * i, 0]), { tall: true });
-  add('fuel_tank', [[-570, -960, 0], [-601, -960, 0], [-570, -997, 0], [-601, -997, 0]], { tall: true });
-  add('radar', [[-700, 350, 0]], { tall: true });
-  add('windsock', [[-60, 250, 0]]);
-  add('blast_fence', [[0, 330, 180], [0, -2530, 0]], { tall: true });
-  add('bowser', [[-150, -40, 60]]);
-  add('tractor', [[-120, -20, 30]]);
-  add('gpu_cart', [[-100, 40, 0], [-95, 60, 0]]);
-  add('landrover', [[-240, 150, 100]]);
-  add('fire_tender', [[-120, 138, 180]]);
-  add('chocks', [[-1.3, 1.8, 0], [1.3, 1.8, 0]]);
-  add('sign', [[-170, -240, 0], [-170, -1090, 0], [-170, -2040, 0], [-40, 120, 0]]);
-  add('gate', [[-660, 400, 0]]);
+  add('tower', [[370, -1175, 0]], { tall: true });
+  add('fire_station', [[153, -1050, 180]], { tall: true });
+  add('fuel_tank', [[395, -850, 0], [410, -850, 0]], { tall: true });
+  add('radar', [[310, -630, 0]], { tall: true });
+  add('windsock', [[-30, -520, 0]]);
+  add('bowser', [[270, -940, 60]]);
+  add('tractor', [[245, -920, 30]]);
+  add('gpu_cart', [[220, -955, 0], [245, -1000, 0]]);
+  add('fire_tender', [[170, -1040, 180]]);
+  add('sign', [[65, -700, 0], [70, -1500, 0]]);
 
   // Range pads: containers and gabion blocks scattered within 60 m of each hardstand centre.
   const pads = [[-950, -3900], [-1090, -4050], [-800, -4170], [-1040, -4300], [-1220, -4190], [-860, -4430]];
@@ -123,7 +117,7 @@ function placements() {
 
   // A tree belt behind the service blocks, and gorse-height cards along the western boundary.
   const belt = [];
-  for (let z = -180; z > -840; z -= 22) belt.push([-585 + Math.sin(z * 0.02) * 6, z, 0]);
+  for (let z = -700; z > -1300; z -= 22) belt.push([480 + Math.sin(z * 0.02) * 6, z, 0]);
   add('tree_card', belt, { billboard: true });
 
   return list;
@@ -132,8 +126,7 @@ function placements() {
 // Fence posts every 12 m along the perimeter roads (spec 5.5).
 function fencePosts() {
   const posts = [];
-  for (let z = 400; z > -2700; z -= 12) posts.push([-672, z, 0]);
-  for (let x = -672; x < 420; x += 12) { posts.push([x, 302, 0]); posts.push([x, -2618, 0]); }
+  for (let z = -390; z > -1835; z -= 12) posts.push([-65, z, 0]);
   return posts;
 }
 
@@ -152,27 +145,23 @@ const LAMP_COLOURS = {
 function lampPlacements() {
   const lamps = { white: [], green: [], red: [], blue: [], amber: [] };
   // Runway edge lights every 60 m, both sides, from the 36 threshold at z = 300 to the 18 end.
-  for (let z = 300; z >= -2500; z -= 60) { lamps.white.push([-31.5, 0.22, z]); lamps.white.push([31.5, 0.22, z]); }
+  for (let z = -400; z >= -1840; z -= 51) { lamps.white.push([-8.5, 0.22, z]); lamps.white.push([31.1, 0.22, z]); }
   // Threshold bars: green facing runway 36 at its threshold, red at the far end.
-  for (let x = -30; x <= 30; x += 5) { lamps.green.push([x, 0.22, 300]); lamps.red.push([x, 0.22, -2500]); }
+  for (let x = -7; x <= 30; x += 4) { lamps.green.push([x, 0.22, -440]); lamps.red.push([x, 0.22, -1765]); }
   // Taxiway edge lights blue, centreline green, along the parallel taxiway.
-  for (let z = -50; z >= -2250; z -= 30) {
-    lamps.blue.push([-201, 0.22, z]); lamps.blue.push([-179, 0.22, z]);
-    lamps.green.push([-190, 0.18, z]);
-  }
-  for (let x = -180; x <= 0; x += 30) {
-    for (const z of [-250, -1100, -2050]) lamps.green.push([x, 0.18, z]);
+  for(const polygon of AIRPORT.pavement)for(let i=0;i<polygon.points.length;i+=4){
+    const [x,z]=polygon.points[i];if(x>40)lamps.blue.push([x,.22,z]);
   }
   // Approach bars every 150 m out to 900 m off the 36 threshold, five lamps to a bar.
   for (let k = 1; k <= 6; k++) {
-    const z = 300 + 150 * k;
-    for (let i = -2; i <= 2; i++) lamps.white.push([i * 3.5, 1.4, z]);
+    const z = -440 + 85 * k;
+    for (let i = -2; i <= 2; i++) lamps.white.push([11.3+i * 3, Math.max(.6,terrainHeight(11.3,z)+.6), z]);
   }
   // PAPI, four boxes on the left of runway 36, 300 m in from the threshold. Two show white and
   // two red on the correct three-degree slope, which is what the frame should read.
   for (let i = 0; i < 4; i++) {
-    const x = -46 - i * 8;
-    (i < 2 ? lamps.white : lamps.red).push([x, 0.9, 0]);
+    const x = -25 - i * 7;
+    (i < 2 ? lamps.white : lamps.red).push([x, 0.9, -690]);
   }
   return lamps;
 }
@@ -290,20 +279,31 @@ void main(){vec3 d=normalize(direction);
     // v2 scenery list drops the old `ocean` asset.
     this.oceanMaterial = new THREE.ShaderMaterial({
       depthWrite: false,
-      uniforms: { time: { value: 0 } },
+      uniforms: { time: { value: 0 }, aircraftWater: { value:new THREE.Vector4(0,0,0,0) }, waterDirection:{value:new THREE.Vector2(0,-1)} },
       vertexShader: 'varying vec3 worldP;void main(){worldP=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(worldP,1.);}',
-      fragmentShader: `varying vec3 worldP;uniform float time;${NOISE_GLSL}${COAST_GLSL}
+      fragmentShader: `varying vec3 worldP;uniform float time;uniform vec4 aircraftWater;uniform vec2 waterDirection;${NOISE_GLSL}${COAST_GLSL}
 void main(){
  vec3 eye=normalize(cameraPosition-worldP);
  float waveFade=exp(-length(cameraPosition-worldP)*.0007);
  float a=(sin(worldP.x*.06+time*.7)+sin(worldP.z*.093-time*.5))*waveFade;
  vec3 normal=normalize(vec3(a*.045,1.,cos(worldP.x*.087+worldP.z*.04+time)*.06*waveFade));
+ // A restrained surface disturbance under a very low pass gives a nearby scale reference.
+ // It fades with height; it is a visual cue, not a fluid simulation of jet exhaust.
+ vec2 offset=worldP.xz-aircraftWater.xy;
+ float aft=-dot(offset,waterDirection);
+ float across=dot(offset,vec2(-waterDirection.y,waterDirection.x));
+ float spread=5.+max(0.,aft)*.10;
+ float envelope=exp(-pow(across/spread,2.))*smoothstep(-8.,6.,aft)*(1.-smoothstep(12.,110.,aft))*aircraftWater.z;
+ float ripple=sin(across*.7+aft*.12-time*5.+noise(worldP.xz*.13)*4.);
+ normal.xz+=vec2(-waterDirection.y,waterDirection.x)*ripple*envelope*.025;
+ normal=normalize(normal);
  vec3 reflection=reflect(-eye,normal);
  vec3 reflected=atmosphere(reflection);
  float fres=pow(1.-max(0.,dot(eye,normal)),4.);
  vec3 c=mix(vec3(.025,.14,.20),reflected,.18+fres*.8);
  float foam=noise(worldP.xz*.1+time*.1);
  c+=vec3(.03)*smoothstep(.78,.95,foam);
+ c+=vec3(.09,.11,.12)*envelope*smoothstep(.35,.8,fbm(worldP.xz*.43+time*.4));
  // Surf along the true analytic coast, so the water meets the shore on the same line the
  // terrain shader discards on.
  float d=worldP.x-coastX(worldP.z);
@@ -324,6 +324,15 @@ void main(){
   // ------------------------------------------------------------------------- terrain
 
   buildTerrain() {
+    const airportCanvas=document.createElement('canvas');airportCanvas.width=airportCanvas.height=1024;
+    const airportContext=airportCanvas.getContext('2d');airportContext.fillStyle='white';
+    for(const p of AIRPORT.pavement){
+      airportContext.beginPath();
+      for(const ring of [p.points,...p.holes]){ring.forEach(([x,z],i)=>{const u=(x+100)/800*1024,v=(z+2000)/1800*1024;if(i)airportContext.lineTo(u,v);else airportContext.moveTo(u,v);});airportContext.closePath();}
+      airportContext.fill('evenodd');
+    }
+    const airportMap=new THREE.CanvasTexture(airportCanvas);airportMap.flipY=false;
+    airportMap.minFilter=airportMap.magFilter=THREE.NearestFilter;airportMap.generateMipmaps=false;
     const coverCanvas=document.createElement('canvas');coverCanvas.width=coverCanvas.height=2048;
     const coverContext=coverCanvas.getContext('2d');
     for(const area of LANDCOVER){
@@ -393,17 +402,20 @@ void main(){
     this.terrainMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.roadMap={value:roadMap};
       shader.uniforms.coverMap={value:coverMap};
+      shader.uniforms.airportMap={value:airportMap};
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 worldP;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nworldP=(modelMatrix*vec4(transformed,1.)).xyz;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', `#include <common>\nuniform sampler2D roadMap;uniform sampler2D coverMap;varying vec3 worldP;${NOISE_GLSL}${COAST_GLSL}`)
+        .replace('#include <common>', `#include <common>\nuniform sampler2D airportMap;uniform sampler2D roadMap;uniform sampler2D coverMap;varying vec3 worldP;${NOISE_GLSL}${COAST_GLSL}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
  // Analytic shoreline: drop the sea bed between the coast and the far shore so the water plane
  // shows through along the true sine coast instead of the height grid's stair-step.
  float coastD=worldP.x-coastX(worldP.z);
  // Jersey now uses measured elevation; the old analytic shoreline is no longer the land mask.
  if(worldP.y < ${(JERSEY.seaLevel+.2).toFixed(2)})discard;
+ vec2 airportUv=(worldP.xz+vec2(100.,2000.))/vec2(800.,1800.);
+ if(all(greaterThanEqual(airportUv,vec2(0.)))&&all(lessThanEqual(airportUv,vec2(1.)))&&texture2D(airportMap,airportUv).a>.5)discard;
  ${PAVEMENT.map(r=>`if(worldP.x>=${r.x0.toFixed(2)}&&worldP.x<=${r.x1.toFixed(2)}&&worldP.z>=${r.z0.toFixed(2)}&&worldP.z<=${r.z1.toFixed(2)})discard;`).join('\n')}`)
         .replace('#include <map_fragment>', `#include <map_fragment>
  // Two samples of the moor tile at different scales and rotations, so the repeat does not read.
@@ -487,9 +499,11 @@ void main(){
     this.concreteMaterial = surface(concrete, concreteNormal, concrete ? 0x929da6 : 0x5c6268, true);
     this.tarmacMaterial = surface(tarmac || concrete, concreteNormal, tarmac ? 0x8b9095 : 0x40464a, false);
 
+    // The runway, apron and taxiway are one engine-built surface now (buildAirportSurface); the old
+    // library assets named here are only the range's own, if a pack ever carries them.
     const surfaces = [
       ['runway', this.concreteMaterial], ['apron', this.concreteMaterial],
-      ['taxiway', this.tarmacMaterial], ['pavement', this.concreteMaterial],
+      ['taxiway', this.tarmacMaterial],
     ];
     for (const [name, material] of surfaces) {
       if (!this.library.has(name)) continue;
@@ -497,6 +511,7 @@ void main(){
       group.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
       this.scene.add(group);
     }
+    this.buildAirportSurface();
     for (const name of ['markings', 'runway_markings']) {
       if (!this.library.has(name)) continue;
       const group = this.library.asset(name);
@@ -505,6 +520,45 @@ void main(){
       break;
     }
     this.buildTyreMarks();
+  }
+
+  // The airport pavement, built in the engine from the surveyed AIRPORT plan, from the same polygons
+  // the terrain shader discards under. The Blender-baked `pavement` asset triangulated the union with
+  // an unconstrained Delaunay and `covers()` filter that left the 08 threshold with no triangles, so
+  // the discarded terrain there showed the reflected sky and ocean through the gap. Building from the
+  // authoritative outline, the way roads and land cover are built, cannot leave a hole.
+  buildAirportSurface() {
+    const H = 0.015;
+    const positions = [];
+    const indices = [];
+    for (const poly of AIRPORT.pavement) {
+      const base = positions.length / 3;
+      const contour = poly.points.map(([x, z]) => new THREE.Vector2(x, z));
+      const holes = poly.holes.map((h) => h.map(([x, z]) => new THREE.Vector2(x, z)));
+      for (const v of [contour, ...holes].flat()) positions.push(v.x, H, v.y);
+      // triangulateShape winds clockwise once x,z map straight down to the ground, so each face is
+      // reversed to face up; left as returned, the whole surface is back-face culled and the hole
+      // returns.
+      for (const f of THREE.ShapeUtils.triangulateShape(contour, holes)) {
+        indices.push(base + f[0], base + f[2], base + f[1]);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const surface = new THREE.Mesh(geometry, this.concreteMaterial);
+    surface.receiveShadow = true;
+    this.scene.add(surface);
+
+    // The weapons-range hardstands, the six pads the old `pavement` asset also carried.
+    const pad = new THREE.BoxGeometry(35, 0.12, 45);
+    for (const [x, z] of [[-950, -3900], [-1090, -4050], [-800, -4170], [-1040, -4300], [-1220, -4190], [-860, -4430]]) {
+      const box = new THREE.Mesh(pad, this.concreteMaterial);
+      box.position.set(x, -0.06, z);
+      box.receiveShadow = true;
+      this.scene.add(box);
+    }
   }
 
   // Rubber laid down in the touchdown zones, as dark alpha streaks on the runway.
@@ -525,11 +579,11 @@ void main(){
     const geometry = new THREE.PlaneGeometry(1, 1);
     geometry.rotateX(-Math.PI / 2);
     const marks = [];
-    for (const zone of [0, -2200]) {
+    for (const zone of [-690, -1510]) {
       for (let i = 0; i < 26; i++) {
         const side = i % 2 ? 1 : -1;
         const z = zone + (i - 13) * 9 * (zone < 0 ? -1 : 1);
-        marks.push([side * (4.5 + (i % 3)), 0.02, z, 1.4 + (i % 4) * 0.4, 16 + (i % 5) * 4]);
+        marks.push([AIRPORT.centre[0]+side * (4.5 + (i % 3)), 0.04, z, 1.4 + (i % 4) * 0.4, 16 + (i % 5) * 4]);
       }
     }
     const mesh = new THREE.InstancedMesh(geometry, material, marks.length);
@@ -586,6 +640,9 @@ void main(){
       this.scene.add(group);
     }
     let placed = 0;
+    if(this.library.has('jersey_airport')){
+      const airport=this.library.asset('jersey_airport');airport.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});this.scene.add(airport);
+    }
     const before = new Set(this.scene.children);
     for (const entry of placements()) {
       if (!this.library.has(entry.asset) || !entry.places.length) continue;
@@ -952,6 +1009,11 @@ void main(){
     this.time = elapsed;
     this.windTime.value=elapsed;this.blastImpulse.value.z+=dt;
     this.oceanMaterial.uniforms.time.value = elapsed;
+    const waterHeight=flight.position.y-JERSEY.seaLevel;
+    const lowPass=!flight.crashed && !flight.onGround && terrainHeight(flight.position.x,flight.position.z)<JERSEY.seaLevel+.2;
+    const waterStrength=lowPass ? (1-THREE.MathUtils.smoothstep(waterHeight,5,35))*THREE.MathUtils.smoothstep(flight.velocity.length(),45,120) : 0;
+    this.oceanMaterial.uniforms.aircraftWater.value.set(flight.position.x,flight.position.z,waterStrength,waterHeight);
+    this.oceanMaterial.uniforms.waterDirection.value.set(flight.velocity.x,flight.velocity.z).normalize();
     for (const material of this.cloudMaterials) material.uniforms.time.value = elapsed;
     this.sky.position.copy(camera.position);
     this.skyMaterial.uniforms.offset.value.set(

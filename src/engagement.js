@@ -132,6 +132,7 @@ export class Engagement {
     const position=this.aircraft.releaseMissile(2-this.remaining);mesh.position.copy(position);mesh.quaternion.copy(flight.attitude);this.scene.add(mesh);
     this.missiles.push({mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,30),target:s.target,age:0,trail:0});
     this.effects.lastMunition=this.missiles[this.missiles.length-1];
+    this.effects.missileLaunch?.(position,flight.velocity,flight.basis().forward);
     this.remaining--;s.locked=false;s.dwell=0;this.message('ASRAAM AWAY · hold U to follow');return true;
   }
   hitAir(target,damage,point){
@@ -192,7 +193,7 @@ export class Engagement {
       const expired=missileStep(m,m.target,dt);
       m.mesh.quaternion.setFromUnitVectors(V3(0,0,-1),m.velocity.clone().normalize());
       m.trail+=dt;
-      if(m.age<AAM.burn&&m.trail>.035){m.trail=0;this.effects.spray.spawn({position:m.position.clone(),velocity:V3(1,1,0),size:1.1,alpha:.5,life:2.7});}
+      if(m.age<AAM.burn) this.effects.missilePlume?.(m,dt);
       let hit = null;
       if (m.age > .2) for (const target of this.airTargets) {
         if (target.destroyed) continue;
@@ -207,7 +208,7 @@ export class Engagement {
   reset(){
     this.reloadTime=0;
     this.remaining=2;this.selected=null;this.elapsed=0;this.laser.active=false;
-    Object.assign(this.seeker,{enabled:false,warm:0,dwell:0,target:null,locked:false});
+    Object.assign(this.seeker,{enabled:false,warm:0,dwell:0,target:null,locked:false,status:''});
     for(const m of this.missiles)this.scene.remove(m.mesh);this.missiles.length=0;
     for(const t of this.airTargets){t.destroyed=false;t.hp=t.maxHp;t.engine=1;t.mesh.visible=true;t.age=0;t.position.set(-700,1050,-2300);t.velocity.set(199.5,6,0);}
     this.aircraft.resetMissiles?.();this.notice='';this.noticeTime=0;

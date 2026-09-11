@@ -175,9 +175,15 @@ class DependencyCheck(HTMLParser):
 
 def build(tier):
     manifest,binary=library()
+    assets=read_v3(manifest,binary)
     if tier=='mobile':
-        assets=select(read_v3(manifest,binary),SETTLEMENT_BUDGET)
-        manifest,binary=write_v3(assets,manifest['materials'],manifest.get('pivots',{}),manifest.get('blender',''))
+        if any(n.startswith('mobile_settlement_') for n in assets):
+            assets={n.removeprefix('mobile_'):p for n,p in assets.items() if not n.startswith('settlement_')}
+        else:
+            assets=select(assets,SETTLEMENT_BUDGET)
+    else:
+        assets={n:p for n,p in assets.items() if not n.startswith('mobile_settlement_')}
+    manifest,binary=write_v3(assets,manifest['materials'],manifest.get('pivots',{}),manifest.get('blender',''))
     stems=texture_stems(manifest)
     textures={};texture_bytes=0;sizes={}
     for stem in sorted(stems):

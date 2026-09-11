@@ -110,6 +110,10 @@ void main(){vec2 q=(uvp-.5)*2.;float n=fbm(uvp*11.+vAlpha*1.5);
  float edge=1.-length(q);float a=smoothstep(.03,.45,edge)*smoothstep(.25,.63,n)*vAlpha;
  vec3 c=mix(vec3(2.4,.16,.012),vec3(10.,6.5,3.2),smoothstep(.43,.74,n)*vAlpha);
  gl_FragColor=vec4(c,a);}`,{additive:true});
+    this.rocketGlow=new SpritePool(scene,quadGeometry,48,`
+varying vec2 uvp;varying float vAlpha;
+void main(){float r=length((uvp-.5)*2.);float core=exp(-r*r*18.);
+ gl_FragColor=vec4(mix(vec3(3.,.75,.12),vec3(7.,5.,2.8),core),pow(max(0.,1.-r),2.)*vAlpha);}`,{additive:true});
     this.sparks = new SpritePool(scene,quadGeometry,400,`
 varying vec2 uvp;varying float vAlpha;uniform vec3 tint;
 void main(){vec2 q=abs(uvp-.5)*2.;float a=pow(max(0.,1.-q.x),2.)*max(0.,1.-q.y)*vAlpha;
@@ -193,6 +197,27 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
 
   sparksAt(position,inherited=V3(),count=26){
     for(let i=0;i<count;i++)this.sparks.spawn({position:position.clone(),velocity:V3((Math.random()-.5)*45,8+Math.random()*30,(Math.random()-.5)*45).addScaledVector(inherited,.15),size:1.3+Math.random()*2,width:.08,alpha:1,life:.4+Math.random()*1.4});
+  }
+
+  missileLaunch(position,velocity,forward) {
+    // Ignition is visible from the aircraft camera even before the missile clears the wing.
+    this.audio?.missileLaunch?.();
+    const nozzle=position.clone().addScaledVector(forward,-1.45);
+    this.rocketGlow.spawn({position:nozzle,velocity:velocity.clone().addScaledVector(forward,-35),size:2.1,alpha:1,life:.18});
+    this.launchGlow={position:position.clone(),age:0};
+    for(let i=0;i<7;i++)this.spray.spawn({position:nozzle.clone().addScaledVector(forward,-i*.6),
+      velocity:velocity.clone().multiplyScalar(.12),size:1.1+i*.28,alpha:.62,life:.7+i*.12});
+  }
+
+  missilePlume(m,dt) {
+    // Sample along the path, rather than leaving isolated puffs at low phone frame rates.
+    const forward=m.velocity.clone().normalize();
+    while(m.trail>=.025){
+      m.trail-=.025;
+      const nozzle=m.position.clone().addScaledVector(m.velocity,-m.trail).addScaledVector(forward,-1.45);
+      this.spray.spawn({position:nozzle.clone(),velocity:V3(1,1,0),size:1.5,alpha:.62,life:2});
+      this.rocketGlow.spawn({position:nozzle,velocity:m.velocity.clone().multiplyScalar(.75),size:1.7,alpha:.9,life:.075});
+    }
   }
 
   explosion(position, strength = 1, inherited = V3()) {
@@ -387,6 +412,11 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
 
     // The flash illuminates nearby surfaces briefly; smoke and debris remain after it dies.
     for(const light of this.blastLights)light.intensity=0;
+    if(this.launchGlow){
+      const glow=this.launchGlow;glow.age+=dt;
+      if(glow.age<.22){const light=this.blastLights[0];light.position.copy(glow.position);light.intensity=75*Math.exp(-glow.age*20);}
+      else this.launchGlow=null;
+    }
     for (let i = this.blasts.length - 1; i >= 0; i--) {
       const blast = this.blasts[i];
       blast.age += dt;
@@ -473,6 +503,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
       return p.life>0 && p.alpha>.015;
     });
     this.spray.update(dt, step);
+    this.rocketGlow.update(dt,(p,d)=>{p.life-=d;p.position.addScaledVector(p.velocity,d);p.alpha=Math.min(1,p.life*16);return p.life>0;});
     this.dust.update(dt,step);
     this.fire.update(dt,(p,d)=>{p.life-=d;p.position.addScaledVector(p.velocity,d);p.size+=d*7;p.alpha*=Math.exp(-d*3.8);return p.life>0;});
     this.sparks.update(dt,(p,d)=>{p.life-=d;p.velocity.y-=9.81*d;p.velocity.multiplyScalar(Math.exp(-d*.35));p.position.addScaledVector(p.velocity,d);p.alpha=Math.min(1,p.life*2);return p.life>0&&p.position.y>groundHeight(p.position.x,p.position.z);});
@@ -484,6 +515,8 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
 
   reset() {
     this.lastMunition = null;
+    this.launchGlow = null;
+    this.rocketGlow.clear();
     this.reload = { bombs: 0, rounds: 0 };
     this.playerWreck = null;
     for (const bomb of this.bombs) this.scene.remove(bomb.mesh);

@@ -135,6 +135,23 @@ export class Audio {
     o.stop(now + 1);
   }
 
+  missileLaunch() {
+    if(!this.context)return;
+    const context=this.context,now=context.currentTime,duration=.85;
+    const buffer=context.createBuffer(1,Math.ceil(context.sampleRate*duration),context.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++){
+      const t=i/context.sampleRate;
+      data[i]=(Math.random()*2-1)*Math.exp(-t*4)+Math.sin(2*Math.PI*95*t)*Math.exp(-t*20)*.45;
+    }
+    const source=context.createBufferSource(),filter=context.createBiquadFilter(),gain=context.createGain();
+    source.buffer=buffer;filter.type='lowpass';filter.frequency.setValueAtTime(2800,now);
+    filter.frequency.exponentialRampToValueAtTime(450,now+duration);
+    gain.gain.setValueAtTime(.6,now);gain.gain.exponentialRampToValueAtTime(.001,now+duration);
+    source.connect(filter).connect(gain).connect(this.master);source.start(now);
+    source.onended=()=>{source.disconnect();filter.disconnect();gain.disconnect();};
+  }
+
   // A soft thump for a touchdown, scaled by the sink rate.
   touchdown(strength) {
     if (!this.context) return;

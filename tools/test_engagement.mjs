@@ -247,4 +247,30 @@ delete globalThis.window;delete globalThis.document;
   m.expired=false;scene.remove(m.mesh);assert(!follow.update(camera,m,true,dt),'Despawn ends held follow');
   pass('WVR signature envelope and damped munition camera lifetime');
 }
+{
+  const results=[];
+  for(const [name,position,velocity,expected] of [
+    ['5 km rear',V3(0,3000,-5000),V3(0,0,-200),true],
+    ['crossing',V3(2500,3000,-3000),V3(-200,0,0),true],
+    ['12 km fast retreat',V3(0,3000,-12000),V3(0,0,-400),false],
+    ['outside tracking cone',V3(0,3000,2000),V3(0,0,200),false],
+  ]){
+    const target={position,velocity},m={position:V3(0,3000,0),velocity:V3(0,0,-250),target,age:0};
+    let hit=false;
+    for(let i=0;i<4320;i++){
+      const a=m.position.clone(),b=target.position.clone();target.position.addScaledVector(velocity,dt);
+      if(missileStep(m,m.target,dt))break;
+      if(proximityPass(a,m.position,b,target.position)!==null){hit=true;break;}
+    }
+    assert.equal(hit,expected,name);
+    results.push({name,hit,seconds:+m.age.toFixed(2),speed:+m.velocity.length().toFixed(1)});
+  }
+  const scene=new THREE.Scene(),library={has:()=>true,asset:()=>new THREE.Group()};
+  let launches=0;
+  const fx=new Effects(library,scene,new THREE.PlaneGeometry(1,1),{missileLaunch(){launches++;}});
+  fx.missileLaunch(V3(0,1000,0),V3(0,0,-200),V3(0,0,-1));
+  assert.equal(launches,1);assert(fx.rocketGlow.live.length>0&&fx.spray.live.length>0);
+  fx.reset();assert.equal(fx.rocketGlow.live.length,0);assert.equal(fx.launchGlow,null);
+  pass('ASRAAM good and poor launch outcomes, ignition and reset',results);
+}
 console.log('ALL ENGAGEMENT CHECKS PASS');

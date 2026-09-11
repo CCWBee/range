@@ -7,6 +7,7 @@ import * as THREE from '../vendor/three.module.js';
 import { Input } from '../src/input.js';
 import { ChaseCamera } from '../src/camera.js';
 import { JERSEY } from '../src/jersey.js';
+import { AIRPORT } from '../src/airport.js';
 
 const dt = 1 / 120;
 const DEG = 180 / Math.PI;
@@ -21,7 +22,7 @@ function simulate(f, seconds, input) {
   for (let t = 0; t < seconds - dt / 2; t += dt) f.step(dt, typeof input === 'function' ? input(f, t) : input);
 }
 // An aircraft in the air: clean, throttle as given, wheels clear.
-function airborne({ x = 0, y = 1000, z = 0, V = 160, throttle = 0.8, gear = false, bombs = 4, pitch = 0, bank = 0 } = {}) {
+function airborne({ x = AIRPORT.spawn[0], y = 1000, z = -500, V = 160, throttle = 0.8, gear = false, bombs = 4, pitch = 0, bank = 0 } = {}) {
   const f = new Flight();
   f.position.set(x, y, z); f.velocity.set(0, 0, -V);
   f.attitude.setFromEuler(new THREE.Euler(pitch, 0, -bank, 'YXZ'));
@@ -43,7 +44,7 @@ const takeoffInput = f => ({ throttle: 1, pitch: f.velocity.length() > 74 ? (f.b
   while (f.velocity.length() < 70 && t0 < 30) { f.step(dt, { throttle: 1 }); t0 += dt; }
   assert(f.grounded && !f.crashed && t0 < 30, 'Must stay on runway without rotation');
   const runwaySpeed = f.velocity.length();
-  const z0 = 85;
+  const z0 = AIRPORT.spawn[1];
   let rotationSpeed = null, liftoff = null, maxAlpha = 0, recontact = false, minClimb = Infinity;
   simulate(f, 14, (f, t) => {
     if (rotationSpeed === null && !f.legs[0].contact) rotationSpeed = f.velocity.length();
@@ -75,7 +76,7 @@ const takeoffInput = f => ({ throttle: 1, pitch: f.velocity.length() > 74 ? (f.b
 function approach(vy, gear = true) {
   // 80 m/s trimmed for a steady descent: alpha 0.20 rad gives 1 g at this speed.
   const gamma = Math.atan2(vy, 80);
-  const f = airborne({ y: 1.87 + 2.0, z: -100, V: 80, throttle: 0.28, gear, pitch: 0.20 + gamma });
+  const f = airborne({ x:AIRPORT.spawn[0], y: 1.87 + 2.0, z: -500, V: 80, throttle: 0.28, gear, pitch: 0.20 + gamma });
   f.velocity.set(0, vy, -80); f.airborneTime = 60;
   return f;
 }
@@ -97,7 +98,7 @@ function approach(vy, gear = true) {
 
 // --- 4. Hard landing rejection (original) -------------------------------------------------
 {
-  const bad = airborne({ y: 3, z: -100, V: 85 });
+  const bad = airborne({ y: 3, z: -500, V: 85 });
   bad.velocity.set(0, -12, -85);
   simulate(bad, 1, {});
   assert(bad.crashed, 'Hard belly impact must fail');
@@ -281,7 +282,7 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   let rotatedEarly = false, liftoff = null, maxAlpha = 0, recontact = false, Vr = 0;
   fly(f, 30, f => { Vr = 1.12 * f.stallSpeed; return f.ias >= Vr ? aimAt(0, 10)(f) : aimAt(0, 0)(f); }, { throttle: 1 }, (f, t) => {
     if (f.ias < Vr && !f.legs[0].contact) rotatedEarly = true;
-    if (liftoff === null && !f.onGround) liftoff = { t, speed: f.velocity.length(), run: 85 - f.position.z };
+    if (liftoff === null && !f.onGround) liftoff = { t, speed: f.velocity.length(), run: AIRPORT.spawn[1] - f.position.z };
     if (liftoff && t - liftoff.t <= 3) maxAlpha = Math.max(maxAlpha, f.alpha);
     if (liftoff && f.onGround) recontact = true;
   });
@@ -289,9 +290,9 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   pass('instructor ground take-off', { Vr: round(Vr, 1), liftoffTime: round(liftoff.t, 1), liftoffSpeed: round(liftoff.speed, 1), liftoffRun: round(liftoff.run, 0), maxAlpha: round(maxAlpha), altitude: round(f.position.y, 0) });
 }
 {
-  const f = airborne({ y: 210, z: 4300, V: 82, throttle: 0.3, gear: true, pitch: 0.16 });
+  const f = airborne({ x:AIRPORT.spawn[0], y: 210, z: 3560, V: 82, throttle: 0.3, gear: true, pitch: 0.16 });
   f.velocity.set(0, -82 * Math.sin(3 / DEG), -82 * Math.cos(3 / DEG));
-  const threshold = new THREE.Vector3(0, 0, 300);
+  const threshold = new THREE.Vector3(AIRPORT.spawn[0], 0, -440);
   let flare = false, touchdown = null;
   fly(f, 90, f => {
     if (!flare && f.position.y - 1.87 < 12) flare = true;
@@ -308,7 +309,7 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
   });
   assert(touchdown && touchdown.vy < 3.5 && !f.crashed, `landing: touchdown ${JSON.stringify(touchdown)} ${f.crashReason}`);
   assert(f.stopped && touchdown.z - f.position.z < 1500, `landing roll ${touchdown && touchdown.z - f.position.z}`);
-  assert(Math.abs(touchdown.x) < 31 && touchdown.z < 300 && touchdown.z > -2500, 'touchdown on the runway');
+  assert(Math.abs(touchdown.x-AIRPORT.spawn[0]) < 19 && touchdown.z < -440 && touchdown.z > -1765, 'touchdown on the surveyed runway');
   pass('instructor landing', { touchdownVy: round(touchdown.vy, 2), touchdownSpeed: round(touchdown.speed, 1), touchdownZ: round(touchdown.z, 0), touchdownX: round(touchdown.x, 1), pitchAtTouchdown: round(touchdown.pitch, 1), rollOut: round(touchdown.z - f.position.z, 0) });
 }
 {
@@ -383,7 +384,8 @@ const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG
 // --- 14. Shared numbers: terrain, pavement, noise range ------------------------------------
 {
   const samples = [[0, 0], [-1000, -4200], [900, -3000], [3000, -4000], [5500, -4000]].map(([x, z]) => [x, z, +terrainHeight(x, z).toFixed(6)]);
-  assert(onPavement(0, 0) && onPavement(-425, -620) && !onPavement(100, 0), 'pavement lookup');
+  assert(onPavement(11.3, -900) && onPavement(-950, -3900) && !onPavement(100, 0), 'pavement lookup');
+  assert(!onPavement(0,0)&&!onPavement(0,-2200),'Old runway extensions must return to natural terrain');
   let lo = 1, hi = -1;
   for (let i = 0; i < 4000; i++) { const v = fbm2(i * 0.37, i * 0.11); lo = Math.min(lo, v); hi = Math.max(hi, v); }
   assert(lo >= -1 && hi <= 1 && hi - lo > 0.5, `fbm2 range ${lo}..${hi}`);
