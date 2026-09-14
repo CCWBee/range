@@ -191,6 +191,10 @@ function setAircraft(type) {
   flight.airframe = type; reset();
   setSwitch('aircraftSwitch', AIRFRAME_LEGENDS, type);
   $('skinSwitch').style.display = type === 'wyvern' ? 'none' : '';
+  $('gunHelp').textContent = type === 'wyvern' ? 'Four wing-mounted Hispano cannons' : '27 mm cannon';
+  $('bombHelp').textContent = type === 'wyvern' ? 'Release torpedo, low and level over water' : 'Release Paveway';
+  $('seekerHelp').textContent = type === 'wyvern' ? 'Fire RP-3 rocket' : 'Heat-seeking missile sensor on / off';
+  $('missileHelp').textContent = type === 'wyvern' ? 'Fire RP-3 rocket, no lock needed' : 'Launch locked heat-seeking missile';
   return true;
 }
 
@@ -312,7 +316,7 @@ function frame(dt, stepSim) {
     gunTimer -= dt;
     if (!input.devCamera && input.gunFiring() && gunTimer <= 0 && !flight.crashed) {
       effects.fireGun(flight);
-      gunTimer = 0.065;
+      gunTimer = flight.airframe === 'wyvern' ? .08 : .065;
     }
     effects.update(dt, flight, camera, elapsed);
     audio.update(flight, false);

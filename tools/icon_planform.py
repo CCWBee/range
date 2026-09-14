@@ -233,10 +233,10 @@ CORNER = 14           # 21.9 per cent of the side
 # `wing` shapes are reflected into a separate subpath. Both reflections reverse the point order
 # so every subpath winds the same way and the non-zero fill unions them instead of punching
 # holes where they overlap.
-BODY = [(32, 4), (34, 4), (36, 7), (36, 30), (40, 50), (40, 60),
-        (36, 60), (36, 56), (32, 56)]                       # nose facet, side, flare, one nozzle
-CANARD = [(34, 13), (44, 20), (44, 24), (34, 24)]           # root buried in the fuselage
-WING = [(32, 29), (36, 29), (55, 50), (55, 52), (32, 52)]   # delta with a two unit cropped tip
+BODY = [(32, 3), (33.5, 8), (35, 18), (35, 30), (38, 45), (38, 59),
+        (33, 59), (33, 56), (32, 56)]                     # pointed radome and paired exhausts
+CANARD = [(34, 17), (43, 24), (43, 27), (34, 24)]         # forward canards, clear of the delta
+WING = [(32, 28), (35, 29), (53, 49), (53, 52), (38, 49), (32, 49)]
 
 
 def mirror(points, axis=True):

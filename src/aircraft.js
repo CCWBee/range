@@ -90,6 +90,7 @@ export class Aircraft {
       this.wyvern=new THREE.Group();this.root.add(this.wyvern);
       this.wyvern.add(this.library.asset('wyvern_body'));
       this.wyvernGear=this.library.asset('wyvern_gear');this.wyvern.add(this.wyvernGear);
+      this.wyvernMainGear=[-1,1].map(side=>{const leg=this.library.asset(side<0?'wyvern_gear_l':'wyvern_gear_r');leg.position.set(side*2.2,-.1,0);this.wyvern.add(leg);return leg;});
       this.props=[-1,1].map(sign=>{const p=this.library.asset('wyvern_prop');p.position.z=-6.4+sign*.22;this.wyvern.add(p);return p;});
       this.rockets=[];
       for(let j=0;j<8;j++)for(const side of [-1,1]){
@@ -340,7 +341,10 @@ export class Aircraft {
     if(this.type==='wyvern'){
       this.props.forEach((p,i)=>p.rotation.z+=dt*(8+flight.spool*65)*(i?1:-1));
       this.wyvernGear.visible=flight.gearPosition>.02;
-      this.wyvernGear.rotation.z=(1-flight.gearPosition)*Math.PI*.48;
+      for(let i=0;i<2;i++){
+        this.wyvernMainGear[i].visible=flight.gearPosition>.02;
+        this.wyvernMainGear[i].rotation.z=(i===0?1:-1)*(1-flight.gearPosition)*Math.PI*.48;
+      }
       this.contactShadow.visible=false;
       if(this.reheatLight)this.reheatLight.intensity=0;
       if(this.landingLight)this.landingLight.intensity=0;
@@ -448,5 +452,5 @@ export class Aircraft {
   releaseRocket(index){const r=this.rockets[index];r.visible=false;return r.getWorldPosition(V3());}
   resetRockets(){for(const r of this.rockets||[])r.visible=true;}
   releaseMissile(index){const store=this.missileStores[index];if(!store)return this.root.localToWorld(V3(0,-1,0));store.visible=false;return store.getWorldPosition(V3());}
-  resetMissiles(){for(const store of this.missileStores||[])store.visible=true;}
+  resetMissiles(){for(const store of this.missileStores||[])store.visible=this.type!=='wyvern';}
 }

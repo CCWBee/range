@@ -297,15 +297,24 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
 
   fireGun(flight) {
     if (flight.rounds <= 0 || flight.crashed) return false;
-    flight.rounds--;
     const forward = flight.basis().forward;
+    const muzzles = flight.airframe === 'wyvern' ? [-2.55,-2,2,2.55] : [0];
+    for (const x of muzzles) {
+    if (flight.rounds <= 0) break;
+    flight.rounds--;
+    const position = flight.airframe === 'wyvern'
+      ? V3(x,-.08,-2.8).applyQuaternion(flight.attitude).add(flight.position)
+      : flight.position.clone().addScaledVector(forward,8);
+    const direction = flight.airframe === 'wyvern'
+      ? flight.position.clone().addScaledVector(forward,400).sub(position).normalize() : forward;
     this.shots.push({
-      position: flight.position.clone().addScaledVector(forward, 8),
-      velocity: flight.velocity.clone().addScaledVector(forward, 1020),
+      position,
+      velocity: flight.velocity.clone().addScaledVector(direction, flight.airframe === 'wyvern' ? 840 : 1020),
       age: 0,
     });
     this.hitFlash = 0.025;
-    this.fire.spawn({position:flight.position.clone().addScaledVector(forward,8),velocity:flight.velocity.clone(),size:1.8,alpha:1,life:.045});
+    this.fire.spawn({position:position.clone(),velocity:flight.velocity.clone(),size:1.2,alpha:1,life:.045});
+    }
     return true;
   }
 
@@ -335,7 +344,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
         if (this.reload[kind] >= seconds) {
           flight[kind] = capacity; this.reload[kind] = 0;
           if (kind === 'bombs') this.engagement?.aircraft.resetStores();
-          this.engagement?.message(kind === 'bombs' ? 'PAVEWAYS RELOADED' : 'GUN RELOADED');
+          this.engagement?.message(kind === 'bombs' ? (flight.airframe === 'wyvern' ? 'TORPEDO RELOADED' : 'PAVEWAYS RELOADED') : 'GUN RELOADED');
         }
       } else this.reload[kind] = 0;
     }
