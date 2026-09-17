@@ -68,7 +68,8 @@ export function missileStep(m, target, dt) {
   m.velocity.addScaledVector(steer,dt).normalize().multiplyScalar(nextSpeed);
   m.velocity.y-=9.81*dt;
   m.position.addScaledVector(m.velocity,dt);
-  return m.age>AAM.life || m.position.y<groundHeight(m.position.x,m.position.z);
+  // Detonate at the sea surface, not the DEM sea floor 12 m below it, as rockets and bombs do.
+  return m.age>AAM.life || m.position.y<Math.max(-82.6,groundHeight(m.position.x,m.position.z));
 }
 
 export function guidedBombStep(b, laser, dt) {
