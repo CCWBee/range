@@ -179,7 +179,7 @@ export class World {
     this.renderer = renderer;
     this.library = library;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x7e8b91, 0.000105);
+    this.scene.fog = new THREE.FogExp2(0x8a857b, 0.000105);
     this.time = 0;
     this.blastImpulse={value:new THREE.Vector4(0,0,100,0)};
     this.windTime={value:0};
@@ -501,7 +501,7 @@ void main(){
  vec3 faceNormal=normalize(cross(dFdx(worldP),dFdy(worldP)));
  float exposed=smoothstep(.22,.72,1.-abs(faceNormal.y)+noise(worldP.xz*.028)*.14);
  float north=clamp((-worldP.x+1000.)/5000.,0.,1.);
- vec3 granite=mix(vec3(.39,.20,.13),vec3(.43,.34,.31),north);
+ vec3 granite=mix(vec3(.50,.32,.24),vec3(.46,.36,.32),north);
  float strata=noise(vec2(worldP.x*.075+worldP.z*.04,worldP.y*.32));
  granite*=.72+.48*strata;
  diffuseColor.rgb=mix(diffuseColor.rgb,granite,exposed);
@@ -685,6 +685,7 @@ void main(){
       material.customProgramCacheKey=()=>`jersey-surface-${name}`;
       material.roughness=.94;
       if(name==='jersey_render')material.color.setRGB(.43,.39,.32);
+      if(name==='landmark_granite')material.color.setRGB(.55,.40,.32); // Jersey granite reads pink-orange, not flat grey-brown
       material.onBeforeCompile=shader=>{
         shader.vertexShader=shader.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 facadeP;varying vec3 facadeN;')
           .replace('#include <worldpos_vertex>','#include <worldpos_vertex>\nfacadeP=(modelMatrix*vec4(transformed,1.)).xyz;facadeN=normalize(mat3(modelMatrix)*normal);');
@@ -699,8 +700,15 @@ void main(){
  float mortar=step(.94,fract(facadeP.y*2.4))+step(.97,fract(horizontal*1.4+floor(facadeP.y*2.4)*.5));
  diffuseColor.rgb*=mix(.83,1.1,noise(facadeP.xz*.13));
  diffuseColor.rgb*=1.-min(1.,mortar)*.12*detailFade;
- ${name.startsWith('jersey_render')?'diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.065,.095,.11),windowMask*wall*.86*detailFade);':''}
- `);
+ float litWin=0.;
+ ${name.startsWith('jersey_render')?`
+ // A hashed third of the windows are lit at dusk; the rest keep dark glazing. The lit ones are
+ // emissive above the bloom threshold, so they glow and follow the real building footprints.
+ float litCell=step(.68,hash(floor(vec2(horizontal/3.5,facadeP.y/3.2))*vec2(1.,1.31)+3.7));
+ litWin=windowMask*wall*detailFade*litCell;
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.065,.095,.11),windowMask*wall*.86*detailFade*(1.-litCell));`:''}
+ `)
+          .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n totalEmissiveRadiance += litWin*vec3(1.0,.72,.42)*1.5;');
       };
     }
     // Real footprints are merged in Blender into spatial chunks, allowing ordinary frustum

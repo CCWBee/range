@@ -36,7 +36,10 @@ uniform float flash;
 void main() {
   vec3 col = texture2D(image, uvp).rgb + texture2D(bloom, uvp).rgb * 0.4;
   col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), 0.12);
-  col *= vec3(0.97, 1.0, 1.025);
+  // Dusk split-tone: warm the shadows and midtones toward the low sun and leave the highlights
+  // slightly cool, instead of a flat cool lift, so the golden-hour cast carries across the frame.
+  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col *= mix(vec3(1.06, 0.99, 0.86), vec3(0.98, 1.0, 1.04), smoothstep(0.15, 0.7, luma));
   float vignette = 1.0 - 0.21 * pow(length((uvp - 0.5) * 1.3), 2.0);
   col *= vignette;
   col += flash * 0.025;
