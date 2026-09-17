@@ -152,6 +152,17 @@ export class Instructor {
     let pDem = clamp((1 - w) * pSmall + w * pLargeLimited, -3.5, 3.5);
     let qDem = (1 - w) * qSmall + w * qLarge;
 
+    // Deliberate banked aiming uses body axes, including an inverted positive-g pull.
+    // Keep the gentle upright and low-speed recovery laws for small corrections.
+    const bodyAim = active && !latched ? authority * smoothstep(Math.abs(phi), 1.35, 1.55)
+      * smoothstep(theta, .04, .16) : 0;
+    const ahead = t.dot(forward);
+    const bodyPitch = Math.atan2(by, Math.max(.01, ahead));
+    const rollToAim = Math.atan2(bx * (by < 0 ? -1 : 1), Math.max(.04, Math.abs(by)));
+    pDem = THREE.MathUtils.lerp(pDem, clamp(3.5 * rollToAim, -3.5, 3.5), bodyAim);
+    qDem = THREE.MathUtils.lerp(qDem, 3.8 * bodyPitch, bodyAim);
+    const aimYaw = bodyAim * clamp(2.4 * Math.atan2(bx, Math.max(.1, ahead)), -.6, .6);
+
     // Keyboard on top, before the guard and the caps so they still win.
     const keyRoll = Math.abs(k.roll) > 0.05;
     // Direct pitch takes precedence over a saved mouse target, avoiding opposed demands.
@@ -166,7 +177,7 @@ export class Instructor {
     const flightCmd = {
       pitch: clamp(qDem >= 0 ? qDem / pull : qDem / push, -1, 1),
       roll: keyRoll ? k.roll : clamp(pDem / pMax(V, flight.bombs, flight.gearPosition), -1, 1),
-      yaw: k.yaw,
+      yaw: Math.abs(k.yaw) > .05 ? k.yaw : aimYaw,
     };
 
     // Ground law (3.4): keys own the roll, the nose wheel tracks the aim ahead, rotation is a

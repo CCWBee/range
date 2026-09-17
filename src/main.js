@@ -152,8 +152,32 @@ function setPauseUi(paused) {
   audio.update(flight,paused);
   if(paused)audio.seeker(false,false,false);
   const resume = touch?.active ? 'Tap to continue.' : 'Click the view to take the controls back.';
-  hud.setStatus(paused && !flight.crashed ? `PAUSED<small>${resume}</small>` : '');
+  hud.setStatus(paused && !flight.crashed ? `PAUSED<small>${resume}</small><button id="returnMenu" type="button">Back to aircraft selection</button>` : '');
+  if ($('returnMenu')) $('returnMenu').onclick = returnToMenu;
   if (flight.crashed) hud.crashShown = false;
+}
+
+function returnToMenu() {
+  running = false;
+  input.running = false;
+  input.exitLock();
+  input.virtualLock = false;
+  input.keys.clear();
+  input.gunHeld = false;
+  input.touchLook = false;
+  touchFollow = null;
+  if (touch) { touch.active = false; touch.throttle = 0; touch.syncWakeLock(true); }
+  reset();
+  staged = false;
+  audio.update(flight, true);
+  audio.seeker(false, false, false);
+  $('hud').classList.add('hidden');
+  $('touch').classList.add('hidden');
+  $('buttons').classList.add('hidden');
+  $('help').classList.add('hidden');
+  $('intro').classList.remove('hidden');
+  $('veil').classList.remove('hidden');
+  $('start').focus();
 }
 
 input.on('pause', setPauseUi);
@@ -280,7 +304,10 @@ if (touch) {
   });
 }
 $('helpToggle').onclick = () => hud.toggleHelp();
-$('pauseButton').onclick = () => { input.setPaused(true); input.exitLock(); };
+$('pauseButton').onclick = () => {
+  if (input.paused) input.requestLock();
+  else { input.setPaused(true); input.exitLock(); }
+};
 $('sound').onclick = () => { $('sound').textContent = audio.toggleMute() ? 'SOUND OFF' : 'SOUND ON'; };
 $('skinChoice').onchange = (event) => setSkin(event.target.value);
 

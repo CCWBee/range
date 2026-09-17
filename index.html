@@ -60,6 +60,9 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0
 #buttons button:hover{opacity:1}
 #status{position:absolute;top:29%;left:50%;transform:translateX(-50%);text-align:center;font-size:28px;letter-spacing:.08em;line-height:1.6;pointer-events:none;color:var(--ink)}
 #status small{display:block;font-size:14px;letter-spacing:.02em;color:var(--ink);opacity:.82}
+#status button{display:block;margin:14px auto 0;min-height:44px;padding:8px 14px;background:var(--stop-veil);color:var(--ink);border:1px solid currentColor;font:inherit;font-size:14px;pointer-events:auto;cursor:pointer}
+#status button:focus-visible{outline:2px solid var(--ink);outline-offset:4px}
+body:has(#returnMenu) #markers,body:has(#returnMenu) #hint{display:none}
 /* Paused, the whole screen dims to the stop veil, as it does on the touch build: the veil is #hud's
    own background so the render dims while the HUD text and the status line stay lit. */
 body:not(.touch):has(#status:not(:empty)) #hud{background:var(--stop-veil)}
@@ -563,7 +566,7 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
 <div id="hud" class="hidden">
 <div id="brand">RANGE</div>
 <div id="location">JERSEY · CHANNEL ISLANDS</div>
-<div id="objective">RUNWAY 08 · DEPARTURE</div>
+<div id="objective" hidden></div>
 <div id="killConfirmation" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <svg id="markers" aria-hidden="true">
  <g id="fpm" fill="none" stroke="#e6ecee" stroke-width="1" opacity="0.9">
@@ -588,13 +591,13 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
  </g>
  <g id="seekerEnvelope" visibility="hidden" fill="none" stroke="#e5dfcd" stroke-width="1" opacity=".35"><circle r="100"/></g>
  <g id="seekerHead" visibility="hidden" fill="none" stroke="#e5dfcd" stroke-width="1.5"><circle r="19"/><path d="M-25,0 H-20 M20,0 H25 M0,-25 V-20 M0,20 V25"/></g>
- <g id="laserMark" visibility="hidden" fill="none" stroke="#e8c78b" stroke-width="1.5"><path d="M-14,-6 V-14 H-6 M6,-14 H14 V-6 M14,6 V14 H6 M-6,14 H-14 V6"/><text y="-23" fill="#e8c78b" stroke="none" text-anchor="middle" font-size="10">LTD</text></g>
+ <g id="laserMark" visibility="hidden" fill="none" stroke="#e8c78b" stroke-width="1.5"><path d="M-14,-6 V-14 H-6 M6,-14 H14 V-6 M14,6 V14 H6 M-6,14 H-14 V6"/><text y="-23" fill="#e8c78b" stroke="none" text-anchor="middle" font-size="10"></text></g>
 </svg>
 <div id="telemetry">
  <div><label><span class="long">AIRSPEED</span><span class="short">IAS</span></label><b id="speed">0</b><span>KM/H</span></div>
  <div><label title="Metres above mean sea level"><span class="long">ALTITUDE</span><span class="short">ALT</span></label><b id="alt">0</b><span>M</span></div>
  <div><label>THROTTLE</label><b id="throttle">0</b><span>%</span></div>
- <div><label><span class="long">HEADING</span><span class="short">HDG</span></label><b id="heading">000</b></div>
+ <div class="hidden"><b id="heading">000</b></div>
 </div>
 <div id="flightstate">
  <div><i>G</i><b id="load">1.0</b></div>
@@ -606,8 +609,8 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
  <div id="weaponState">WEAPONS READY</div>
  <div id="gear">GEAR DOWN</div>
  <div id="weapons">GUN 150 · BOMBS 4</div>
- <div id="instructor">INSTRUCTOR ON</div>
- <div id="laserState">LTD · OFF</div>
+ <div id="instructor"></div>
+ <div id="laserState" hidden></div>
  <div id="fps"></div>
 </div>
 <div id="hint">Click to take the controls. The aircraft flies towards the circle.</div>

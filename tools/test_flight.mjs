@@ -226,6 +226,26 @@ function fly(f, seconds, aimFn, keys = {}, watch = () => {}) {
   return ins;
 }
 const aimAt = (az, el) => f => ({ direction: aimFromAngles(f, az / DEG, el / DEG), active: true });
+for (const angle of [90, -90, 175, -175]) {
+  const f = airborne({ V: 200, bank: angle / DEG });
+  const ins = new Instructor();
+  const { forward, up, right } = f.basis();
+  const target = forward.clone().addScaledVector(up, .5).normalize();
+  const aim = { direction: target, active: true };
+  const first = ins.update(dt, f, aim, {});
+  assert(first.pitch > .8 && Math.abs(first.roll) < .15, `bank ${angle}: pull without forced upright roll`);
+  const sideways = ins.update(dt, f, { direction: target.clone().addScaledVector(right, .2).normalize(), active: true }, {});
+  assert(sideways.yaw > .1, `bank ${angle}: rudder assists sideways aim`);
+  const initial = f.basis().forward.angleTo(target);
+  let maxLoad = 0;
+  for (let t = 0; t < 1; t += dt) {
+    f.step(dt, ins.update(dt, f, aim, {}));
+    maxLoad = Math.max(maxLoad, f.load);
+  }
+  const error = f.basis().forward.angleTo(target);
+  assert(!f.crashed && error < initial * .65 && maxLoad > 3, `bank ${angle}: converges under positive g, error ${error}, load ${maxLoad}`);
+  pass('banked mouse pull', { bank: angle, errorDegrees: round(error * DEG, 1), maxLoad: round(maxLoad, 1) });
+}
 {
   const f = airborne();
   const h0 = heading(f), y0 = f.position.y;

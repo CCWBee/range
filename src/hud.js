@@ -117,13 +117,13 @@ export class Hud {
     const engagement=effects.engagement;
     el.weapons.textContent = flight.airframe==='wyvern' ? `20 MM ${flight.rounds} · TORPEDO ${flight.bombs} · RP-3 ${engagement?.rocketsRemaining ?? 16}` : `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · IR MISSILE ${engagement?.remaining ?? 0}`;
     const stallWarning = !flight.onGround && !flight.crashed && (flight.stall || instructor.state.stallGuard > .3);
-    el.instructor.textContent = stallWarning ? 'STALL · LOWER NOSE' : 'INSTRUCTOR ON';
+    el.instructor.textContent = stallWarning ? 'STALL · LOWER NOSE' : '';
     el.instructor.classList.toggle('stall-warning',stallWarning);
     if (flight.bombs === 0) el.weapons.textContent += ` · BOMBS ${Math.ceil(25-(effects.reload?.bombs||0))}s`;
     if (flight.rounds === 0) el.weapons.textContent += ` · GUN ${Math.ceil(12-(effects.reload?.rounds||0))}s`;
     if (engagement?.remaining === 0) el.weapons.textContent += ` · MISSILES ${Math.ceil(20-(engagement.reloadTime||0))}s`;
 
-    this.updateObjective(flight, effects, options);
+    el.objective.textContent = '';
     this.updateHint(flight, input, effects, options);
 
     if (flight.crashed && !this.crashShown) {
@@ -328,6 +328,6 @@ export class Hud {
     const laser=this.project(e.laser.point,camera);this.place($('laserMark'),laser,!!laser&&e.laser.active);
     $('weaponState').textContent=s.enabled?(s.status || 'NO SEEKER CONTACT'):e.laser.active?'LASER ON':'WEAPONS READY';
     $('weaponState').classList.toggle('locked',s.locked);
-    $('laserState').textContent=e.laser.active?'LTD · ON':'LTD · OFF';
+    $('laserState').textContent='';
   }
 }
