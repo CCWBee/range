@@ -12,6 +12,9 @@ import { guidedBombStep } from './engagement.js';
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const clamp = THREE.MathUtils.clamp;
 const lerp = THREE.MathUtils.lerp;
+// A constant read-only lerp target for the smoke drift, hoisted out of the per-particle step so the
+// smoke pool does not allocate a Vector3 per particle per frame.
+const SMOKE_DRIFT = new THREE.Vector3(2, 4, 1);
 
 export const RANGE_PADS = [[-950, -3900], [-1090, -4050], [-800, -4170], [-1040, -4300], [-1220, -4190], [-860, -4430]];
 
@@ -410,17 +413,23 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     let tracerCount = 0;
     const line = new THREE.Line3();
     const closest = V3();
+    // Ground targets do not move within a frame, so lift their gun-collision centres out of the
+    // per-shot loop: one reused Vector3 per target, not two allocated per shot-per-target per frame.
+    const centres = (this._gunCentres ||= []);
+    for (let ti = 0; ti < this.targets.length; ti++) (centres[ti] ||= V3()).copy(this.targets[ti].position).y += 1;
+    const prevShot = (this._prevShot ||= V3());
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const shot = this.shots[i];
-      const previous = shot.position.clone();
+      prevShot.copy(shot.position);
       shot.velocity.y -= 9.81 * dt;
       shot.position.addScaledVector(shot.velocity, dt);
       shot.age += dt;
       let hit = false;
-      line.set(previous, shot.position);
-      for (const target of this.targets) {
+      line.set(prevShot, shot.position);
+      for (let ti = 0; ti < this.targets.length; ti++) {
+        const target = this.targets[ti];
         if (target.destroyed) continue;
-        const centre = target.position.clone().add(V3(0, 1, 0));
+        const centre = centres[ti];
         line.closestPointToPoint(centre, true, closest);
         if (closest.distanceTo(centre) < (target.ship?18:3.8)) {
           target.hp--;
@@ -541,7 +550,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
       p.position.addScaledVector(p.velocity,d);
       p.velocity.x += Math.sin(p.life*1.7+p.position.z*.03)*d*1.2;
       p.velocity.z += Math.cos(p.life*1.3+p.position.x*.03)*d*1.2;
-      p.velocity.lerp(V3(2,4,1),1-Math.exp(-d*.35));
+      p.velocity.lerp(SMOKE_DRIFT,1-Math.exp(-d*.35));
       p.size += d*2.1;
       p.alpha *= Math.exp(-d*.12);
       return p.life>0 && p.alpha>.015;

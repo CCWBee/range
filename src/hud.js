@@ -263,7 +263,10 @@ export class Hud {
         velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
         guided: true, age: 0,
       };
-      for (let i = 0; i < 2400; i++) if (guidedBombStep(predicted, effects.engagement?.laser, 1 / 60)) break;
+      // 1200 steps (20 s) bounds the loop: guidedBombStep returns true at impact, so a real drop
+      // from the y<1600 window breaks well before this (about 925 steps from the ceiling); the cap
+      // only limits a laser-guided glide that never reaches the ground.
+      for (let i = 0; i < 1200; i++) if (guidedBombStep(predicted, effects.engagement?.laser, 1 / 60)) break;
       this.bombPrediction = predicted.position;
       this.bombPredictionTime = performance.now();
       }
@@ -298,6 +301,8 @@ export class Hud {
 
   updateEngagement(flight,camera,input,e,detachedView=false,munition=null){
     const svg=this.el.markers,ns='http://www.w3.org/2000/svg';
+    const anchorV=(this._anchor||(this._anchor=V3())),sightV=(this._sight||(this._sight=V3()));
+    const now=performance.now();
     for(const t of [...e.effects.targets,...e.airTargets]){
       let g=this.targetMarks.get(t);
       if(!g){
@@ -307,10 +312,18 @@ export class Hud {
       }
       // Anchor at the rendered object's world origin. Keep the label's gap in screen pixels:
       // adding world Y makes it drift sideways relative to the object when the view rotates.
-      const anchor = t.mesh ? t.mesh.getWorldPosition(V3()) : t.position;
+      const anchor = t.mesh ? t.mesh.getWorldPosition(anchorV) : t.position;
       const observer = detachedView ? camera.position : flight.position;
       const distance=observer.distanceTo(anchor),p=this.project(anchor,camera);
-      const visible=!t.destroyed&&distance<7500&&p&&p.x>25&&p.x<innerWidth-25&&p.y>80&&p.y<this.markerFloor()&&clearSight(camera.position,t.position.clone().add(V3(0,2,0)));
+      // The cheap tests gate the terrain occlusion ray, and the ray (28 groundHeight samples) is
+      // cached per target and refreshed at 10 Hz: it decides visibility, not placement, so a tenth
+      // of a second of lag is invisible while the per-frame terrain-sampling cost drops by six.
+      const onScreen=!t.destroyed&&distance<7500&&p&&p.x>25&&p.x<innerWidth-25&&p.y>80&&p.y<this.markerFloor();
+      let visible=onScreen;
+      if(onScreen){
+        if(t._sightAt===undefined||now-t._sightAt>100){t._sight=clearSight(camera.position,sightV.copy(t.position).setY(t.position.y+2));t._sightAt=now;}
+        visible=t._sight;
+      }
       this.place(g,p,!!visible);
       if(visible){g.children[0].setAttribute('d',`M-${8*t.hp/t.maxHp},-14 H${8*t.hp/t.maxHp}`);g.children[1].textContent=t.name;g.children[2].textContent=`${(distance/1000).toFixed(2)} KM`;g.setAttribute('opacity',t===e.selected?'1':'.64');}
     }

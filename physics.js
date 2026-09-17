@@ -13,6 +13,15 @@ const clamp = THREE.MathUtils.clamp;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const WORLD_UP = V3(0, 1, 0);
 
+// Reused per-step scratch. Flight.step runs at 120 Hz and is never re-entrant (JS is single
+// threaded and step never calls step), so these module temporaries are safe to share across the
+// one call in flight and remove the largest source of steady GC churn. Each is fully written before
+// it is read within a step; none is retained across steps. basis() is deliberately NOT scratched:
+// it returns fresh vectors the camera and HUD hold and read after the step.
+const _force = V3(), _torque = V3(), _omegaW = V3(), _vb = V3(), _velDir = V3(), _liftDir = V3(),
+  _gyro = V3(), _predicted = V3(), _tipW = V3();
+const _invAtt = new THREE.Quaternion();
+
 export const G0 = 9.81;
 export const RHO0 = 1.225;
 export const WING_AREA = 51.2;
@@ -161,6 +170,7 @@ const TRAVEL = 0.35;
 const BELLY_Y = -0.9;
 const NOSE_TIP = V3(0, -0.3, -8);
 const WINGTIPS = [V3(-5.4, -0.1, 3.9), V3(5.4, -0.1, 3.9)];
+const CRASH_TIPS = [NOSE_TIP, ...WINGTIPS];
 // Static rest: mains compressed 0.225 m from y = -1.87 puts the centre of mass 1.645 m up.
 const REST_HEIGHT = 1.645;
 
@@ -254,8 +264,8 @@ export class Flight {
     const vg = Math.max(speed, 5);
     const h = this.position.y;
     const rho = RHO0 * Math.exp(-Math.max(0, h) / 9500);
-    const invAttitude = this.attitude.clone().invert();
-    const vb = vel.clone().applyQuaternion(invAttitude); // body: x right, y up, z back
+    const invAttitude = _invAtt.copy(this.attitude).invert();
+    const vb = _vb.copy(vel).applyQuaternion(invAttitude); // body: x right, y up, z back
     let alpha = 0, beta = 0;
     if (speed >= 5) {
       alpha = Math.atan2(-vb.y, -vb.z);
@@ -308,11 +318,11 @@ export class Flight {
     const Cm = -0.02 - 0.30 * alpha - 7.5 * qh - 1.2 * de - 0.35 * smoothstep(aa, 0.30, 0.45) * sgnAlpha;
     const Cn = 0.10 * beta - 0.28 * rh - 0.02 * ph - 0.09 * dr + 0.012 * da;
 
-    const velDir = speed > 0.1 ? vel.clone().divideScalar(speed) : forward.clone();
-    let liftDir = right.clone().cross(velDir);
-    if (liftDir.lengthSq() < 1e-6) liftDir = up.clone(); else liftDir.normalize();
+    const velDir = speed > 0.1 ? _velDir.copy(vel).divideScalar(speed) : _velDir.copy(forward);
+    let liftDir = _liftDir.copy(right).cross(velDir);
+    if (liftDir.lengthSq() < 1e-6) liftDir.copy(up); else liftDir.normalize();
     const qS = qbar * WING_AREA;
-    const force = V3(); // world, everything but gravity
+    const force = _force.set(0, 0, 0); // world, everything but gravity
     force.addScaledVector(liftDir, qS * CL);
     force.addScaledVector(velDir, -qS * CD);
     force.addScaledVector(right, qS * CY);
@@ -324,11 +334,11 @@ export class Flight {
     force.addScaledVector(forward, thrust);
     const airframeLoad = force.dot(up) / (mass * G0);
     // Body torque: x = pitching moment M, y = -N (yaw), z = -L (roll).
-    const torque = V3(qS * CHORD * Cm, -qS * SPAN * Cn, -qS * SPAN * Cl);
+    const torque = _torque.set(qS * CHORD * Cm, -qS * SPAN * Cn, -qS * SPAN * Cl);
 
     // Wheels (spec 2.6). Springs first, then friction against the velocity predicted after the
     // other forces so a parked aircraft holds still against idle thrust instead of creeping.
-    const omegaWorld = this.omega.clone().applyQuaternion(this.attitude);
+    const omegaWorld = _omegaW.copy(this.omega).applyQuaternion(this.attitude);
     const bank = Math.atan2(-right.y, up.y);
     const pitchAttitude = Math.asin(clamp(forward.y, -1, 1));
     const groundSpeed = Math.hypot(vel.x, vel.z);
@@ -369,7 +379,7 @@ export class Flight {
       contacts.push({ i, leg, rw, vPoint, fz, pavement, share });
     }
     if (contacts.length) {
-      const predicted = force.clone().divideScalar(mass); predicted.y -= G0;
+      const predicted = _predicted.copy(force).divideScalar(mass); predicted.y -= G0;
       for (const c of contacts) {
         let dirLong = V3(forward.x, 0, forward.z);
         if (dirLong.lengthSq() < 1e-6) dirLong = V3(0, 0, -1); else dirLong.normalize();
@@ -405,7 +415,7 @@ export class Flight {
     this.velocity.addScaledVector(force, dt / mass);
     this.position.addScaledVector(this.velocity, dt);
     const w = this.omega;
-    const gyro = V3(w.y * Iz * w.z - w.z * Iy * w.y, w.z * Ix * w.x - w.x * Iz * w.z, w.x * Iy * w.y - w.y * Ix * w.x);
+    const gyro = _gyro.set(w.y * Iz * w.z - w.z * Iy * w.y, w.z * Ix * w.x - w.x * Iz * w.z, w.x * Iy * w.y - w.y * Ix * w.x);
     w.x += (torque.x - gyro.x) / Ix * dt;
     w.y += (torque.y - gyro.y) / Iy * dt;
     w.z += (torque.z - gyro.z) / Iz * dt;
@@ -420,8 +430,8 @@ export class Flight {
     if (airframeLoad > 12 || airframeLoad < -5) this.crash('airframe');
     else if (this.position.y < JERSEY.seaLevel && terrainHeight(this.position.x,this.position.z) < JERSEY.seaLevel) this.crash('water');
     else {
-      for (const tip of [NOSE_TIP, ...WINGTIPS]) {
-        const pw = tip.clone().applyQuaternion(this.attitude).add(this.position);
+      for (const tip of CRASH_TIPS) {
+        const pw = _tipW.copy(tip).applyQuaternion(this.attitude).add(this.position);
         if (pw.y < groundAt(pw.x, pw.z)) { this.crash('attitude'); break; }
       }
     }

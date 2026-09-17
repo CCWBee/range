@@ -19,6 +19,9 @@ const DEG = Math.PI / 180;
 // Sun direction, the vector pointing at the sun: about 11 degrees of elevation in the
 // north-north-west, which is where the atmosphere shader puts its warm band.
 export const SUN_DIRECTION = V3(-0.35, 0.21, -1).normalize();
+// The sun's fixed light-space basis, for shadow-texel snapping (aimLight). Constant, so once.
+const SUN_RIGHT = V3(0, 1, 0).cross(SUN_DIRECTION).normalize();
+const SUN_UP = SUN_DIRECTION.clone().cross(SUN_RIGHT).normalize();
 
 // Value noise and the layered sky, shared by the terrain, ocean, cloud and smoke shaders.
 export const NOISE_GLSL = `
@@ -1052,8 +1055,9 @@ void main(){
 
   aimLight(light, target) {
     // Move in whole shadow texels. Fractional light-space motion makes stationary ground crawl.
-    const right=V3(0,1,0).cross(SUN_DIRECTION).normalize();
-    const up=SUN_DIRECTION.clone().cross(right).normalize();
+    // The sun is fixed, so its light-space basis is constant: computed once at module load, not
+    // twice a frame (near and far light).
+    const right=SUN_RIGHT,up=SUN_UP;
     const shadow=light.shadow.camera;
     const dx=(shadow.right-shadow.left)/light.shadow.mapSize.x;
     const dy=(shadow.top-shadow.bottom)/light.shadow.mapSize.y;
