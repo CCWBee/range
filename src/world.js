@@ -6,6 +6,7 @@
 // yet is logged once and skipped, so the scene fills in as stream B lands each mesh.
 import * as THREE from '../vendor/three.module.js';
 import { terrainHeight, onPavement, coast, PAVEMENT } from '../physics.js';
+import { shoreSample } from './shore.js';
 import { LANDCOVER } from './landcover.js';
 import { LANDMARKS } from './landmarks.js';
 import { JERSEY } from './jersey.js';
@@ -279,39 +280,93 @@ void main(){vec3 d=normalize(direction);
 
   buildOcean() {
     // The water plane is built here rather than taken from the library: it is one quad, and the
-    // v2 scenery list drops the old `ocean` asset.
+    // v2 scenery list drops the old `ocean` asset. The shader is tier-gated with a compile-time
+    // OCEAN_HI define so the phone runs a lighter fragment path (see below), because at pixel ratio
+    // 2 the sea fills much of a coastal frame.
+    const hi = this.tier !== 'mobile';
+    // A baked signed coast-distance field over the island bounds: negative metres at sea, positive
+    // on land, sampled once from the same OpenStreetMap coastline the terrain uses. It gives the
+    // water a shallow turquoise shelf and (desktop) a breaker line without the shader sampling the
+    // terrain. 512 texels over 20 km is 39 m each, so the linear filter is what makes the foam band
+    // smooth rather than stepped.
+    const N = 512, box = new THREE.Vector4(JERSEY.originX, JERSEY.originZ, (JERSEY.nx - 1) * JERSEY.spacing, (JERSEY.nz - 1) * JERSEY.spacing);
+    const sdf = new Uint8Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const s = shoreSample(box.x + (i / (N - 1)) * box.z, box.y + (j / (N - 1)) * box.w);
+      const signed = s.land ? Math.min(127, s.distance) : -Math.min(128, s.distance);
+      sdf[j * N + i] = Math.max(0, Math.min(255, Math.round(128 + signed)));
+    }
+    const coastSDF = new THREE.DataTexture(sdf, N, N, THREE.RedFormat, THREE.UnsignedByteType);
+    coastSDF.minFilter = coastSDF.magFilter = THREE.LinearFilter;
+    coastSDF.wrapS = coastSDF.wrapT = THREE.ClampToEdgeWrapping;
+    coastSDF.needsUpdate = true;
     this.oceanMaterial = new THREE.ShaderMaterial({
       depthWrite: false,
-      uniforms: { time: { value: 0 }, aircraftWater: { value:new THREE.Vector4(0,0,0,0) }, waterDirection:{value:new THREE.Vector2(0,-1)} },
+      uniforms: { time: { value: 0 }, aircraftWater: { value:new THREE.Vector4(0,0,0,0) }, waterDirection:{value:new THREE.Vector2(0,-1)},
+        sunDir: { value: SUN_DIRECTION.clone() }, skyOffset: { value: new THREE.Vector2() }, coastSDF: { value: coastSDF }, islandBox: { value: box } },
       vertexShader: 'varying vec3 worldP;void main(){worldP=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(worldP,1.);}',
-      fragmentShader: `varying vec3 worldP;uniform float time;uniform vec4 aircraftWater;uniform vec2 waterDirection;${NOISE_GLSL}${COAST_GLSL}
+      fragmentShader: `varying vec3 worldP;uniform float time;uniform vec4 aircraftWater;uniform vec2 waterDirection;uniform vec3 sunDir;uniform vec2 skyOffset;uniform sampler2D coastSDF;uniform vec4 islandBox;${hi ? '\n#define OCEAN_HI' : ''}${NOISE_GLSL}
 void main(){
  vec3 eye=normalize(cameraPosition-worldP);
- float waveFade=exp(-length(cameraPosition-worldP)*.0007);
+ float dist=length(cameraPosition-worldP);
+ float waveFade=exp(-dist*.0007);
+ // Wind chop: two crossed sines near the camera, with extra directional octaves on the desktop tier
+ // so it reads as chop rather than corduroy up close. Distant sea stays glassy and cheap via waveFade.
  float a=(sin(worldP.x*.06+time*.7)+sin(worldP.z*.093-time*.5))*waveFade;
- vec3 normal=normalize(vec3(a*.045,1.,cos(worldP.x*.087+worldP.z*.04+time)*.06*waveFade));
- // A restrained surface disturbance under a very low pass gives a nearby scale reference.
- // It fades with height; it is a visual cue, not a fluid simulation of jet exhaust.
+ float b=cos(worldP.x*.087+worldP.z*.04+time)*.06*waveFade;
+ #ifdef OCEAN_HI
+ a+=(sin(dot(worldP.xz,vec2(.132,-.05))+time*1.3)+sin(dot(worldP.xz,vec2(-.031,.163))-time*1.1))*.5*waveFade;
+ b+=cos(dot(worldP.xz,vec2(.11,.14))+time*1.7)*.03*waveFade;
+ #endif
+ vec3 normal=normalize(vec3(a*.045,1.,b));
+ // A restrained surface disturbance under a very low pass gives a nearby scale reference. It fades
+ // with height and is only computed where it exists, not across the whole sea, so it costs nothing
+ // on open water. It is a visual cue, not a fluid simulation of jet exhaust.
  vec2 offset=worldP.xz-aircraftWater.xy;
  float aft=-dot(offset,waterDirection);
  float across=dot(offset,vec2(-waterDirection.y,waterDirection.x));
  float spread=5.+max(0.,aft)*.10;
  float envelope=exp(-pow(across/spread,2.))*smoothstep(-8.,6.,aft)*(1.-smoothstep(12.,110.,aft))*aircraftWater.z;
- float ripple=sin(across*.7+aft*.12-time*5.+noise(worldP.xz*.13)*4.);
- normal.xz+=vec2(-waterDirection.y,waterDirection.x)*ripple*envelope*.025;
- normal=normalize(normal);
+ if(envelope>.001){
+  float ripple=sin(across*.7+aft*.12-time*5.+noise(worldP.xz*.13)*4.);
+  normal.xz+=vec2(-waterDirection.y,waterDirection.x)*ripple*envelope*.025;
+  normal=normalize(normal);
+ }
  vec3 reflection=reflect(-eye,normal);
+ // Reflect the full cloudy sky on desktop so the sea and sky read as one wet dusk; the plain
+ // gradient on mobile, because skyColour evaluates fbm twice per fragment.
+ #ifdef OCEAN_HI
+ vec3 reflected=skyColour(reflection,skyOffset);
+ #else
  vec3 reflected=atmosphere(reflection);
+ #endif
  float fres=pow(1.-max(0.,dot(eye,normal)),4.);
  vec3 c=mix(vec3(.025,.14,.20),reflected,.18+fres*.8);
+ // Low-sun specular glitter. The flat plane's normal carries the chop, so a tight lobe against the
+ // sun breaks into a dusk track across the water: the single strongest cue at this light angle.
+ vec3 hvec=normalize(eye+sunDir);
+ float ndh=max(0.,dot(normal,hvec));
+ c+=vec3(1.,.82,.55)*pow(ndh,90.)*.6;
+ #ifdef OCEAN_HI
+ c+=vec3(1.,.72,.42)*pow(ndh,240.)*1.1;
+ c+=vec3(.5,.36,.2)*pow(ndh,26.)*.12;
+ #endif
  float foam=noise(worldP.xz*.1+time*.1);
  c+=vec3(.03)*smoothstep(.78,.95,foam);
- c+=vec3(.09,.11,.12)*envelope*smoothstep(.35,.8,fbm(worldP.xz*.43+time*.4));
- // Surf along the true analytic coast, so the water meets the shore on the same line the
- // terrain shader discards on.
- float d=worldP.x-coastX(worldP.z);
- // The former sine-coast surf band does not apply to the island coastline.
- float fog=1.-exp(-length(cameraPosition-worldP)*.00009);
+ if(envelope>.001)c+=vec3(.09,.11,.12)*envelope*smoothstep(.35,.8,fbm(worldP.xz*.43+time*.4));
+ // Shoreline, from the baked signed coast distance: a shallow turquoise shelf near land, and on the
+ // desktop tier a soft animated breaker on the seaward side.
+ vec2 iuv=(worldP.xz-islandBox.xy)/islandBox.zw;
+ if(iuv.x>0.&&iuv.x<1.&&iuv.y>0.&&iuv.y<1.){
+  float shoreD=texture2D(coastSDF,iuv).r*255.-128.;
+  float sea=max(0.,-shoreD);
+  c=mix(vec3(.06,.34,.38),c,smoothstep(0.,120.,sea));
+  #ifdef OCEAN_HI
+  float surf=smoothstep(38.,0.,sea)*(.5+.5*sin(sea*.35-time*2.2+fbm(worldP.xz*.2)*3.));
+  c=mix(c,vec3(.9,.94,.95),surf*.6*step(0.,-shoreD));
+  #endif
+ }
+ float fog=1.-exp(-dist*.00009);
  c=mix(c,vec3(.44,.51,.55),fog);
  gl_FragColor=vec4(c,1.);}`,
     });
@@ -1035,6 +1090,8 @@ void main(){
     this.sky.position.copy(camera.position);
     this.skyMaterial.uniforms.offset.value.set(
       flight.position.x * 0.00003 + elapsed * 0.001, flight.position.z * 0.00003);
+    // The sea reflects the same drifting cloud offset as the sky (desktop tier).
+    this.oceanMaterial.uniforms.skyOffset.value.copy(this.skyMaterial.uniforms.offset.value);
     this.ocean.position.x = camera.position.x;
     this.ocean.position.z = camera.position.z;
 
