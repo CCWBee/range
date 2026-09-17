@@ -2,7 +2,63 @@
 
 ## Where it stands
 
-12 September 2026. Three passes have landed since `85a1c7b`:
+17 September 2026. A performance, correctness, water and visual polish pass landed on top of
+`0f09752`, seven commits, all verified and pushed (see "Done (polish pass)"). It was guided by a
+read-only audit fan-out (run `wf_f0887a38-50f`; the simplify dimension failed on an Opus content
+filter false positive, so simplification was done by hand). Overview and per-feature renders are in
+`_archive/polish-qa/` (gitignored).
+
+## Done (polish pass, 17 September 2026)
+
+Seven commits, `2067510` through `f09c0e2`, each verified before the next:
+
+1. **Codex's steering/HUD/pause work (`2067510`), picked up and verified.** Banked and inverted
+   mouse steering (`control.js` aims in body axes past ~80 degrees bank, with a rudder assist),
+   HUD declutter (objective, INSTRUCTOR ON, LTD state and the heading readout removed), and a
+   "Back to aircraft selection" pause button (`returnToMenu()` in `src/main.js`). It was left
+   uncommitted; 67 PASS incl. a banked-pull convergence test, `tools/qa_pause_menu.mjs` green.
+2. **Performance (`e65d7ee`).** Mobile stutter is heap churn, not draw calls. `Flight.step` reuses
+   module scratch for its world force/torque accumulators and other non-retained temporaries (a
+   7200-step cruise now allocates 5.25 MB, down from 7.92); `basis()` left alone. `hud.js`
+   caches the target-marker terrain-occlusion ray at 10 Hz behind the on-screen test and reuses
+   scratch, and the bomb predictor's loop cap drops 2400 to 1200. `effects.js` lifts the
+   gun-collision centres out of the per-shot loop and hoists the smoke-drift constant. `world.js`
+   precomputes the sun's shadow-snap basis. Numbers identical across 69 PASS. Bench:
+   `scratchpad/perf_bench.mjs` (not in repo).
+3. **Sea walls with land behind them (`3c3b90f`).** `shore.js` classified the coast side from the
+   single nearest segment, which flips at concave corners and harbour mouths and raised land on the
+   seaward side; it now averages neighbour segment normals at a shared vertex. The inland ramp is
+   capped below the wall coping so terrain no longer climbs over walls. Missed air-to-air missiles
+   now detonate at the sea surface. New `tools/test_shore.mjs` (chained): raise never exceeds the
+   coping over 15,120 samples; across 1,385 corners the sides classify oppositely 96% with 1%
+   seaward wrongly raised.
+4. **Water (`15b0913`).** Tier-gated via a compile-time `OCEAN_HI` define (verified in on desktop,
+   out on mobile at runtime). Sun specular glint (both tiers, sharper on desktop), desktop cloud
+   reflection (skyColour), a baked 512-texel signed coast-distance field for a shallow turquoise
+   shelf (both tiers) and a desktop breaker, extra desktop wave octaves, and the whole-sea wake fbm
+   short-circuited to the strip behind the aircraft.
+5. **Dusk mood and life (`97ddb65`).** A dusk split-tone colour grade (warm shadows/mids, cool
+   highlights) replacing the flat cool tint, warmed fog, emissive lit windows (a hashed third,
+   distance-faded), and Jersey pink-granite retint of the landmark and cliff granite. Grade is
+   contrast-gated: the 27-cell touch matrix (480 boxes) and intro cells (48 boxes) both 0 failures.
+6. **Simplification (`f09c0e2`).** Removed the dead `billboard` placement option and the unused
+   `this.billboards`; the dead coast-surf/coastX path was dropped from the ocean shader in `15b0913`.
+
+Verification across the pass: `node tools/test_flight.mjs` 69 PASS; both tiers build (desktop
+29.6 MB, mobile 11.1 MB, 0 network assets); `tools/qa_fleet.mjs`, `tools/qa_hud_feedback.mjs`,
+`tools/qa_pause_menu.mjs` green; both contrast gates 0 failures; renders in `_archive/polish-qa/`.
+
+**Deferred (named, not done):** field/hedge boundary lines and a meadow vs farmland colour split
+(shader, both tiers, safe next wins); spreading ground clutter and gorse beyond the airfield disc
+(the `y < -1.5` gate bars the lowlands and the radius is 1800 m; needs an island-wide LANDCOVER-keyed
+pass); relocating the town-light billboards to settlement centroids for twinkle from altitude;
+Noirmont and Fort Henry geometry and the St Ouen wall re-placement onto the coastline (all Blender +
+the LFS blend); a proper simplification sweep (the audit agent for it was blocked, so re-run it on a
+non-Opus model).
+
+## Earlier passes
+
+12 September 2026. Three passes had landed since `85a1c7b`:
 
 - `5a50c37` (11 Sep): the polish pass: airport chrome-mirror, the mobile black square, desktop UI on
   the mobile Liquid Glass system, the intro copy. Detail under "Done (first pass)".
@@ -150,9 +206,25 @@ Blender launch when needed:
 - `tools/test_library.mjs` decodes packed vertices back to lat/lon against each landmark's real site.
 - Node ESM on Windows: an import of an absolute path needs a `file:///E:/...` URL, or the loader
   fails with `Received protocol 'e:'`.
+- `Flight.step` uses module-level scratch vectors (`_force`, `_torque` etc.) reused each call to cut
+  GC churn. Safe only because step is never re-entrant. If step is ever made to call itself or run
+  concurrently, that breaks; and `basis()` must keep returning fresh vectors (the camera and HUD
+  hold them). A new physics change that shifts the takeoff/landing/turn numbers is the aliasing
+  tell; the suite pins them exactly.
+- The ocean shader is tier-gated by a compile-time `#define OCEAN_HI`, chosen at runtime from
+  `this.tier`. Both bundles carry the same source (the tier is a runtime flag, not a build strip),
+  so grepping the bundle for `OCEAN_HI` proves nothing; check
+  `range.world.oceanMaterial.fragmentShader.includes('#define OCEAN_HI')` in a running page instead.
+- The water's shoreline foam and shallow tint read a baked 512-texel signed coast-distance field
+  (`shoreSample` over the island bounds) built once in `buildOcean`; it must use `LinearFilter`
+  (39 m per texel) or the foam band steps.
+- Any colour-grade or fog change must re-run both contrast gates (`tools/qa_touch.mjs` 27-cell and
+  `--intro`), because the HUD stands on the bare frame and the touch layer only just clears 4.5:1.
 
 ## Resume
 
-Read this file first. All three passes are committed and pushed; the working tree is clean. Next
-substantive work is the backlog above, cheapest first: the on-device phone check, the granite
-retint, Noirmont, then the sea-wall character pass with references per section.
+Read this file first. All passes are committed and pushed; the working tree is clean. Next
+substantive work is in "Deferred" above, cheapest first: the field/hedge boundary lines and the
+meadow/farmland colour split (shader, both tiers), then the island-wide clutter spread, then the
+Blender items (Noirmont, Fort Henry, the St Ouen wall re-placement). Still owed: an on-device phone
+check of the perf pass and the new water on a real handset.
