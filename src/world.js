@@ -74,7 +74,7 @@ const yawToRotation = (degrees) => -degrees * DEG;
 
 function placements() {
   const list = [];
-  const add = (asset, places, options = {}) => list.push({ asset, places, ...options });
+  const add = (asset, places) => list.push({ asset, places });
 
   add('tower', [[370, -1175, 0]], { tall: true });
   add('fire_station', [[153, -1050, 180]], { tall: true });
@@ -122,7 +122,7 @@ function placements() {
   // A tree belt behind the service blocks, and gorse-height cards along the western boundary.
   const belt = [];
   for (let z = -700; z > -1300; z -= 22) belt.push([480 + Math.sin(z * 0.02) * 6, z, 0]);
-  add('tree_card', belt, { billboard: true });
+  add('tree_card', belt);
 
   return list;
 }
@@ -184,7 +184,6 @@ export class World {
     this.blastImpulse={value:new THREE.Vector4(0,0,100,0)};
     this.windTime={value:0};
     this.animated = [];
-    this.billboards = [];
     this.quadGeometry = this.geometryOf('quad') || new THREE.PlaneGeometry(1, 1);
 
     this.buildSky();
