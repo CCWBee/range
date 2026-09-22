@@ -94,12 +94,15 @@ transparency to .88 and .80, with the blur off and the grain kept.
 ## Motion
 
 - No decorative motion. The stall warning flashes at .7 s steps and is still under reduced motion.
-  Every other movement on screen comes from the simulation.
+  Every other movement on screen comes from the simulation, bar the load gauge's bar, which moves
+  only when the load does: no sweep, no spinner, nothing animated while a stage is running.
 
 ## States
 
 - Lock: colour. Stall: colour and flash. Paused or lost: centred status text. Reloading: a countdown
-  in the label. Press, touch only: the tint deepens and the label brightens.
+  in the label. Press, touch only: the tint deepens and the label brightens. Loading: the gauge names
+  the stage and ENTER stays dim until the textures are uploaded, every shader is compiled and the
+  first frame is drawn, so nothing freezes after it lights.
 
 ## Copy
 
@@ -111,7 +114,8 @@ transparency to .88 and .80, with the blur off and the grain kept.
 
 ## Per-screen module order
 
-- Intro: title, three lines, ENTER, the aircraft switch, the skin switch, small print.
+- Intro: title, three lines, ENTER, the aircraft switch, the skin switch, small print; the load
+  gauge at the bottom left until ENTER lights (on touch too).
 - Touch intro: title, one line, ENTER, the aircraft switch, the skin switch, one placard line. The
   skin switch is absent while the Wyvern is chosen: its paint is its own.
 - Play: markers; then brand and objective (top left), location (top right), telemetry (bottom
@@ -135,4 +139,5 @@ transparency to .88 and .80, with the blur off and the grain kept.
 | throttle quadrant | `#quadrant.panel` | touch only; a 26 px slot cut into a panel, with etched ticks, the MIL detent, the reheat hatch, the fill and a metal lever |
 | HUD halo | `#hud` text-shadow, `#markers` drop-shadow | both tiers; the tight dark halo every HUD text block and marker stroke stands on; no band, no box |
 | lit legend | `.lit`, `.locked` | a legend that glows: core colour, 1 px fringe, soft bloom, a wash on the cap behind it; never a dot |
+| load gauge | `#loading` | both tiers, intro only, until ENTER lights; the switch slot's material laid flat (slot tint, inset shade, lip, cut edge), 220 x 8 px (180 on touch), radius 4, etched every tenth like the throttle quadrant, with a `--metal` bar advancing in it; above it a 10 to 11 px legend naming the stage (`LOADING · DATA`, `BUILDING · TERRAIN`, `COMPILING · SHADERS`, `PREPARING · FIRST FRAME`); monochrome, since loading is not a live system; `role="progressbar"`; one writer, the `load-gauge` script in `index.html`, which only moves forwards |
 | toggle switch | `.switch`: `#aircraftSwitch`, `#skinSwitch` | both tiers, intro only; a 60 x 26 slot with a 26 px `--metal` knob at one end and a legend either side; monochrome, the knob's position is the state; a tap anywhere on the row outside the legends toggles it, committed on release, and a drag past 6 px follows the pointer and snaps to the end it crosses; the first legend is 68 px wide so stacked switches share one slot column; never a native select, which is what the aircraft choice first shipped as |

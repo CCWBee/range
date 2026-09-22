@@ -21,13 +21,6 @@ export const TEXTURE_STEMS = [
   'raf_typhoon_heritage',
 ];
 
-function decodeBase64(text) {
-  const raw = atob(text);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes;
-}
-
 async function loadTexture(url) {
   return new Promise((resolve, reject) => {
     new THREE.TextureLoader().load(url, resolve, undefined, reject);
@@ -240,10 +233,13 @@ export function buildGeometries(library) {
 
 // The bundle carries the manifest and binary on window; the dev page fetches them over http.
 // Nothing is fetched as a data URL: the content security policy blocks that, so the bundle's
-// binary arrives base64 encoded and is decoded with atob.
+// binary arrives base64 encoded in slices, which index.html's load-gauge script decodes as they
+// arrive.
 async function readLibrary() {
   if (typeof window !== 'undefined' && window.RANGE_MANIFEST) {
-    return { manifest: window.RANGE_MANIFEST, binary: decodeBase64(window.RANGE_BIN), source: 'bundle' };
+    const binary = window.RANGE_BIN_DATA;
+    if (!binary) throw new Error('RANGE: the bundle carries no library data');
+    return { manifest: window.RANGE_MANIFEST, binary, source: 'bundle' };
   }
   const manifest = await fetch('assets/library.json').then((r) => r.json());
   const binary = new Uint8Array(await fetch('assets/library.bin').then((r) => r.arrayBuffer()));

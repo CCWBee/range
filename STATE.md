@@ -2,32 +2,84 @@
 
 ## Where it stands
 
-22 September 2026, hosting only (no demo code touched): RANGE is live at
-https://range.charlesbee.org through the `range-charlesbee` proxy Worker (`deploy/worker/`,
-`MAINTENANCE.md`) and listed on the charlesbee.org hub. The working tree then held nine modified
-files nobody had recorded here (`index.html`, `physics.js`, `src/engagement.js`, `src/hud.js`,
-`src/touch.js`, `src/world.js` and three tools tests); they were left as found and are not in the
-live build.
+22 September 2026. RANGE is live at https://range.charlesbee.org through the `range-charlesbee`
+proxy Worker (`deploy/worker/`, `MAINTENANCE.md`) and listed on the charlesbee.org hub. A pass on UI
+consistency, the random black screens, performance and a loading screen is committed on top of
+`ac51c8a` (detail under "Done (22 September pass)"). PUSH PENDING until the browser QA chain is
+green; replace this sentence with the pushed hash. An earlier hosting note here called nine modified
+files unrecorded and not live: they were Codex's 17 September work, verified and committed as
+`2412d91`, and ship in this build.
 
-22 September 2026. IN FLIGHT (ultracode): UI consistency pass (Liquid Glass plus cockpit
-"military-spec" language across both tiers, anchored on the phone throttle quadrant and weapon
-caps; switches toggle on tap instead of sliding), performance, random black screens (root cause
-unknown at start), windsock orange. Also in the tree, uncommitted, from 17 Sep 12:48 to 13:19 (after
-the 02:02 push): Codex work taking the Wyvern to 100% max with no reheat, a bounded bomb predictor
-(`predictBombImpact`, hidden on the Wyvern), a water depth channel, hedge lines, meadow/farmland
-split, island-wide clutter and town lights sampled from real buildings. 70 PASS on that tree;
-render and contrast not yet verified. Plan: verify and commit that first, then a read-only audit
-workflow (black screen by rendering and lifecycle lenses with adversarial verification, GPU and
-load-time performance, UI consistency), then implement serially and push once. Audit run id
-`wf_132e2bd8-6ae`; resume with `Workflow({scriptPath:
-"C:\Users\Charles\.claude\projects\E--claude-projects-range\251677ae-ebd9-40d2-965d-abfd5ddd11ca\workflows\scripts\range-ui-perf-blackscreen-audit-wf_132e2bd8-6ae.js",
-resumeFromRunId: "wf_132e2bd8-6ae"})`.
+IN FLIGHT after the push: the polish wave named under "Deferred (22 September)", item by item, each
+verified, then one more push.
 
 17 September 2026. A performance, correctness, water and visual polish pass landed on top of
 `0f09752`, seven commits, all verified and pushed (see "Done (polish pass)"). It was guided by a
 read-only audit fan-out (run `wf_f0887a38-50f`; the simplify dimension failed on an Opus content
 filter false positive, so simplification was done by hand). Overview and per-feature renders are in
 `_archive/polish-qa/` (gitignored).
+
+## Done (22 September pass)
+
+Charles asked for UI consistency across both tiers in the Liquid Glass plus cockpit
+"military-spec" language (anchored on the phone throttle quadrant and weapon caps), switches that
+toggle on a tap, performance, a fix for random black screens, an orange windsock, and then a
+loading screen because the page sat frozen while it loaded.
+
+1. **Codex's 17 September work (`2412d91`)**, verified and committed: the Wyvern at 100 % with no
+   reheat, a bounded bomb predictor hidden on the Wyvern, the water depth channel, hedge lines, the
+   meadow and farmland split, island-wide clutter, town lights sampled from real buildings. Codex
+   also toned my turquoise shallow-water shelf down to a depth-gated teal; left as found, a taste
+   call for Charles.
+2. **Black frames (`887429d`).** Root cause: the adaptive resolution resized the canvas after the
+   draw, which clears the drawing buffer, so the compositor showed an empty frame whenever the ratio
+   stepped. `tick()` resizes first, with hysteresis. WebGL context loss is handled (status line,
+   the PMREM environment rebuilt, post targets resized, a RELOAD cap after 5 s). The post chain
+   scrubs NaN and Inf, and the sky, terrain and camera have their NaN sources guarded. A start-up
+   failure shows a panel with RELOAD instead of a dead ENTER. The FPS readout shows only with
+   `?fps=1` or in the map camera. Harness: `tools/qa_black_frames.mjs`.
+3. **One cockpit UI on both tiers (`887429d`).** Barlow Condensed on the desktop too; `--ink-2`
+   and `--ink-3` colour tokens instead of opacity steps; the stop screens' control is a `.key` cap
+   (the pause cap reads CHANGE AIRCRAFT); the failure box is the panel material; the HUD halo on
+   both tiers; desktop type sizes stepped up for the condensed face. Switches toggle on a tap and
+   still follow a drag past 6 px. The windsock is orange (`tools/model_range.py` and a material
+   swap in `world.js`). Harness: `tools/qa_ui.mjs`. Contrast gates: 27 cells (480 boxes), intro
+   (48) and Wyvern intro (18), 0 failures.
+4. **Hosting (`8b4ff86`, `0aa9b19`)**, from the charlesbee.org session: the Worker forwards
+   conditional and Range headers, and MAINTENANCE.md describes it.
+5. **Performance.** Exact terrain-query cuts: a bounding box ahead of the pavement tests, numeric
+   shore bucket keys with a shared result, and `MAX_GROUND` (the highest ground anywhere) letting
+   `clearSight` and `bombStep` skip samples above it. A guided bomb prediction, run ten times a
+   second for the whole sortie, is about four times faster (53.7 to 16.9 ms, then 30.9 to 7.3 ms
+   in Node) with identical impact points over 300 guided and 300 unguided drops; terrain and ground
+   heights are identical to `ac51c8a` at 600,000 points. The water depth bake reuses its shore
+   sample (identical bytes, twice as fast). On the phone: a cheaper sky shader (`SKY_LO`) and sprite
+   noise (`SPRITE_LO`), half the cloud sprites, fully transparent cloud fragments discarded, one sun
+   at 1.5 instead of a shadowed and an unshadowed copy, one blast light, no tree shadow pass. Both
+   tiers: idle sprite pools neither draw nor upload, the canvas has no depth or stencil buffer, the
+   terrain roughness reuses the wet term instead of a second fbm.
+6. **Loading screen.** A load gauge (`#loading`, registered in `docs/DESIGN.md`): the switch slot's
+   material with a metal bar and a stage legend. The library and textures now arrive as classic
+   data scripts ahead of the module (`tools/build.py`), so the download moves the gauge and decodes
+   a slice at a time; the island builds in stages with a frame between them; textures upload and
+   every shader compiles (hidden sprite pools included) before ENTER lights, and the first frame is
+   drawn behind the full gauge. Measured with `tools/qa_boot.mjs` (headless, SwiftShader, a loaded
+   machine): the longest freeze went from 6.9 s to 3.0 s on the desktop and from 8.2 s to 2.9 s on
+   the four-times-throttled phone, and nothing blocks after ENTER any more (it was 4.6 s and 3.5 s).
+   In a hidden tab the boot runs straight through (compile 0.45 s where the first version took
+   63 s). `range.bootTimes` holds each phase for a real-device check.
+
+## Deferred (22 September)
+
+The polish wave from the read-only audit (run `wf_132e2bd8-6ae`), none started: target-label
+declutter and the distance text under the object; hint bearings from `JERSEY.bearing`; the Wyvern's
+wording and a designate guard; tier-aware touch notices; Tab swallowed only while flying; craters
+and wrecks floored at the sea surface; the Wyvern's rotation speed from its stall speed; a dim
+state and countdown for the rocket reload and "RELOAD n S" in place on the weapons line; the
+duplicate crash text; one casing for air-target names; `polygonOffset` on `airport_marking`; the
+town-light glow faded with distance; the Wyvern's throttle ticks; the hint's width on a narrow
+window. Also owed: an on-device phone check of all of this, including `range.bootTimes` on a real
+handset.
 
 ## Done (polish pass, 17 September 2026)
 
@@ -244,8 +296,7 @@ Blender launch when needed:
 
 ## Resume
 
-Read this file first. All passes are committed and pushed; the working tree is clean. Next
-substantive work is in "Deferred" above, cheapest first: the field/hedge boundary lines and the
-meadow/farmland colour split (shader, both tiers), then the island-wide clutter spread, then the
-Blender items (Noirmont, Fort Henry, the St Ouen wall re-placement). Still owed: an on-device phone
-check of the perf pass and the new water on a real handset.
+Read this file first. The 22 September pass is committed; see "Where it stands" for whether it is
+pushed. Next: the polish wave under "Deferred (22 September)", then the older "Deferred" list under
+the 17 September pass (the Blender items: Noirmont, Fort Henry, the St Ouen wall re-placement).
+Still owed: an on-device phone check.

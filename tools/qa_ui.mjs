@@ -22,6 +22,13 @@ for (const tier of ['desktop', 'mobile']) {
     await page.eval('range.renderOnce(0)');
     await shot('intro');
 
+    // The load gauge: finished, it is hidden at 100; staged mid-load for the render.
+    const gauge = await page.eval(`(()=>{const b=document.getElementById('loading');return {hidden:b.classList.contains('hidden'),role:b.getAttribute('role'),now:b.getAttribute('aria-valuenow'),fill:document.getElementById('loadingFill').style.width};})()`);
+    assert(gauge.hidden && gauge.role === 'progressbar' && gauge.now === '100' && parseFloat(gauge.fill) === 100, `load gauge at the end: ${JSON.stringify(gauge)}`);
+    await page.eval(`(()=>{const b=document.getElementById('loading');b.classList.remove('hidden');document.getElementById('loadingFill').style.width='46%';document.getElementById('loadingStage').textContent='BUILDING · TERRAIN';document.getElementById('start').disabled=true;})()`);
+    await shot('loading');
+    await page.eval(`document.getElementById('loading').classList.add('hidden');document.getElementById('start').disabled=false`);
+
     // Tap the knob of each switch: it must toggle, then toggle back.
     const state = () => page.eval(`({aircraft:range.aircraft.type||'typhoon',skin:range.aircraft.skinName||'grey',
       aircraftOn:document.getElementById('aircraftSwitch').classList.contains('on'),skinOn:document.getElementById('skinSwitch').classList.contains('on')})`);

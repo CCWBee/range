@@ -51,7 +51,18 @@ no pill labels, no decorative dots, no emoji icons.
   `node tools/qa_fleet.mjs` (Wyvern renders, rocket and torpedo release, the coastal views, into
   `_archive/expansion-qa/`), `node tools/qa_hud_feedback.mjs` (metric readouts, the kill
   confirmation at four widths, the chime's waveform, munition-view marker tracking) and
-  `node tools/qa_east_coast.mjs` (Gorey and St Catherine views).
+  `node tools/qa_east_coast.mjs` (Gorey and St Catherine views). Against both bundles:
+  `node tools/qa_ui.mjs` (a tap on each switch knob toggles it, the stop-screen cap, the desktop
+  help sheet, the load gauge's end state; renders into `_archive/ui-qa/`) and
+  `node tools/qa_black_frames.mjs` (reads the real framebuffer: nine poses, an explosion over the
+  canopy, a WebGL context loss and restore, and on the phone a deterministic `range.tick` drive
+  that asserts the canvas is never resized after a draw).
+- Boot timeline: `node tools/qa_boot.mjs [--tier desktop|mobile] [--throttle 4]` prints each gauge
+  stage with its time, the long tasks, the longest main-thread gap before ENTER and
+  `range.bootTimes` (textures, compile, first frame, the world's stages). The headless GPU is
+  SwiftShader, so shaders and the first frame are CPU work there and totals swing with machine load:
+  compare the longest gap and the stage order, not the totals. `range.bootTimes` in a phone's own
+  console is the real-device number.
 - Bundle: `python tools/build.py` (writes `dist/index.html` and `RANGE.zip`, then the lighter
   `dist/mobile.html`; `--tier desktop|mobile` writes one; prints the byte counts, asserts the size
   budgets and no external references; packs the library first when the Blender export is newer).
@@ -168,3 +179,24 @@ no pill labels, no decorative dots, no emoji icons.
 - A new instructor test that leaves the aircraft on the runway at 85 m/s with crash `terrain` and
   no lift-off has almost certainly passed `{direction}` without `active: true`: the ground law only
   rotates for a live aim. The check is the `aimAt` helper at `tools/test_flight.mjs` line 228.
+- "The screen goes black for a frame at random", mostly on the phone. The cause: the adaptive
+  resolution resized the canvas after the frame was drawn, and resizing a WebGL canvas clears its
+  drawing buffer, so the compositor showed an empty frame each time the ratio stepped. `tick()`
+  resizes before it draws, and a step needs two decisions in the same direction. The check is
+  `tools/qa_black_frames.mjs`: the phone drive must report resizes above 0 and `afterDraw` 0.
+- "Frozen on load for a while, then frozen again after ENTER lights." The cause: the boot was one
+  synchronous block with a static line of text, and every shader compiled on the first frame after
+  ENTER was enabled (4.6 s on the desktop run, 3.5 s on the throttled phone). The boot now yields a
+  frame between stages under the load gauge, uploads the textures and compiles every shader before
+  ENTER lights, and draws the first frame behind the full gauge. The check is `tools/qa_boot.mjs`:
+  no long task after ENTER, and the gauge's stages in order.
+- A boot that crawls in a background tab: a hidden page gets no animation frames and its timers
+  are throttled to about one a second, so a boot that waits for a frame between stages takes minutes
+  there (the Claude-in-Chrome automation tab reports itself hidden and showed it). `nextFrame` in
+  `src/main.js` resolves at once while `document.hidden`. The check: load the bundle in the
+  automation tab and read `range.bootTimes` within seconds, not minutes.
+- A `#define` spliced into a shader through a template string must start on a line of its own: the
+  phone's `SPRITE_LO` first landed after `uniform vec3 tint;` and the smoke shader failed to compile.
+  The boot's warm-up compiles every program, hidden sprite pools included, so this now shows as a
+  console error at load rather than as missing smoke at the first explosion; `qa_ui` and
+  `qa_black_frames` fail on any console error.

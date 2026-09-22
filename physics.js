@@ -62,7 +62,18 @@ export function onPavement(x, z) {
 }
 
 // Distance from (x, z) to the nearest pavement edge, 0 when inside a rectangle.
+// Every pavement's bounds in one box, 120 m wider: terrainHeight only uses a distance under 120 m,
+// so a point outside it skips the polygon and rectangle tests (most of the island, and most of a
+// terrain query's cost).
+let pavedBox = null;
 function pavementDistance(x, z) {
+  if (!pavedBox) {
+    pavedBox = [Infinity, Infinity, -Infinity, -Infinity];
+    const grow = (x0, z0, x1, z1) => { pavedBox[0] = Math.min(pavedBox[0], x0 - 120); pavedBox[1] = Math.min(pavedBox[1], z0 - 120); pavedBox[2] = Math.max(pavedBox[2], x1 + 120); pavedBox[3] = Math.max(pavedBox[3], z1 + 120); };
+    for (const p of AIRPORT.pavement) grow(...p.bounds);
+    for (const r of PAVEMENT) grow(r.x0, r.z0, r.x1, r.z1);
+  }
+  if (x < pavedBox[0] || z < pavedBox[1] || x > pavedBox[2] || z > pavedBox[3]) return Infinity;
   let best = Infinity;
   for(const p of AIRPORT.pavement){
     const [x0,z0,x1,z1]=p.bounds;
@@ -121,7 +132,7 @@ function legacyNaturalHeight(x, z) {
   return -7 + clamp(0.012 * (d - 1800), 0, 8);
 }
 
-function naturalHeight(x,z) {
+export function naturalHeight(x,z) {
   const u=(x-JERSEY.originX)/JERSEY.spacing,v=(z-JERSEY.originZ)/JERSEY.spacing;
   if(u<0||v<0||u>=JERSEY.nx-1||v>=JERSEY.nz-1)return JERSEY.seaLevel-12;
   const i=Math.floor(u),j=Math.floor(v),a=j*JERSEY.nx+i,fx=u-i,fz=v-j,h=JERSEY.heights;
@@ -177,6 +188,12 @@ const REST_HEIGHT = 1.645;
 function groundAt(x, z) {
   return onPavement(x, z) ? 0 : terrainHeight(x, z);
 }
+// The highest ground anywhere, with two metres of margin: groundAt is 0 on pavement, and
+// terrainHeight is a blend of height-grid samples that the shore raises to at most sea level plus
+// 4.6 m, so neither exceeds this. Anything above it can skip a terrain query exactly.
+let highest = Math.max(0, JERSEY.seaLevel + 5);
+for (const h of JERSEY.heights) if (h > highest) highest = h;
+export const MAX_GROUND = highest + 2;
 // The ground the aircraft actually stands on, pavement or terrain. The instructor reads it to
 // know how high the aircraft is above the runway.
 export { groundAt as groundHeight };
@@ -465,6 +482,7 @@ export function bombStep(bomb, dt) {
   bomb.velocity.y -= G0 * dt;
   bomb.velocity.multiplyScalar(Math.exp(-0.018 * dt));
   bomb.position.addScaledVector(bomb.velocity, dt);
+  if (bomb.position.y > MAX_GROUND) return false;
   const { x, z } = bomb.position;
   let ground = terrainHeight(x, z);
   ground = Math.max(ground, JERSEY.seaLevel);

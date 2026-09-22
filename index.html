@@ -70,7 +70,17 @@ body:has(#returnMenu) #markers,body:has(#returnMenu) #hint{display:none}
 /* Paused, the whole screen dims to the stop veil, as it does on the touch build: the veil is #hud's
    own background so the render dims while the HUD text and the status line stay lit. */
 body:not(.touch):has(#status:not(:empty)) #hud{background:var(--stop-veil)}
-#loading{position:absolute;bottom:30px;left:6%;font-size:14px}
+/* The load gauge: the switch slot's material laid flat and graduated every tenth like the throttle
+   quadrant, with a machined metal bar advancing in it under a legend naming the stage. Monochrome,
+   since loading is not a live system, and it moves only when the load does. */
+#loading{position:absolute;bottom:30px;left:6%;display:flex;flex-direction:column;gap:8px;width:220px}
+#loadingStage{font-size:11px;font-weight:500;letter-spacing:.16em;line-height:1;color:var(--ink);text-shadow:var(--halo)}
+#loadingSlot{position:relative;display:block;height:8px;padding:1px;box-sizing:border-box;border-radius:4px;background:var(--slot-tint);
+ box-shadow:inset 0 2px 3px var(--slot-shade),inset 0 -1px 0 var(--slot-lip),0 0 0 1px var(--cut)}
+#loadingSlot::before{content:"";position:absolute;inset:0;border-radius:inherit;
+ background:repeating-linear-gradient(to right,var(--etch-dark) 0 1px,var(--etch-light) 1px 2px,transparent 2px 10%)}
+#loadingFill{position:relative;display:block;height:100%;width:0;border-radius:3px;background:var(--metal-face);
+ box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec)}
 /* The start-up failure box: the panel material, not an opaque square outside it. */
 #error{position:absolute;left:50%;top:30%;transform:translateX(-50%);width:min(420px,calc(100vw - 36px));
  padding:24px;line-height:1.5;font-size:15px;color:var(--ink);border-radius:15px;background:var(--light-panel),var(--panel-tint-opaque);
@@ -336,7 +346,8 @@ body.touch #start{display:inline-flex;align-items:center;justify-content:center;
 /* Two element selectors, because #intro small and body.touch #intro small would otherwise win on
    specificity and keep their margin and their grey. */
 body.touch #intro #introTouch{margin:0;font-size:9px;font-weight:500;letter-spacing:.14em;line-height:1.5;color:var(--ink)}
-body.touch #loading{left:var(--inset-left);bottom:calc(22px + var(--sab));font-size:12px;color:var(--ink)}
+body.touch #loading{left:var(--inset-left);bottom:calc(22px + var(--sab));width:180px;gap:7px}
+body.touch #loadingStage{font-size:10px}
 
 /* ---- the switches: the quadrant in miniature. A slot cut into the veil with a machined knob at
    one end or the other and the two legends etched either side. Monochrome, because a skin or an
@@ -669,7 +680,35 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
 <dt>I / H</dt><dd>Show / hide controls</dd>
 <dt>P, Esc</dt><dd>Pause</dd>
 </dl><details><summary>Map credits</summary><p>Mapzen Terrain Tiles. Europe terrain produced using Copernicus data and information funded by the European Union (EU-DEM). SRTM and GMTED2010 courtesy of USGS; ETOPO1 NOAA. Roads, buildings and harbour geometry © OpenStreetMap contributors, ODbL 1.0 (openstreetmap.org/copyright). Building heights are estimated where not supplied. Horizontal scale 85%. Jersey Airport location and runway bearing follow the NATS aerodrome chart; runway length and airfield buildings are adapted for gameplay. Barlow Condensed, copyright 2017 The Barlow Project Authors, SIL Open Font License 1.1; the licence text is at assets/fonts/OFL-BarlowCondensed.txt.</p></details></div>
-<div id="status"></div><div id="loading">Preparing aircraft and airfield…</div>
+<div id="status"></div><div id="loading" role="progressbar" aria-label="Loading RANGE" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="loadingStage">LOADING</span><span id="loadingSlot" aria-hidden="true"><span id="loadingFill"></span></span></div>
+<script>/* load-gauge: the one writer of #loading, and it only moves forwards. The bundle's data scripts
+   (tools/build.py) call RANGE_LOAD, RANGE_PART and RANGE_TEX as the page arrives, so the download
+   itself moves the gauge and the library is decoded a slice at a time rather than in one block at
+   the end; main.js reports the build stages after them. */
+(function () {
+  var last = 0, total = 1, got = 0, at = 0, bin = null;
+  window.RANGE_GAUGE = function (fraction, text) {
+    var box = document.getElementById('loading');
+    if (!box) return;
+    last = Math.min(1, Math.max(last, fraction || 0));
+    document.getElementById('loadingFill').style.width = (last * 100).toFixed(1) + '%';
+    box.setAttribute('aria-valuenow', String(Math.round(last * 100)));
+    if (text) { document.getElementById('loadingStage').textContent = text; box.setAttribute('aria-valuetext', text); }
+  };
+  function arrived(characters) { got += characters; window.RANGE_GAUGE(0.5 * got / total, 'LOADING · DATA'); }
+  // Each data script is removed once it has run, so the page does not keep a second copy of the text.
+  function done() { var s = document.currentScript; if (s) s.remove(); }
+  window.RANGE_LOAD = function (characters, bytes) { total = characters; bin = window.RANGE_BIN_DATA = new Uint8Array(bytes); window.RANGE_TEXTURES = {}; done(); };
+  // One slice of the library, a whole number of base64 quads, decoded into place.
+  window.RANGE_PART = function (text) {
+    var bytes;
+    if (typeof Uint8Array.fromBase64 === 'function') bytes = Uint8Array.fromBase64(text);
+    else { var raw = atob(text); bytes = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i); }
+    bin.set(bytes, at); at += bytes.length; arrived(text.length); done();
+  };
+  window.RANGE_TEX = function (stem, url) { window.RANGE_TEXTURES[stem] = url; arrived(url.length); done(); };
+})();
+</script>
 <!-- Outside #touch, which carries .hidden until ENTER: the intro deleted its own "Hold the phone
      sideways" line on the grounds that this veil says it in the only situation where it is needed,
      and inside a display:none ancestor it never painted on the intro at all. Last but for the error

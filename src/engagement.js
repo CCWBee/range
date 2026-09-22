@@ -1,7 +1,7 @@
 // Small sortie mechanics. Public names and silhouettes, deliberately simplified game dynamics.
 // The seeker and steering are tuned for readable gameplay, not a real weapon performance model.
 import * as THREE from '../vendor/three.module.js';
-import { groundHeight, bombStep } from '../physics.js';
+import { groundHeight, bombStep, MAX_GROUND } from '../physics.js';
 import { TRAFFIC, trafficPose } from './traffic.js';
 import { JERSEY } from './jersey.js';
 
@@ -25,8 +25,13 @@ export function proximityPass(a0, a1, b0, b1, radius = 18) {
 }
 
 export function clearSight(a,b) {
+  // No sample above every piece of ground can be blocked, so only the low ones query the terrain.
+  // Exact: an air-to-air ray skips the loop, and a laser ray from a falling bomb to the ground tests
+  // its last few samples rather than all 27 (the impact predictor runs it every step, ten times a
+  // second).
+  if (Math.min(a.y, b.y) > MAX_GROUND + .5) return true;
   const p=V3();
-  for(let i=1;i<28;i++) {p.lerpVectors(a,b,i/28);if(p.y<groundHeight(p.x,p.z)+.5)return false;}
+  for(let i=1;i<28;i++) {p.lerpVectors(a,b,i/28);if(p.y<=MAX_GROUND+.5&&p.y<groundHeight(p.x,p.z)+.5)return false;}
   return true;
 }
 

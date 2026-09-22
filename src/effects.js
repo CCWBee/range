@@ -57,6 +57,7 @@ class SpritePool {
 
   // step(particle, dt) returns false when the particle is done.
   update(dt, step) {
+    const was = this.mesh.count;
     for (let i = this.live.length - 1; i >= 0; i--) {
       if (!step(this.live[i], dt)) this.live.splice(i, 1);
     }
@@ -69,13 +70,21 @@ class SpritePool {
       this.alpha[i] = p.alpha;
     }
     this.mesh.count = n;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.geometry.attributes.alpha.needsUpdate = true;
+    // An empty pool neither draws nor uploads: it still bound its program every frame before, and
+    // re-sent its whole instance buffer. Upload only while something is, or has just stopped being,
+    // alive, so the last frame's instances are cleared.
+    this.mesh.visible = n > 0;
+    if (n > 0 || was > 0) {
+      this.mesh.instanceMatrix.needsUpdate = true;
+      this.mesh.geometry.attributes.alpha.needsUpdate = true;
+    }
   }
 }
 
 export class Effects {
-  constructor(library, scene, quadGeometry, audio) {
+  // options.tier: 'mobile' swaps the sprite noise for a two-tap version and keeps one blast light.
+  constructor(library, scene, quadGeometry, audio, options = {}) {
+    this.tier = options.tier || 'desktop';
     this.library = library;
     this.scene = scene;
     this.quadGeometry = quadGeometry;
@@ -92,25 +101,36 @@ export class Effects {
     this.buildTargets();
     this.buildTracers();
     this.buildCraters();
+    // Smoke, spray, fire and dust ran a five-octave fbm per fragment, layered deep in a smoke column.
+    // The phone gets two taps of value noise instead, which reads the same at sprite size.
+    // The define gets a line of its own: SPRITE_NOISE follows a declaration on the same line.
+    const SPRITE_NOISE = `${this.tier === 'mobile' ? '\n#define SPRITE_LO\n' : ''}${NOISE_GLSL}
+float spriteNoise(vec2 p){
+#ifdef SPRITE_LO
+ return noise(p)*.6+noise(p*2.1+3.7)*.4;
+#else
+ return fbm(p);
+#endif
+}`;
     this.smoke = new SpritePool(scene, quadGeometry, 280, `
-varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${SPRITE_NOISE}
 void main(){
  float d=length(uvp-.5)*2.;
- float n=fbm(uvp*8.);
+ float n=spriteNoise(uvp*8.);
  float a=smoothstep(.96,.18,d+n*.25)*smoothstep(.22,.6,n)*vAlpha;
  vec3 shade=mix(vec3(.012,.014,.018),vec3(.12,.13,.14),uvp.y*.65+n*.4);
  gl_FragColor=vec4(shade,a);
 }`, { tint: 0x30383d });
     this.spray = new SpritePool(scene, quadGeometry, 96, `
-varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${SPRITE_NOISE}
 void main(){
  float d=length(uvp-.5)*2.;
- float n=fbm(uvp*6.+.5);
+ float n=spriteNoise(uvp*6.+.5);
  gl_FragColor=vec4(tint*(.8+n*.5),smoothstep(1.,.05,d)*(.35+n*.65)*vAlpha);
 }`, { tint: 0x9aa6ab });
     this.fire = new SpritePool(scene,quadGeometry,128,`
-varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
-void main(){vec2 q=(uvp-.5)*2.;float n=fbm(uvp*11.+vAlpha*1.5);
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${SPRITE_NOISE}
+void main(){vec2 q=(uvp-.5)*2.;float n=spriteNoise(uvp*11.+vAlpha*1.5);
  float edge=1.-length(q);float a=smoothstep(.03,.45,edge)*smoothstep(.25,.63,n)*vAlpha;
  vec3 c=mix(vec3(2.4,.16,.012),vec3(10.,6.5,3.2),smoothstep(.43,.74,n)*vAlpha);
  gl_FragColor=vec4(c,a);}`,{additive:true});
@@ -123,11 +143,12 @@ varying vec2 uvp;varying float vAlpha;uniform vec3 tint;
 void main(){vec2 q=abs(uvp-.5)*2.;float a=pow(max(0.,1.-q.x),2.)*max(0.,1.-q.y)*vAlpha;
  gl_FragColor=vec4(vec3(5.,1.6,.23),a);}`,{additive:true});
     this.dust = new SpritePool(scene,quadGeometry,160,`
-varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${NOISE_GLSL}
-void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
+varying vec2 uvp;varying float vAlpha;uniform vec3 tint;${SPRITE_NOISE}
+void main(){float n=spriteNoise(uvp*8.);float d=length((uvp-.5)*2.);
  gl_FragColor=vec4(mix(vec3(.09,.08,.065),vec3(.28,.27,.23),uvp.y+n*.2),smoothstep(1.,.1,d+n*.18)*vAlpha);}`);
-    // Keep the light count fixed so detonations never recompile scene materials.
-    this.blastLights=Array.from({length:2},()=>{const l=new THREE.PointLight(0xff963d,0,150,2);scene.add(l);return l;});
+    // Keep the light count fixed so detonations never recompile scene materials. Every lit fragment
+    // pays for each point light even at intensity zero, so the phone keeps one.
+    this.blastLights=Array.from({length:this.tier==='mobile'?1:2},()=>{const l=new THREE.PointLight(0xff963d,0,150,2);scene.add(l);return l;});
     this.debris=[];
     this.smokeShadow=this.buildSmokeShadow();
   }
@@ -473,7 +494,7 @@ void main(){float n=fbm(uvp*8.);float d=length((uvp-.5)*2.);
     for (let i = this.blasts.length - 1; i >= 0; i--) {
       const blast = this.blasts[i];
       blast.age += dt;
-      const light=this.blastLights[i%2];
+      const light=this.blastLights[i%this.blastLights.length];
       light.position.copy(blast.position).add(V3(0,3,0));
       light.intensity=Math.max(light.intensity,22000*blast.strength*Math.exp(-blast.age*10));
       if(blast.age>1.5)this.blasts.splice(i,1);

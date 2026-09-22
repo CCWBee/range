@@ -5,8 +5,8 @@
 // Placement is a data table read against the library by name. An asset the library does not carry
 // yet is logged once and skipped, so the scene fills in as stream B lands each mesh.
 import * as THREE from '../vendor/three.module.js';
-import { terrainHeight, onPavement, coast, PAVEMENT } from '../physics.js';
-import { shoreSample } from './shore.js';
+import { terrainHeight, naturalHeight, onPavement, coast, PAVEMENT } from '../physics.js';
+import { shoreSample, shoreHeightFrom } from './shore.js';
 import { LANDCOVER } from './landcover.js';
 import { LANDMARKS } from './landmarks.js';
 import { JERSEY } from './jersey.js';
@@ -43,9 +43,19 @@ vec3 atmosphere(vec3 d){
 vec3 skyColour(vec3 d,vec2 offset){
  vec3 col=atmosphere(d);float h=max(.025,d.y+.045);
  vec2 p=d.xz/h*.82+offset;
+ // The phone tier drops the domain warp and the second fbm: the sky is drawn on every pixel before
+ // anything can occlude it, so this was the largest per-pixel cost on the phone.
+ #ifdef SKY_LO
+ float n=fbm(p);
+ #else
  float n=fbm(p+fbm(p*.5)*1.5);
+ #endif
  float cover=smoothstep(.39,.66,n);
+ #ifdef SKY_LO
+ float layer=noise(p*2.7+vec2(11.3));
+ #else
  float layer=fbm(p*2.7+vec2(11.3));
+ #endif
  vec3 cloud=mix(vec3(.18,.23,.30),vec3(.55,.61,.67),layer*.8+max(0.,d.y)*.22);
  cloud+=vec3(.12,.10,.075)*pow(max(0.,-d.z),4.)*exp(-h*4.);
  col=mix(col,cloud,cover*smoothstep(-.012,.10,d.y));
@@ -189,18 +199,29 @@ export class World {
     this.windTime={value:0};
     this.animated = [];
     this.quadGeometry = this.geometryOf('quad') || new THREE.PlaneGeometry(1, 1);
+    this.buildTimes = {};
+  }
 
-    this.buildSky();
-    this.buildLighting();
-    this.buildOcean();
-    this.buildTerrain();
-    this.buildPavement();
-    this.buildScenery();
-    this.buildLamps();
-    this.buildClutter();
-    this.buildWoodland();
-    this.buildClouds();
-    this.buildTownLights();
+  // The island is built in stages, in this order, with step(fraction, legend) awaited before each:
+  // main.js hands the page a frame there, so the load gauge moves and the page stays responsive
+  // rather than freezing for the whole build. buildTimes keeps each stage's milliseconds.
+  async build(step = async () => {}) {
+    const stages = [
+      ['SKY AND SEA', () => { this.buildSky(); this.buildLighting(); this.buildOcean(); }],
+      ['TERRAIN', () => { this.buildTerrain(); this.buildPavement(); }],
+      ['BUILDINGS', () => { this.buildScenery(); this.buildLamps(); }],
+      ['FIELDS', () => this.buildClutter()],
+      ['WOODLAND', () => this.buildWoodland()],
+      ['CLOUDS', () => { this.buildClouds(); this.buildTownLights(); }],
+    ];
+    for (let i = 0; i < stages.length; i++) {
+      const [name, run] = stages[i];
+      await step(i / stages.length, `BUILDING · ${name}`);
+      const t0 = performance.now();
+      run();
+      this.buildTimes[name] = Math.round(performance.now() - t0);
+    }
+    return this;
   }
 
   // The first geometry of an asset, for the cases where a single mesh is wanted.
@@ -218,7 +239,7 @@ export class World {
       side: THREE.BackSide, depthWrite: false,
       uniforms: { offset: { value: new THREE.Vector2() }, panorama: { value: skyTexture }, hasMap: { value: skyTexture ? 1 : 0 } },
       vertexShader: 'varying vec3 direction;void main(){direction=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-      fragmentShader: `varying vec3 direction;uniform sampler2D panorama;uniform vec2 offset;uniform float hasMap;${NOISE_GLSL}
+      fragmentShader: `varying vec3 direction;uniform sampler2D panorama;uniform vec2 offset;uniform float hasMap;${this.tier === 'mobile' ? '\n#define SKY_LO' : ''}${NOISE_GLSL}
 void main(){vec3 d=normalize(direction);
  vec2 uv=vec2(atan(d.z,d.x)/6.2831853+.5+offset.x*.025,asin(clamp(d.y,-1.,1.))/3.14159265+.5);
  vec3 col=hasMap>.5?mix(texture2D(panorama,uv).rgb,skyColour(d,offset),.55):skyColour(d,offset);
@@ -289,8 +310,16 @@ void main(){vec3 d=normalize(direction);
     // of anything it taxis past. Far: an 800 m square ahead of the camera for the buildings.
     this.nearLight = make(70, 6, 260, -0.00012, 0.06);
     this.farLight = make(800, 24, 2200, -0.0006, 0.9);
-    // The mobile tier keeps the aircraft's own shadow and drops the far map for the buildings.
-    if (this.tier === 'mobile') this.farLight.castShadow = false;
+    // The mobile tier keeps the aircraft's own shadow and has no far map for the buildings. It also
+    // drops the far light altogether rather than keeping it unshadowed: it had the same
+    // colour, angle and 0.75 as the near light, so every lit fragment paid for a second sun that
+    // only half-filled the aircraft's shadow. The near light carries both at 1.5, and the shadow
+    // near the aircraft now reads as dark as the desktop's.
+    if (this.tier === 'mobile') {
+      this.farLight.castShadow = false;
+      this.scene.remove(this.farLight, this.farLight.target);
+      this.nearLight.intensity = 1.5;
+    }
   }
 
   // ------------------------------------------------------------------------- ocean
@@ -309,11 +338,15 @@ void main(){vec3 d=normalize(direction);
     const N = 512, box = new THREE.Vector4(JERSEY.originX, JERSEY.originZ, (JERSEY.nx - 1) * JERSEY.spacing, (JERSEY.nz - 1) * JERSEY.spacing);
     const sdf = new Uint8Array(N * N * 2);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const s = shoreSample(box.x + (i / (N - 1)) * box.z, box.y + (j / (N - 1)) * box.w);
+      const x = box.x + (i / (N - 1)) * box.z, z = box.y + (j / (N - 1)) * box.w;
+      const s = shoreSample(x, z);
       const signed = s.land ? Math.min(127, s.distance) : -Math.min(128, s.distance);
       const index=(j*N+i)*2;
       sdf[index] = Math.max(0, Math.min(255, Math.round(128 + signed)));
-      const depth=JERSEY.seaLevel-terrainHeight(box.x+i/(N-1)*box.z,box.y+j/(N-1)*box.w);
+      // terrainHeight's own shore and grid terms, reusing this point's sample: the full call would
+      // repeat the shore lookup and test the pavement polygons 262,144 times at load, and neither
+      // the pavement nor the airfield blend reaches the water.
+      const depth=JERSEY.seaLevel-shoreHeightFrom(s,x,z,naturalHeight(x,z),JERSEY.seaLevel);
       sdf[index+1]=Math.round(255*THREE.MathUtils.clamp((6-depth)/6,0,1));
     }
     const coastSDF = new THREE.DataTexture(sdf, N, N, THREE.RGFormat, THREE.UnsignedByteType);
@@ -549,7 +582,7 @@ void main(){
  diffuseColor.rgb*=1.-ditch*.55;`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
- roughnessFactor=mix(.98,.88,smoothstep(.25,.72,fbm(worldP.xz*.0035)));`);
+ roughnessFactor=mix(.98,.88,smoothstep(.25,.72,wet)); // wet from map_fragment, same main()`);
     };
     this.terrain = new THREE.Mesh(geometry, this.terrainMaterial);
     this.terrain.receiveShadow = true;
@@ -1042,7 +1075,9 @@ void main(){
     for(const part of this.library.parts('jersey_tree')){
       const mesh=new THREE.InstancedMesh(part.geometry,part.material,positions.length),m=new THREE.Matrix4(),q=new THREE.Quaternion();
       positions.forEach(([x,y,z,size,angle],i)=>{q.setFromAxisAngle(V3(0,1,0),angle);m.compose(V3(x,y,z),q,V3(size,size,size));mesh.setMatrixAt(i,m);});
-      mesh.castShadow=true;mesh.receiveShadow=true;mesh.computeBoundingSphere();this.scene.add(mesh);
+      // The phone's only shadow map is the 89 m square round the aircraft, which almost never meets
+      // woodland, yet every tree instance went through its shadow pass: 336k triangles a frame.
+      mesh.castShadow=this.tier!=='mobile';mesh.receiveShadow=true;mesh.computeBoundingSphere();this.scene.add(mesh);
     }
     console.log(`RANGE: ${positions.length} trees within OSM woodland and orchard boundaries`);
   }
@@ -1075,9 +1110,16 @@ void main(){
   a=smoothstep(.02,.55,edge)*smoothstep(.27,.6,density);
   c=tint*(.6+density*.6);
  }
+ // A fifth of every quad lies outside the disc and blends exactly zero; with no depth write the
+ // discard costs nothing and saves the blend on a tile GPU.
+ if(a*strength<.004)discard;
  gl_FragColor=vec4(c,a*strength);
 }`;
+    // The phone keeps half of each bank: inside the deck the sprites are many full-screen blended
+    // layers, which is what tile GPUs are weakest at.
+    const share = this.tier === 'mobile' ? .5 : 1;
     const makeBank = (count, place, tint, strength) => {
+      count = Math.round(count * share);
       const map = textures.length ? textures[Math.floor(random() * textures.length)] : null;
       if (map) map.colorSpace = THREE.SRGBColorSpace;
       const material = new THREE.ShaderMaterial({

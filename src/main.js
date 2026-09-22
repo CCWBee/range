@@ -43,7 +43,9 @@ addEventListener('error', (event) => showStartFailure(event.message || 'A script
 addEventListener('unhandledrejection', (event) => showStartFailure(event.reason?.message || String(event.reason)));
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  // No depth or stencil on the canvas: every 3D pass renders into the post scene target, which
+  // has its own, and the final quad does not depth-test. About 5 to 6 MB of GPU memory on a phone.
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', depth: false, stencil: false });
 } catch (error) {
   $('error').classList.remove('hidden');
   $('error').textContent = 'RANGE needs WebGL 2. Open it in a browser with hardware acceleration enabled. ' + error.message;
@@ -75,11 +77,36 @@ const audio = new Audio();
 const input = new Input(canvas);
 const hud = new Hud();
 
+// The load gauge (index.html, load-gauge), and a frame between build stages so it repaints and the
+// page takes taps while the island is assembled. A hidden tab (opened in the background) paints
+// nothing and throttles its timers to about one a second, so there the boot runs straight through, as
+// it did before it had stages; the timer covers a tab hidden mid-wait.
+const gauge = (fraction, text) => window.RANGE_GAUGE?.(fraction, text);
+const nextFrame = () => document.hidden ? Promise.resolve() : new Promise((resolve) => {
+  const timer = setTimeout(resolve, 100);
+  requestAnimationFrame(() => { clearTimeout(timer); setTimeout(resolve, 0); });
+});
+// For a loop of small steps: a frame only once 100 ms of work has gone by, since each frame waited
+// for is about 16 ms the loop is not working.
+function frameEvery100ms() {
+  let since = performance.now();
+  return async (fraction, text) => {
+    if (performance.now() - since < 100) return;
+    gauge(fraction, text);
+    await nextFrame();
+    since = performance.now();
+  };
+}
+gauge(.5, 'LOADING · TEXTURES');
+await nextFrame();
 const library = await loadLibrary(renderer);
 const world = new World(renderer, library, { tier: MOBILE ? 'mobile' : 'desktop' });
+await world.build(async (fraction, text) => { gauge(.55 + .3 * fraction, text); await nextFrame(); });
+gauge(.86, 'BUILDING · AIRCRAFT');
+await nextFrame();
 const chase = new ChaseCamera(innerWidth / innerHeight);
 const aircraft = new Aircraft(library, world.scene, world.quadGeometry);
-const effects = new Effects(library, world.scene, world.quadGeometry, audio);
+const effects = new Effects(library, world.scene, world.quadGeometry, audio, { tier: MOBILE ? 'mobile' : 'desktop' });
 const engagement = new Engagement(library,world.scene,effects,aircraft,audio);
 effects.world=world;
 // The mobile tier carries two samples, not none. Observed: with no MSAA on the half-float post
@@ -168,7 +195,8 @@ function adaptResolution(dt) {
 // ------------------------------------------------------------------------------- actions
 
 function start() {
-  if (running) return;
+  // ENTER lights only once the warm-up is done; Enter on the keyboard must not start sooner.
+  if (running || $('start').disabled) return;
   running = true;
   input.running = true;
   $('intro').classList.add('hidden');
@@ -720,14 +748,71 @@ function setAim(azimuth, elevation) {
 
 // ------------------------------------------------------------------------------- go
 
+// Upload the textures and compile every shader before ENTER lights, not on the first frames after
+// it: that was a block of 3.5 to 4.6 seconds with an enabled ENTER already showing (measured with
+// tools/qa_boot.mjs). Where the browser has KHR_parallel_shader_compile the programs build off the
+// main thread and are polled here, so the gauge counts them. compile() walks hidden objects too, so
+// the idle sprite pools are included and the first explosion does not stop to build its smoke.
+// bootTimes keeps each phase's milliseconds for tools/qa_boot.mjs and a phone's own console.
+const bootTimes = { parallelCompile: renderer.extensions.has('KHR_parallel_shader_compile') };
+async function warmUp() {
+  let t0 = performance.now();
+  const textures = [...new Set(Object.values(library.textures))];
+  const textureFrame = frameEvery100ms();
+  for (let i = 0; i < textures.length; i++) {
+    renderer.initTexture(textures[i]);
+    await textureFrame(.88 + .04 * (i + 1) / textures.length, 'LOADING · TEXTURES');
+  }
+  bootTimes.textures = Math.round(performance.now() - t0);
+  gauge(.92, 'COMPILING · SHADERS');
+  await nextFrame();
+  t0 = performance.now();
+  // Object by object, so a browser without the extension (where each compile blocks) still moves
+  // the gauge; with it, the loop below waits for the last program.
+  const objects = [], materials = new Set(), compileFrame = frameEvery100ms();
+  scene.traverse((object) => { if (object.material) objects.push(object); });
+  for (let i = 0; i < objects.length; i++) {
+    for (const material of renderer.compile(objects[i], camera, scene)) materials.add(material);
+    await compileFrame(.92 + .04 * (i + 1) / objects.length, 'COMPILING · SHADERS');
+  }
+  bootTimes.compile = Math.round(performance.now() - t0);
+  bootTimes.programs = materials.size;
+  t0 = performance.now();
+  const pending = [...materials];
+  const ready = (material) => renderer.properties.get(material).currentProgram?.isReady() ?? true;
+  for (let waited = 0; waited < 30000; waited += 30) {
+    const count = pending.filter(ready).length;
+    gauge(.96 + .03 * count / Math.max(1, pending.length), 'COMPILING · SHADERS');
+    if (count === pending.length || document.hidden) break;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  }
+  bootTimes.compileWait = Math.round(performance.now() - t0);
+}
+
+// The window may have been resized or turned while the island was built, before the listener existed.
+window.dispatchEvent(new Event('resize'));
 chase.update(1 / 60, flight, null, false, true);
 aircraft.update(0.016, flight, camera, 0);
 world.update(0.016, flight, camera, 0);
+await warmUp();
+// The first frame draws here, behind the full gauge, so what is left of its cost (the shadow passes'
+// own programs, the first buffer uploads) is paid before ENTER rather than after it.
+gauge(.99, 'PREPARING · FIRST FRAME');
+await nextFrame();
+{
+  const t0 = performance.now();
+  frame(0, false);
+  bootTimes.firstFrame = Math.round(performance.now() - t0);
+}
+bootTimes.world = world.buildTimes;
+gauge(1);
+await nextFrame();
 $('loading').classList.add('hidden');
 $('start').disabled = false;
 started = true;
 // Reaching this line means nothing that fired during loading was fatal, so clear any failure box.
 $('error').classList.add('hidden');
+lastFrame = performance.now(); // the first frame's time is that frame's, not the whole boot's
 requestAnimationFrame(loop);
 
 // Assigned last, once every await has settled, so a headless --eval that runs the moment the page
@@ -735,7 +820,7 @@ requestAnimationFrame(loop);
 window.range = {
   flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch, post,
   targets: effects.targets, bombs: effects.bombs,
-  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft, tick,
+  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft, tick, bootTimes,
   dropBomb: () => effects.dropBomb(flight, aircraft),
   fireGun: () => effects.fireGun(flight),
   explosion: (position, strength) => effects.explosion(position, strength),

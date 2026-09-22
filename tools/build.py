@@ -142,8 +142,6 @@ def bundle_code(manifest,binary,textures,tier):
         modules[path],extra=transform_data(path.stem,modules[path],tier);preamble+=extra
     code='const THREE=(()=>{'+three+'})();\nconst RANGE={};\n'+preamble
     code+='window.RANGE_MANIFEST='+json.dumps(manifest,separators=(',',':'))+';\n'
-    code+='window.RANGE_BIN='+json.dumps(base64.b64encode(binary).decode())+';\n'
-    code+='window.RANGE_TEXTURES='+json.dumps(textures,separators=(',',':'))+';\n'
     for path in order:
         body=modules[path];bindings=[]
         for match in pattern.finditer(body):
@@ -163,6 +161,19 @@ def bundle_code(manifest,binary,textures,tier):
     syntax=subprocess.run(['node','--check','--input-type=module'],input=code,text=True,encoding='utf-8',capture_output=True)
     assert syntax.returncode==0,syntax.stderr
     return code,[p.stem for p in order]
+
+def data_scripts(binary,textures):
+    # The library and textures travel as classic scripts ahead of the module, so they run as the page
+    # arrives: each one reports to the load gauge (index.html, load-gauge), and the library is decoded
+    # a slice at a time instead of in one block once the whole page is in. A slice is a whole number of
+    # base64 quads, so each decodes on its own.
+    encoded=base64.b64encode(binary).decode();size=512*1024
+    assert size%4==0
+    total=len(encoded)+sum(len(url) for url in textures.values())
+    out=[f'<script>RANGE_LOAD({total},{len(binary)})</script>']
+    out+=[f'<script>RANGE_PART("{encoded[i:i+size]}")</script>' for i in range(0,len(encoded),size)]
+    out+=[f'<script>RANGE_TEX({json.dumps(stem)},{json.dumps(url)})</script>' for stem,url in sorted(textures.items())]
+    return '\n'.join(out)+'\n'
 
 class DependencyCheck(HTMLParser):
     # The one relative reference allowed is the home-screen icon, which build() copies beside the
@@ -194,7 +205,8 @@ def build(tier):
     html=(root/'index.html').read_text(encoding='utf-8')
     entry='<script type="module" src="src/main.js"></script>'
     assert entry in html
-    html=html.replace(entry,'<script type="module">'+code.replace('</script','<\\/script')+'</script>')
+    assert 'window.RANGE_GAUGE' in html,'the load-gauge script must precede the data scripts'
+    html=html.replace(entry,data_scripts(binary,textures)+'<script type="module">'+code.replace('</script','<\\/script')+'</script>')
     # The faces, inlined the way the textures are. DependencyCheck reads only src and href tag
     # attributes, so a url(assets/fonts/...) left inside the inline <style> would pass it unseen and
     # the phone would silently render in Arial; the asserts below are what catch that.

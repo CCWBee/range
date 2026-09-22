@@ -5,7 +5,12 @@ import { SHORE } from './shore-data.js';
 // side test stays consistent where a point's nearest coastline point is a shared vertex. Land is the
 // side the polygon interior lies on; with the OSM winding under this projection that is the +normal
 // side, where normal = (dz, -dx) for a segment running (dx, dz). See tools/test_shore.mjs.
+// Numeric keys (no string per lookup) and one shared result object: shoreSample runs inside every
+// terrainHeight call, so it sits under clearSight, the bomb predictor, sparks, wheel contacts and the
+// load-time bakes.
 const buckets = new Map(), cell = 300;
+const cellKey = (ix, iz) => (ix + 1024) * 4096 + (iz + 1024);
+const sample = { distance: Infinity, land: false };
 function landNormal(a, b) {
   const dx = b[0] - a[0], dz = b[1] - a[1], m = Math.hypot(dx, dz);
   return m < 1e-9 ? null : [dz / m, -dx / m];
@@ -21,12 +26,13 @@ for (const line of SHORE) for (let i = 1; i < line.length; i++) {
   const seg = { a, b, nx: n[0], nz: n[1], pnx: pn[0], pnz: pn[1], nnx: nn[0], nnz: nn[1] };
   for (let x = Math.floor(Math.min(a[0], b[0]) / cell) - 1; x <= Math.floor(Math.max(a[0], b[0]) / cell) + 1; x++)
     for (let z = Math.floor(Math.min(a[1], b[1]) / cell) - 1; z <= Math.floor(Math.max(a[1], b[1]) / cell) + 1; z++) {
-      const key = x + ',' + z; if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(seg);
+      const key = cellKey(x, z); if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(seg);
     }
 }
+// Returns a shared object: read distance and land before the next call.
 export function shoreSample(x, z) {
   let best = Infinity, land = false;
-  for (const s of buckets.get(Math.floor(x / cell) + ',' + Math.floor(z / cell)) || []) {
+  for (const s of buckets.get(cellKey(Math.floor(x / cell), Math.floor(z / cell))) || []) {
     const dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1], l = dx * dx + dz * dz;
     const t = Math.max(0, Math.min(1, ((x - s.a[0]) * dx + (z - s.a[1]) * dz) / Math.max(1, l)));
     const px = s.a[0] + t * dx, pz = s.a[1] + t * dz;
@@ -41,10 +47,14 @@ export function shoreSample(x, z) {
       land = (x - px) * lnx + (z - pz) * lnz > 0;
     }
   }
-  return { distance: best, land };
+  sample.distance = best; sample.land = land;
+  return sample;
 }
 export function shoreHeight(x, z, height, sea) {
-  const s = shoreSample(x, z);
+  return shoreHeightFrom(shoreSample(x, z), x, z, height, sea);
+}
+// The same for a caller that already holds this point's shoreSample (the water bake).
+export function shoreHeightFrom(s, x, z, height, sea) {
   if (s.distance > 250) return height;
   // Restore dry mapped land lost in coarse coastal DEM cells. Do not lower real cliffs, and cap the
   // inland ramp below the sea walls' coping (about sea + 4.7) so the terrain never climbs over a
