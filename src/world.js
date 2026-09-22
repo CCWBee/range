@@ -325,6 +325,91 @@ void main(){vec3 d=normalize(direction);
   // ------------------------------------------------------------------------- ocean
 
   buildOcean() {
+    // The sea's surface helpers. The string starts on a new line: NOISE_GLSL ends in a brace, and
+    // a #ifdef after it on the same line fails to compile.
+    const SEA_GLSL = `
+// The sea's surface, 23 September 2026 (docs/specs/2026-09-23-water-tiling.md). Before this it was
+// two crossed sines on the world axes, whose sum repeated every 70 to 105 m as an egg-crate lattice
+// and aliased into moire towards the horizon. Chosen by a design panel (run wf_ad44ed3c-8b4) from
+// four proposals: a directional spectrum, grafted with integer-hash gradient noise.
+//
+// seaNoised: gradient noise with an integer hash (no table to repeat, exact at 60 km) and analytic
+// derivatives; x the value, yz the gradient. Value noise() would not do here: its maxima sit on its
+// lattice and its gradient vanishes along every cell edge, so anything driven by it shows its grid.
+vec2 seaGrad(uvec2 c){c&=uvec2(65535u);c=1103515245u*((c>>1u)^c.yx);uint n=1103515245u*(c.x^(c.y>>3u));return vec2(uvec2(n,n*747796405u)>>16u)*(2./65535.)-1.;}
+vec3 seaNoised(vec2 f,uvec2 c){
+ vec2 u=f*f*f*(f*(f*6.-15.)+10.);vec2 du=30.*f*f*(f*(f-2.)+1.);
+ vec2 ga=seaGrad(c),gb=seaGrad(c+uvec2(1u,0u)),gc=seaGrad(c+uvec2(0u,1u)),gd=seaGrad(c+uvec2(1u));
+ float va=dot(ga,f),vb=dot(gb,f-vec2(1.,0.)),vc=dot(gc,f-vec2(0.,1.)),vd=dot(gd,f-1.);
+ float k4=va-vb-vc+vd;
+ return vec3(va+u.x*(vb-va)+u.y*(vc-va)+u.x*u.y*k4,ga+u.x*(gb-ga)+u.y*(gc-ga)+u.x*u.y*(ga-gb-gc+gd)+du*(u.yx*k4+vec2(vb,vc)-va));
+}
+// One octave at point p (in cells), seeded by an offset to its lattice.
+float seaNoise1(vec2 p,uvec2 seed){vec2 i=floor(p);return seaNoised(p-i,uvec2(ivec2(i))+seed).x;}
+// The directional spectrum: plane waves on deep-water dispersion. SEA_K row: xy the wavevector in
+// cycles per metre (direction over wavelength), z the frequency in hertz, w the slope amplitude times
+// the wavelength, so xy*w is the slope. Directions spread about a wind of 52 degrees from +X and none
+// lies on a world axis; wavelengths step by uneven ratios (97 m to 1.3 m, the phone 88 m to 2.3 m), so
+// no two waves share a lattice. SEA_J row: x a phase offset, y how many cycles the patch field bends
+// the crests, z and w the rate and offset of the envelope that makes each wave rise and fade in its
+// own patches of sea. The phone's two shortest waves stand 69 degrees apart at four fifths of their
+// first strength, so they do not cross into a clean corduroy up close.
+#ifdef OCEAN_HI
+#define SEA_N 10
+const vec4 SEA_K[10]=vec4[10](
+ vec4(.00498,.00899,.1267,2.0994),
+ vec4(.01492,.00633,.1591,1.6339),
+ vec4(.00313,.02552,.2003,1.1446),
+ vec4(.03472,.02523,.2589,.7084),
+ vec4(-.01109,.07005,.3328,.4425),
+ vec4(.11243,.02803,.4253,.2709),
+ vec4(.05864,.18047,.5443,.1602),
+ vec4(.27679,.14717,.6996,.0939),
+ vec4(-.14403,.47109,.8770,.0557),
+ vec4(.50081,.57611,1.0917,.0334));
+const vec4 SEA_J[10]=vec4[10](
+ vec4(.13,.55,1.31,.17),
+ vec4(.71,-.65,1.87,.62),
+ vec4(.38,.70,2.29,.41),
+ vec4(.94,-.90,1.53,.88),
+ vec4(.27,1.10,2.71,.29),
+ vec4(.59,-1.00,1.69,.73),
+ vec4(.06,1.30,2.13,.05),
+ vec4(.83,-1.20,1.41,.54),
+ vec4(.47,1.45,2.47,.36),
+ vec4(.21,-1.55,1.77,.91));
+#else
+#define SEA_N 6
+const vec4 SEA_K[6]=vec4[6](
+ vec4(.00585,.00973,.1331,2.7493),
+ vec4(.02223,.00898,.1935,1.5257),
+ vec4(.00710,.05052,.2822,.7593),
+ vec4(.08943,.06032,.4104,.3591),
+ vec4(-.09986,.20475,.5964,.1235),
+ vec4(.32788,.35161,.8664,.0534));
+const vec4 SEA_J[6]=vec4[6](
+ vec4(.13,.55,1.31,.17),
+ vec4(.71,-.70,1.87,.62),
+ vec4(.38,.85,2.29,.41),
+ vec4(.94,-1.10,1.53,.88),
+ vec4(.27,1.30,2.71,.29),
+ vec4(.59,-1.50,1.69,.73));
+#endif
+// The slope field at p. Each wave fades by its own cycles per pixel along both screen axes, so it is
+// gone before it can alias (anisotropic: at a grazing angle a wave running towards the camera goes
+// first), and nothing fades at a fixed distance. Phases wrap in whole cycles before the cosine, so
+// 60 km and a long session stay exact.
+vec2 seaSlope(vec2 p,vec2 dx,vec2 dy,float t,float j){
+ vec2 g=vec2(0.);
+ for(int i=0;i<SEA_N;i++){
+  vec4 k=SEA_K[i];vec4 q=SEA_J[i];
+  float att=1.-smoothstep(.08,.3,abs(dot(k.xy,dx))+abs(dot(k.xy,dy)));
+  float u=abs(fract(j*q.z+q.w)*2.-1.);
+  float ph=fract(dot(k.xy,p))-fract(k.z*t)+q.x+q.y*j;
+  g+=k.xy*(k.w*att*(.45+1.1*u*u*(3.-2.*u))*cos(6.2831853*ph));
+ }
+ return g;
+}`;
     // The water plane is built here rather than taken from the library: it is one quad, and the
     // v2 scenery list drops the old `ocean` asset. The shader is tier-gated with a compile-time
     // OCEAN_HI define so the phone runs a lighter fragment path (see below), because at pixel ratio
@@ -358,20 +443,23 @@ void main(){vec3 d=normalize(direction);
       uniforms: { time: { value: 0 }, aircraftWater: { value:new THREE.Vector4(0,0,0,0) }, waterDirection:{value:new THREE.Vector2(0,-1)},
         sunDir: { value: SUN_DIRECTION.clone() }, skyOffset: { value: new THREE.Vector2() }, coastSDF: { value: coastSDF }, islandBox: { value: box } },
       vertexShader: 'varying vec3 worldP;void main(){worldP=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*viewMatrix*vec4(worldP,1.);}',
-      fragmentShader: `varying vec3 worldP;uniform float time;uniform vec4 aircraftWater;uniform vec2 waterDirection;uniform vec3 sunDir;uniform vec2 skyOffset;uniform sampler2D coastSDF;uniform vec4 islandBox;${hi ? '\n#define OCEAN_HI' : ''}${NOISE_GLSL}
+      fragmentShader: `varying vec3 worldP;uniform float time;uniform vec4 aircraftWater;uniform vec2 waterDirection;uniform vec3 sunDir;uniform vec2 skyOffset;uniform sampler2D coastSDF;uniform vec4 islandBox;${hi ? '\n#define OCEAN_HI' : ''}${NOISE_GLSL}${SEA_GLSL}
 void main(){
  vec3 eye=normalize(cameraPosition-worldP);
  float dist=length(cameraPosition-worldP);
- float waveFade=exp(-dist*.0007);
- // Wind chop: two crossed sines near the camera, with extra directional octaves on the desktop tier
- // so it reads as chop rather than corduroy up close. Distant sea stays glassy and cheap via waveFade.
- float a=(sin(worldP.x*.06+time*.7)+sin(worldP.z*.093-time*.5))*waveFade;
- float b=cos(worldP.x*.087+worldP.z*.04+time)*.06*waveFade;
+ // The patch field: one octave of gradient noise in rotated 244 m cells. It bends each wave's crests
+ // and drives its envelope, so the locally strongest waves change from patch to patch and no crossing
+ // pattern holds over more than a few hundred metres.
+ vec2 dpx=dFdx(worldP.xz),dpy=dFdy(worldP.xz);
+ float fp=max(length(dpx),length(dpy));
+ float seaPatch=clamp(.5+.75*seaNoise1(mat2(.8,.6,-.6,.8)*worldP.xz*.0041,uvec2(0u)),0.,1.);
+ vec2 slope=seaSlope(worldP.xz,dpx,dpy,time,seaPatch);
  #ifdef OCEAN_HI
- a+=(sin(dot(worldP.xz,vec2(.132,-.05))+time*1.3)+sin(dot(worldP.xz,vec2(-.031,.163))-time*1.1))*.5*waveFade;
- b+=cos(dot(worldP.xz,vec2(.11,.14))+time*1.7)*.03*waveFade;
+ // Calmer and rougher stretches (cat's paws) at about 430 m, desktop only; they also gate the foam.
+ float rough=smoothstep(.3,.7,.5+.75*seaNoise1(mat2(.6,-.8,.8,.6)*worldP.xz*.0023,uvec2(911u,3571u)));
+ slope*=mix(.75,1.2,rough);
  #endif
- vec3 normal=normalize(vec3(a*.045,1.,b));
+ vec3 normal=normalize(vec3(-slope.x,1.,-slope.y));
  // A restrained surface disturbance under a very low pass gives a nearby scale reference. It fades
  // with height and is only computed where it exists, not across the whole sea, so it costs nothing
  // on open water. It is a visual cue, not a fluid simulation of jet exhaust.
@@ -405,8 +493,15 @@ void main(){
  c+=vec3(1.,.72,.42)*pow(ndh,240.)*1.1;
  c+=vec3(.5,.36,.2)*pow(ndh,26.)*.12;
  #endif
- float foam=noise(worldP.xz*.1+time*.1);
- c+=vec3(.03)*smoothstep(.78,.95,foam);
+ // Foam sparkle on gradient noise in rotated 10 m cells, whose maxima do not sit on a lattice;
+ // widened by its own derivative and gone once a pixel covers 1.5 to 4 m of sea.
+ float foam=.5+.75*seaNoise1(mat2(.6,.8,-.8,.6)*worldP.xz*.1+vec2(time*.1,0.),uvec2(4099u,2311u));
+ float foamAA=max(fwidth(foam),1e-4);
+ float foamLit=smoothstep(.72-foamAA,.92+foamAA,foam)*(1.-smoothstep(1.5,4.,fp));
+ #ifdef OCEAN_HI
+ foamLit*=.4+.6*rough;
+ #endif
+ c+=vec3(.03)*foamLit;
  if(envelope>.001)c+=vec3(.09,.11,.12)*envelope*smoothstep(.35,.8,fbm(worldP.xz*.43+time*.4));
  // Shoreline, from the baked signed coast distance: a shallow turquoise shelf near land, and on the
  // desktop tier a soft animated breaker on the seaward side.

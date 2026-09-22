@@ -17,6 +17,20 @@ console errors. Not run to completion: `qa_hud_feedback` and the phone `qa_black
 headless runs failed to start Chrome under a saturated CPU); run them if Charles asks for the
 headless harnesses.
 
+Done 23 September, pushed with this file: (1) the favicon (`5b71e15`): the traced planform, flat
+backlit orange `#FF9A1F` on flat HUD green `#2A9A14`, on the 32 unit, radius 6 construction of
+Charles's other site favicons; the tool now rasterises with Pillow, no headless Chrome. (2) The sea's
+lattice ("water tiling", brief `docs/specs/2026-09-23-water-tiling.md`): the two axis-aligned sines
+are replaced by a directional spectrum of plane waves (10 desktop, 6 phone) with per-wave
+anisotropic footprint fades, per-wave patch envelopes and crest bending from integer-hash gradient
+noise, gradient-noise foam, and cat's-paw roughness on the desktop. Chosen by a design panel (run
+`wf_ad44ed3c-8b4`: three Opus proposals, a gpt-5.6-sol one, two judges; the look judge's synthesis,
+built on the directional spectrum). Verified in Brave at the fixed poses of `tools/check_water.js`
+on both tiers, before and after in `_archive/water-qa/`: no lattice at 80, 350 or 1,000 m or on the
+coastal pass, the glitter track intact and breaking into sparkle, both programs linked with empty
+logs and no console errors. The phone's sea pass costs more (the panel measured about 1.7 times on
+the RTX for the spectrum alone, before the gradient noise); judge it in the on-device check.
+
 Next action: an on-device phone check of the live build (`range.bootTimes` in the console: a
 `compileWait` above 0 and a small `firstFrame` mean the parallel-compile path ran, which nothing
 here could exercise), then the older "Deferred" list under the 17 September pass.

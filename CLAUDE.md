@@ -51,7 +51,9 @@ no pill labels, no decorative dots, no emoji icons.
   `python -m http.server 8099 --bind 127.0.0.1`, open `http://127.0.0.1:8099/index.html` (or
   `mobile.html?touch=1`) in the extension's tab and evaluate `tools/check_polish.js` there. That tab
   reports itself hidden, so animation frames never run in it: drive frames with `range.renderOnce(dt)`
-  or `range.tick(now)`. The headless harnesses below run only when Charles asks for them.
+  or `range.tick(now)`. `tools/check_water.js` stages the sea's fixed poses (`seaPose('open80')`,
+  `open350`, `open1000`, `coast`) at a pinned wave phase for before and after shots. The headless
+  harnesses below run only when Charles asks for them.
 - Browser harnesses against the built desktop bundle, each asserting zero console errors:
   `node tools/qa_fleet.mjs` (Wyvern renders, rocket and torpedo release, the coastal views, into
   `_archive/expansion-qa/`), `node tools/qa_hud_feedback.mjs` (metric readouts, the kill
