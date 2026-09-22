@@ -17,8 +17,11 @@ const DROP = [
   "x-proxy-cache", "via", "x-served-by", "x-cache", "x-cache-hits", "x-timer",
   "x-fastly-request-id",
 ];
-// Passed upstream so a revisit can be answered 304 (or a range 206) instead of the full ~30 MB.
-const FORWARD = ["if-none-match", "if-modified-since", "range", "if-range"];
+// Passed upstream so a revisit can be answered 304 instead of the full ~30 MB. Range and If-Range
+// are deliberately not forwarded: the runtime asks GitHub for gzip, GitHub cuts the range from the
+// gzip stream, and the client got bytes of the compressed file under a wrong total. A full 200 is
+// always a valid answer to a range request.
+const FORWARD = ["if-none-match", "if-modified-since"];
 
 const NOT_FOUND = `<!doctype html><html lang="en-GB"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Not found · RANGE</title>

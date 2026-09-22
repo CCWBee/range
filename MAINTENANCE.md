@@ -18,8 +18,10 @@ RANGE, the self-contained three.js flight demo over Jersey, as a live site.
   thin proxy that fetches `https://ccwbee.github.io/range/<path>` and streams it back. It exists
   because `dist/index.html` is about 29.6 MB, over the 25 MiB per-file cap on Workers assets and
   Pages, so Cloudflare cannot host the file directly. It 301s http to https, allows GET and HEAD
-  only, forwards `If-None-Match`, `If-Modified-Since`, `Range` and `If-Range` (so a revisit is a
-  304 rather than the whole file again), keys the upstream on the path only (the query is read in
+  only, forwards `If-None-Match` and `If-Modified-Since` (so a revisit is a 304 rather than the
+  whole file again; `Range` is deliberately not forwarded, because GitHub cut ranges from its gzip
+  stream and the client got compressed bytes under a wrong total, so a range request gets the
+  full 200), keys the upstream on the path only (the query is read in
   the browser), rewrites GitHub's `Location` headers onto the charlesbee.org host, drops GitHub's
   edge headers but keeps `Age`, sets HSTS `max-age=0` (the charlesbee.org guardrail), serves a
   plain RANGE 404 instead of GitHub's branded page, and holds 2xx responses at the edge for 600 s,
