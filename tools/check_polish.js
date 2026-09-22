@@ -45,12 +45,15 @@
   check('target labels never overlap', overlaps === 0 && r.labels.distanceY === '17', r.labels);
 
   if (!mobile) {
-    range.stage('cloud'); range.input.locked = true; range.renderOnce(0);
+    // input.locked is a getter over virtualLock; the staged pose is paused, so the HUD is updated
+    // directly with no pause option rather than through a paused frame.
+    // Inland, on the way out: the cloud pose itself is over the coast, where the coast hint wins.
+    range.stage('cloud'); range.input.virtualLock = true; range.flight.position.set(0, 800, -1500); hudUpdate();
     r.cruiseHint = $('hint').textContent;
     range.flight.bombs = 0; range.effects.reload.bombs = 2; hudUpdate();
     r.weapons = $('weapons').textContent;
     range.flight.crashed = true; hudUpdate(); r.crashHint = $('hint').textContent;
-    range.flight.crashed = false; range.input.locked = false;
+    range.flight.crashed = false; range.input.virtualLock = false;
     check('directions in words', /The range is \d+ km (ahead|behind|to the)/.test(r.cruiseHint), r.cruiseHint);
     check('reload in place', /PAVEWAY RELOAD 23 S/.test(r.weapons) && !/BOMBS/.test(r.weapons), r.weapons);
     check('one crash instruction', r.crashHint === '', r.crashHint);
@@ -67,10 +70,10 @@
       r.rocketCap = $('touchWeapons').querySelector('.key').className;
       check('rocket cap dim on the ground', /\bdim\b/.test(r.rocketCap), r.rocketCap);
     } else {
-      const f = range.flight; range.stage('takeoff'); range.input.locked = true;
+      const f = range.flight; range.stage('takeoff'); range.input.virtualLock = true;
       f.onGround = true; f.landed = false; f.velocity.set(0, 0, -40); f.ias = 1.12 * f.stallSpeed; hudUpdate();
       r.rotate = { hint: $('hint').textContent, vr: Math.round(1.12 * f.stallSpeed * 3.6) };
-      range.input.locked = false;
+      range.input.virtualLock = false;
       check('Wyvern rotation speed', /Rotate at (1[89]0|2[0-4]0) km\/h/.test(r.rotate.hint), r.rotate);
     }
     range.returnToMenu(); range.setAircraft('typhoon');

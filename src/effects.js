@@ -83,7 +83,7 @@ class SpritePool {
 }
 
 export class Effects {
-  // options.tier: 'mobile' swaps the sprite noise for a two-tap version and keeps one blast light.
+  // options.tier: 'mobile' keeps three of the sprite noise's five octaves and one blast light.
   constructor(library, scene, quadGeometry, audio, options = {}) {
     this.tier = options.tier || 'desktop';
     this.library = library;

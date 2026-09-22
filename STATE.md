@@ -4,17 +4,22 @@
 
 22 September 2026. RANGE is live at https://range.charlesbee.org through the `range-charlesbee`
 proxy Worker (`deploy/worker/`, `MAINTENANCE.md`) and listed on the charlesbee.org hub. A pass on UI
-consistency, the random black screens, performance and a loading screen is committed on top of
-`ac51c8a` (detail under "Done (22 September pass)"). PUSH PENDING until the browser QA is green:
-`qa_ui`, `qa_black_frames` (desktop), `qa_pause_menu` and `qa_fleet` pass; `qa_black_frames --tier
-mobile`, `qa_hud_feedback` and the three contrast gates are rerunning after the process exited
-mid-chain (a first run under a saturated CPU lost the WebGL context in the intro cells, which is
-what failed there). Replace this sentence with the pushed hash. An earlier hosting note here called nine modified
-files unrecorded and not live: they were Codex's 17 September work, verified and committed as
-`2412d91`, and ship in this build.
+consistency, the random black screens, performance, a loading screen and the audit's polish list is
+committed and pushed to `master` (everything from `2412d91` to the commit carrying this file; detail
+under "Done (22 September pass)"). An earlier hosting note here called nine modified files
+unrecorded and not live: they were Codex's 17 September work, verified and committed as `2412d91`.
 
-IN FLIGHT after the push: the polish wave named under "Deferred (22 September)", item by item, each
-verified, then one more push.
+Verification: `node tools/test_flight.mjs` all pass; before the rule change, headless `qa_ui`,
+`qa_black_frames` (desktop), `qa_pause_menu`, `qa_fleet` and all three contrast gates (27 cells, 480
+boxes; intro 48; Wyvern intro 18; 0 failures) passed; since then verification is in Brave
+(OPERATING_RULES, 22 September 2026), where `tools/check_polish.js` passes on both bundles with no
+console errors. Not run to completion: `qa_hud_feedback` and the phone `qa_black_frames` (their last
+headless runs failed to start Chrome under a saturated CPU); run them if Charles asks for the
+headless harnesses.
+
+Next action: an on-device phone check of the live build (`range.bootTimes` in the console: a
+`compileWait` above 0 and a small `firstFrame` mean the parallel-compile path ran, which nothing
+here could exercise), then the older "Deferred" list under the 17 September pass.
 
 17 September 2026. A performance, correctness, water and visual polish pass landed on top of
 `0f09752`, seven commits, all verified and pushed (see "Done (polish pass)"). It was guided by a
@@ -75,19 +80,18 @@ loading screen because the page sat frozen while it loaded.
    In a hidden tab the boot runs straight through (compile 0.45 s where the first version took
    63 s). `range.bootTimes` holds each phase for a real-device check.
 
-## Deferred (22 September)
+## Done (22 September, polish from the audit)
 
-The polish wave from the read-only audit (run `wf_132e2bd8-6ae`), none started: target-label
-declutter and the distance text under the object; hint bearings from `JERSEY.bearing`; the Wyvern's
-wording and a designate guard; tier-aware touch notices; Tab swallowed only while flying; craters
-and wrecks floored at the sea surface; the Wyvern's rotation speed from its stall speed; a dim
-state and countdown for the rocket reload and "RELOAD n S" in place on the weapons line; the
-duplicate crash text; one casing for air-target names; `polygonOffset` on `airport_marking`; the
-town-light glow faded with distance; the Wyvern's throttle ticks; the hint's width on a narrow
-window; the intro switches do nothing while the load gauge is up, because they bind after the
-build (bind them before `world.build()` or dim them until ENTER lights). Also owed: an on-device
-phone check of all of this, including `range.bootTimes` on a real
-handset.
+From the read-only audit (run `wf_132e2bd8-6ae`, its `audit:polish` agent), in `150cf49`: target
+labels that give way instead of piling up, with the distance under the object; directions from the
+nose in words and kilometres; the Wyvern's own hints, rotation speed from its stall speed (about
+215 km/h) and no designator; reloads shown in place on the weapons line; notices in capitals that fit
+the tier (`HOLD U TO FOLLOW`, `HOLD THE CAP TO FOLLOW`); one crash instruction; Tab and Space free
+off the flight; air-target names in capitals; no crater on water and wrecks that sink at sea; a
+polygon offset on the runway markings; town lights off the walls, faded with distance; the Wyvern's
+throttle ticks in tenths; the hint capped beside `#systems`; the intro switches unavailable until
+ENTER lights. Not done from that list: a single `RANGE · 6` cluster label at distance (the greedy
+give-way covers the overlap), and the under-700 px desktop layout of `#flightstate`.
 
 ## Done (polish pass, 17 September 2026)
 
@@ -304,7 +308,6 @@ Blender launch when needed:
 
 ## Resume
 
-Read this file first. The 22 September pass is committed; see "Where it stands" for whether it is
-pushed. Next: the polish wave under "Deferred (22 September)", then the older "Deferred" list under
-the 17 September pass (the Blender items: Noirmont, Fort Henry, the St Ouen wall re-placement).
-Still owed: an on-device phone check.
+Read this file first. Everything is committed and pushed. Next is the on-device phone check under
+"Where it stands", then the older "Deferred" list (the Blender items: Noirmont, Fort Henry, the St
+Ouen wall re-placement).
