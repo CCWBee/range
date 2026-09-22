@@ -205,54 +205,49 @@ def main():
 
 
 # --------------------------------------------------------------------------------------------
-# ICON. The shipped mark, drawn from the trace above rather than out of it.
+# ICON. The shipped mark: the traced planform itself, on the portfolio's favicon construction.
 #
-# The icon lives at 16 px in a browser tab, where one device pixel is four units of the 64 unit
-# viewBox, so every load-bearing edge sits on a multiple of four: an edge that lands mid-pixel
-# renders half covered, and half-covered orange over teal is an olive that reads as dirt. The
-# aeroplane is therefore laid out row by row on that grid, 14 rows of the 16 with one clear row
-# top and bottom.
+# Charles, 23 September 2026: an incandescent backlit orange jet on a HUD-green tile, "two tone ...
+# no outline or gradient", in the simplicity and ratios of his other sites' favicons, with the jet as
+# the one custom shape because no character stands in for it. Those favicons (charlesbee.org,
+# Caesar, scam-aware.org) share one construction, copied here: a 32 unit tile with corner radius 6,
+# two flat colours, one centred mark 38 to 54 per cent of the side. The jet stands 18 of 32 tall
+# (56 per cent, level with Caesar's strokes) at the trace's own proportions: the span is 0.70 of the
+# length, the leading edge 39 degrees off the centreline, the canards and wingtip pods as modelled.
+# The earlier drawing widened, blunted and doubled parts of the trace to land edges on a 16 px grid,
+# and read as a generic delta. Only the fin is dropped: from above it is a hairline stalk behind the
+# nozzles, and at 16 px a dirty pixel.
 #
-# Kept from the trace: the wing leading edge sweep (42 degrees off the centreline against the
-# traced 39), the canard well forward of the wing with its trailing edge square to the axis, the
-# fuselage that widens aft under the wing, and the order of the parts down the length.
-# Thickened, because the trace vanishes at 16 px: the nose is blunted to a flat facet so the top
-# row is a solid two pixel column rather than a translucent stalk; the canard is roughly doubled
-# so its trailing rows are one solid six pixel bar; the span is widened to 46 units on 56 of
-# length (0.82 against the aeroplane's true 0.70, which is the widest the planform takes before
-# it reads squat); the rear fuselage is held at 16 units to the tail and the gap between the
-# nozzles opened to 8 units, the narrowest slot that clears two whole pixels either side of the
-# centreline, which is itself a pixel boundary. The fin is dropped: from above it is a line.
-TEAL = '#0A6165'      # hue 182.6, saturation 82, mid-dark; 3.03:1 against the orange
-ICON_ORANGE = '#FF8A1F'   # hue 28.7, fully saturated; the brief's own orange, not a quote of the HUD
-VIEW_ICON = 64
-CORNER = 14           # 21.9 per cent of the side
-
-# Each shape is the right-hand half only, in viewBox units, y down and the nose at the top.
-# `axis` shapes start and end on the centreline x = 32 and are closed by their own reflection;
-# `wing` shapes are reflected into a separate subpath. Both reflections reverse the point order
-# so every subpath winds the same way and the non-zero fill unions them instead of punching
-# holes where they overlap.
-BODY = [(32, 3), (33.5, 8), (35, 18), (35, 30), (38, 45), (38, 59),
-        (33, 59), (33, 56), (32, 56)]                     # pointed radome and paired exhausts
-CANARD = [(34, 17), (43, 24), (43, 27), (34, 24)]         # forward canards, clear of the delta
-WING = [(32, 28), (35, 29), (53, 49), (53, 52), (38, 49), (32, 49)]
+# The green is a HUD phosphor green leaning yellow (hue 108), not the blue-leaning Christmas green;
+# the brighter #34B81C was tried and left the jet at 1.18:1 luminance against the tile, which blurs
+# at 16 px, where #2A9A14 holds 1.66:1. The orange is a backlit switch legend's, flat.
+TILE = '#2A9A14'
+JET = '#FF9A1F'
+VIEW_ICON = 32
+CORNER = 6
+MARK_HEIGHT = 18
+STRIPS = ('#f1f3f4', '#202124')   # the light and dark Chrome tab-strip greys
 
 
-def mirror(points, axis=True):
-    """The shape closed by its own reflection, or reflected whole, winding preserved."""
-    flipped = [(2 * 32 - x, y) for x, y in reversed(points)]
-    return points + flipped[1:-1] if axis else flipped
+def icon_points():
+    """The traced planform (assets/icon/planform.svg, viewBox 1000) minus the fin, fitted centred
+    into the 32 unit tile at MARK_HEIGHT."""
+    import re
+    source = (ROOT / 'assets/icon/planform.svg').read_text(encoding='utf-8')
+    numbers = [float(n) for n in re.findall(r'-?\d+(?:\.\d+)?', re.search(r' d="([^"]+)"', source).group(1))]
+    points = list(zip(numbers[0::2], numbers[1::2]))
+    nozzle = max(y for x, y in points if abs(x - VIEW / 2) > 30)   # the aft-most point off the centreline
+    points = [(x, y) for x, y in points if not (y > nozzle + 2 and abs(x - VIEW / 2) < 30)]
+    xs, ys = [x for x, _ in points], [y for _, y in points]
+    k = MARK_HEIGHT / (max(ys) - min(ys))
+    cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
+    half = VIEW_ICON / 2
+    return [(half + (x - cx) * k, half + (y - cy) * k) for x, y in points]
 
 
 def icon_path():
-    """The whole silhouette as one `d`: body, two canards, wing, all wound the same way."""
-    shapes = [mirror(BODY), mirror(CANARD, axis=False), CANARD, mirror(WING)]
-    out = []
-    for shape in shapes:
-        head = f'M{shape[0][0]:g} {shape[0][1]:g}'
-        out.append(head + ''.join(f'L{x:g} {y:g}' for x, y in shape[1:]) + 'Z')
-    return ''.join(out)
+    """The silhouette as one closed `d`."""
+    return 'M' + 'L'.join(f'{x:.2f} {y:.2f}' for x, y in icon_points()) + 'Z'
 
 
 def write_icon(out=None):
@@ -261,116 +256,66 @@ def write_icon(out=None):
     out.mkdir(parents=True, exist_ok=True)
     d = icon_path()
     note = ('<!-- RANGE: the Typhoon from directly above, traced from assets/RANGE.blend via '
-            f'tools/icon_planform.py; teal {TEAL}, orange {ICON_ORANGE}. -->')
+            f'tools/icon_planform.py; HUD green {TILE}, backlit orange {JET}. -->')
     written = []
     for name, rx in (('favicon.svg', f' rx="{CORNER}"'), ('icon-square.svg', '')):
         svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {VIEW_ICON} {VIEW_ICON}">\n'
                f'{note}\n'
-               f'<rect width="{VIEW_ICON}" height="{VIEW_ICON}"{rx} fill="{TEAL}"/>\n'
-               f'<path fill="{ICON_ORANGE}" d="{d}"/>\n</svg>\n')
+               f'<rect width="{VIEW_ICON}" height="{VIEW_ICON}"{rx} fill="{TILE}"/>\n'
+               f'<path fill="{JET}" d="{d}"/>\n</svg>\n')
         path = out / name
         path.write_text(svg, encoding='utf-8', newline='\n')
         written.append((str(path), len(svg.encode('utf-8'))))
     return written
 
 
-SHOT = r'E:\claude-projects\design\tools\qa\shot.mjs'
-STRIPS = ('#f1f3f4', '#202124')   # the light and dark Chrome tab-strip greys
+def raster(px, rounded=True, ground=None, supersample=16):
+    """The mark as an RGBA image `px` square, drawn with Pillow at `supersample` times and reduced.
 
-
-def inline_svg(path, px):
-    """One of the shipped SVGs at a fixed pixel size, comment dropped, ready to drop into a page."""
-    lines = Path(path).read_text(encoding='utf-8').split('\n')
-    return f'<svg width="{px}" height="{px}"' + lines[0][len('<svg'):] + ''.join(lines[2:])
-
-
-def shoot(page, out, width, height):
-    """One headless shot of a local page. Chrome floors the window at 500 px, so tiles go on a page."""
-    import subprocess
-    subprocess.run(['node', SHOT, '--url', str(page), '--out', str(out),
-                    '--width', str(width), '--height', str(height), '--dsf', '1', '--no-gpu'],
-                   check=True, capture_output=True, text=True)
-    return Image.open(out).convert('RGB')
-
-
-def sheet(out=None, shot=None):
-    """The contact sheet: the mark at 16, 32, 64 and 180 px on both tab-strip greys, plus the square.
-
-    The markup is inlined from the shipped files, so the sheet cannot drift from what is shipped.
+    Two flat shapes need no browser: the tile (with its rounded corners as real alpha, or on
+    `ground` when given) and the jet polygon, both from the same numbers as the SVG.
     """
-    import tempfile
-    out = out or ROOT / 'assets/icon'
-    shot = shot or ROOT / 'screenshots/icon-sheet.png'
-    shot.parent.mkdir(parents=True, exist_ok=True)
-
-    def tile(name, px, label):
-        return (f'<figure><div class="t">{inline_svg(out / name, px)}</div>'
-                f'<figcaption>{label}</figcaption></figure>')
-
-    light = ''.join([tile('favicon.svg', 180, '180'), tile('icon-square.svg', 180, '180 square'),
-                     tile('favicon.svg', 64, '64'), tile('favicon.svg', 32, '32'),
-                     tile('favicon.svg', 16, '16')])
-    dark = ''.join([tile('favicon.svg', 180, '180'), tile('favicon.svg', 64, '64'),
-                    tile('favicon.svg', 32, '32'), tile('favicon.svg', 16, '16')])
-    page = (f"<style>html,body{{margin:0;height:300px;"
-            f"font:11px/1 ui-sans-serif,system-ui,'Segoe UI',sans-serif}}"
-            '#sheet{display:flex;height:300px}'
-            'section{display:flex;align-items:flex-end;gap:10px;padding:16px;height:268px}'
-            f'.light{{background:{STRIPS[0]};color:#5f6368}}'
-            f'.dark{{background:{STRIPS[1]};color:#9aa0a6;flex:1}}'
-            'figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:8px}'
-            '.t{display:flex;align-items:flex-end;height:180px}svg{display:block}'
-            'figcaption{letter-spacing:.04em}</style>'
-            f'<div id="sheet"><section class="light">{light}</section>'
-            f'<section class="dark">{dark}</section></div>')
-    with tempfile.TemporaryDirectory() as tmp:
-        source = Path(tmp) / 'sheet.html'
-        source.write_text(page, encoding='utf-8')
-        shoot(source, shot, 900, 300)
-    return str(shot)
+    assert TRACE_IMPORT_ERROR is None or 'PIL' not in str(TRACE_IMPORT_ERROR), 'the raster needs Pillow'
+    from PIL import Image, ImageDraw
+    big = px * supersample
+    k = big / VIEW_ICON
+    image = Image.new('RGBA', (big, big), ground or (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    if rounded:
+        draw.rounded_rectangle((0, 0, big - 1, big - 1), radius=CORNER * k, fill=TILE)
+    else:
+        draw.rectangle((0, 0, big - 1, big - 1), fill=TILE)
+    draw.polygon([(x * k, y * k) for x, y in icon_points()], fill=JET)
+    return image.resize((px, px), Image.LANCZOS)
 
 
 def render(out=None):
-    """The two shipped rasters, through headless Chrome.
-
-    Both tiles go on one harness page, because shot.mjs floors the browser window at 500 px. The
-    page is shot twice, on white and on black, so the rounded square's transparent corners come
-    back as real alpha: a plain shot would bake the ground into them and the favicon would carry
-    white chips on a dark tab strip. `a = 1 - (white - black) / 255` per pixel, colour `black / a`.
-    """
-    import tempfile
-    assert TRACE_IMPORT_ERROR is None, f'the render needs numpy and Pillow: {TRACE_IMPORT_ERROR}'
+    """The two shipped rasters: the 32 px tab icon with transparent corners, and the 180 px
+    home-screen icon full bleed (iOS masks it with its own corners)."""
     out = out or ROOT / 'assets/icon'
-    body = ''
-    origins, x = [], 8
-    for name, px in [('favicon.svg', 32), ('icon-square.svg', 180)]:
-        body += inline_svg(out / name, px)
-        origins.append((x, 8, px))
-        x += px + 8
-
-    with tempfile.TemporaryDirectory() as tmp:
-        shots = {}
-        for ground in ('ffffff', '000000'):
-            page = Path(tmp) / f'{ground}.html'
-            page.write_text(f'<style>html,body{{margin:0;background:#{ground}}}'
-                            '#row{display:flex;align-items:flex-start;gap:8px;padding:8px}'
-                            f'svg{{display:block}}</style><div id="row">{body}</div>',
-                            encoding='utf-8')
-            shots[ground] = shoot(page, Path(tmp) / f'{ground}.png', 260, 210)
-
-        (ox, oy, px) = origins[0]
-        box = (ox, oy, ox + px, oy + px)
-        white = np.asarray(shots['ffffff'].crop(box), dtype=np.float64)
-        black = np.asarray(shots['000000'].crop(box), dtype=np.float64)
-        alpha = np.clip(1.0 - (white - black).mean(axis=2) / 255.0, 0.0, 1.0)
-        colour = np.divide(black, np.maximum(alpha, 1e-6)[..., None]).clip(0, 255)
-        rgba = np.concatenate([colour, alpha[..., None] * 255], axis=2).round().astype(np.uint8)
-        rgba[alpha < 0.004] = 0
-        Image.fromarray(rgba, 'RGBA').save(out / 'favicon-32.png')
-
-        (ox, oy, px) = origins[1]
-        shots['ffffff'].crop((ox, oy, ox + px, oy + px)).save(out / 'apple-touch-icon.png')
+    raster(32).save(out / 'favicon-32.png')
+    raster(180, rounded=False).convert('RGB').save(out / 'apple-touch-icon.png')
     return [str(out / 'favicon-32.png'), str(out / 'apple-touch-icon.png')]
+
+
+def sheet(shot=None):
+    """The contact sheet: the mark at 180, 64, 32 and 16 px on both tab-strip greys, plus the
+    square, composed from the same rasters as the shipped files."""
+    from PIL import Image
+    shot = shot or ROOT / 'screenshots/icon-sheet.png'
+    shot.parent.mkdir(parents=True, exist_ok=True)
+    sizes = (180, 64, 32, 16)
+    width = 16 + sum(s + 16 for s in sizes) + 196
+    canvas = Image.new('RGB', (width * 2, 212), STRIPS[0])
+    canvas.paste(Image.new('RGB', (width, 212), STRIPS[1]), (width, 0))
+    for side in (0, 1):
+        x = side * width + 16
+        tiles = [(raster(180, rounded=False), 180)] if side == 0 else []
+        for tile, size in tiles + [(raster(s), s) for s in sizes]:
+            canvas.paste(tile, (x, 196 - size), tile.convert('RGBA'))
+            x += size + 16
+    canvas.save(shot)
+    return str(shot)
 
 
 if __name__ == '__main__':
