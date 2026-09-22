@@ -18,9 +18,13 @@ RANGE, the self-contained three.js flight demo over Jersey, as a live site.
   thin proxy that fetches `https://ccwbee.github.io/range/<path>` and streams it back. It exists
   because `dist/index.html` is about 29.6 MB, over the 25 MiB per-file cap on Workers assets and
   Pages, so Cloudflare cannot host the file directly. It 301s http to https, allows GET and HEAD
-  only, rewrites GitHub's `Location` headers onto the charlesbee.org host, drops GitHub's edge
-  headers, sets HSTS `max-age=0` (the charlesbee.org guardrail) and holds 2xx responses at the edge
-  for 600 s, matching Pages' own `max-age=600`.
+  only, forwards `If-None-Match`, `If-Modified-Since`, `Range` and `If-Range` (so a revisit is a
+  304 rather than the whole file again), keys the upstream on the path only (the query is read in
+  the browser), rewrites GitHub's `Location` headers onto the charlesbee.org host, drops GitHub's
+  edge headers but keeps `Age`, sets HSTS `max-age=0` (the charlesbee.org guardrail), serves a
+  plain RANGE 404 instead of GitHub's branded page, and holds 2xx responses at the edge for 600 s,
+  matching Pages' own `max-age=600`. The zone's Browser Cache TTL raises non-HTML files (the zip,
+  the touch icon) to `max-age=14400` in the browser; HTML keeps 600.
 - The Worker is on the same Cloudflare account and `charlesbee.org` zone as the hub and Caesar.
   `custom_domain = true` in `deploy/worker/wrangler.toml` makes wrangler own the DNS record and
   the certificate.
@@ -38,7 +42,8 @@ npx wrangler deploy
 
 - Check: `curl.exe -sI https://range.charlesbee.org/` returns 200, `text/html`,
   `Strict-Transport-Security: max-age=0`; `curl.exe -s -o NUL -w "%{size_download}" https://range.charlesbee.org/`
-  matches the same for `https://ccwbee.github.io/range/`.
+  matches the same for `https://ccwbee.github.io/range/`; the same request with
+  `-H "If-Modified-Since: <its Last-Modified>"` returns 304 and 0 bytes.
 
 ## External dependencies & accounts
 
