@@ -15,6 +15,8 @@ for(let t=0;t<60;t+=dt){
 }
 assert(!f.crashed&&liftoff<40&&f.position.y>60,`Wyvern takes off and climbs: ${JSON.stringify({height:f.position.y,speed:f.ias,crash:f.crashReason,liftoff})}`);
 assert(f.ias<220,'Propeller profile does not accelerate like the Typhoon');
+assert.equal(f.throttle,1,'Wyvern full power is 100 per cent');
+assert.equal(f.reheat,0,'Wyvern has no afterburner');
 console.log('PASS Wyvern takes off and climbs on the propeller profile',JSON.stringify({liftoff:+liftoff.toFixed(1),height:Math.round(f.position.y),ias:Math.round(f.ias)}));
 const library={has:()=>true,asset:()=>new THREE.Group()},scene=new THREE.Scene();
 const fx=new Effects(library,scene,new THREE.PlaneGeometry(1,1),null);

@@ -289,13 +289,16 @@ void main(){vec3 d=normalize(direction);
     // terrain. 512 texels over 20 km is 39 m each, so the linear filter is what makes the foam band
     // smooth rather than stepped.
     const N = 512, box = new THREE.Vector4(JERSEY.originX, JERSEY.originZ, (JERSEY.nx - 1) * JERSEY.spacing, (JERSEY.nz - 1) * JERSEY.spacing);
-    const sdf = new Uint8Array(N * N);
+    const sdf = new Uint8Array(N * N * 2);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const s = shoreSample(box.x + (i / (N - 1)) * box.z, box.y + (j / (N - 1)) * box.w);
       const signed = s.land ? Math.min(127, s.distance) : -Math.min(128, s.distance);
-      sdf[j * N + i] = Math.max(0, Math.min(255, Math.round(128 + signed)));
+      const index=(j*N+i)*2;
+      sdf[index] = Math.max(0, Math.min(255, Math.round(128 + signed)));
+      const depth=JERSEY.seaLevel-terrainHeight(box.x+i/(N-1)*box.z,box.y+j/(N-1)*box.w);
+      sdf[index+1]=Math.round(255*THREE.MathUtils.clamp((6-depth)/6,0,1));
     }
-    const coastSDF = new THREE.DataTexture(sdf, N, N, THREE.RedFormat, THREE.UnsignedByteType);
+    const coastSDF = new THREE.DataTexture(sdf, N, N, THREE.RGFormat, THREE.UnsignedByteType);
     coastSDF.minFilter = coastSDF.magFilter = THREE.LinearFilter;
     coastSDF.wrapS = coastSDF.wrapT = THREE.ClampToEdgeWrapping;
     coastSDF.needsUpdate = true;
@@ -357,12 +360,13 @@ void main(){
  // desktop tier a soft animated breaker on the seaward side.
  vec2 iuv=(worldP.xz-islandBox.xy)/islandBox.zw;
  if(iuv.x>0.&&iuv.x<1.&&iuv.y>0.&&iuv.y<1.){
-  float shoreD=texture2D(coastSDF,iuv).r*255.-128.;
+  vec2 shoreSample=texture2D(coastSDF,iuv).rg;
+  float shoreD=shoreSample.r*255.-128.;
   float sea=max(0.,-shoreD);
-  c=mix(vec3(.06,.34,.38),c,smoothstep(0.,120.,sea));
+  c=mix(c,vec3(.055,.22,.25),(1.-smoothstep(0.,120.,sea))*shoreSample.g*.65);
   #ifdef OCEAN_HI
-  float surf=smoothstep(38.,0.,sea)*(.5+.5*sin(sea*.35-time*2.2+fbm(worldP.xz*.2)*3.));
-  c=mix(c,vec3(.9,.94,.95),surf*.6*step(0.,-shoreD));
+  float surf=(1.-smoothstep(0.,38.,sea))*(.5+.5*sin(sea*.35-time*2.2+fbm(worldP.xz*.2)*3.));
+  c=mix(c,vec3(.9,.94,.95),surf*.25*shoreSample.g*step(0.,-shoreD));
   #endif
  }
  float fog=1.-exp(-dist*.00009);
@@ -392,11 +396,22 @@ void main(){
     airportMap.minFilter=airportMap.magFilter=THREE.NearestFilter;airportMap.generateMipmaps=false;
     const coverCanvas=document.createElement('canvas');coverCanvas.width=coverCanvas.height=2048;
     const coverContext=coverCanvas.getContext('2d');
+    coverContext.fillStyle='#000';coverContext.fillRect(0,0,2048,2048);
     for(const area of LANDCOVER){
-      coverContext.fillStyle=area.kind==='beach'?'#0000ff':/wood|forest|orchard/.test(area.kind)?'#00ff00':`rgb(${80+area.id%175},0,0)`;
+      coverContext.fillStyle=area.kind==='beach'?'#0000ff':/wood|forest|orchard/.test(area.kind)?'#00ff00':area.kind==='meadow'?'#006600':`rgb(${80+area.id%175},0,0)`;
       coverContext.beginPath();
       area.points.forEach(([x,z],i)=>{const u=(x-JERSEY.originX)/20000*2048,v=(z-JERSEY.originZ)/20000*2048;if(i)coverContext.lineTo(u,v);else coverContext.moveTo(u,v);});
       coverContext.closePath();coverContext.fill();
+    }
+    // The alpha channel carries mapped field edges, avoiding another texture or coplanar geometry.
+    // These are a visual hedge treatment of parcel boundaries, not surveyed individual hedges.
+    coverContext.globalCompositeOperation='destination-out';
+    coverContext.strokeStyle='rgba(0,0,0,.65)';coverContext.lineWidth=.55;coverContext.lineJoin='round';
+    for(const area of LANDCOVER){
+      if(!/^(farmland|meadow)$/.test(area.kind))continue;
+      coverContext.beginPath();
+      area.points.forEach(([x,z],i)=>{const u=(x-JERSEY.originX)/20000*2048,v=(z-JERSEY.originZ)/20000*2048;if(i)coverContext.lineTo(u,v);else coverContext.moveTo(u,v);});
+      coverContext.closePath();coverContext.stroke();
     }
     const coverMap=new THREE.CanvasTexture(coverCanvas);coverMap.flipY=false;
     // Roads are part of the terrain material, so there is no coplanar road mesh to flicker.
@@ -484,10 +499,13 @@ void main(){
  vec2 fieldCell=floor((worldP.xz+vec2(0.,worldP.x*.13))/190.);
  vec3 fieldColour=mix(vec3(.20,.34,.09),vec3(.46,.47,.18),noise(fieldCell));
  diffuseColor.rgb=mix(diffuseColor.rgb,fieldColour,.12);
- vec3 cover=texture2D(coverMap,(worldP.xz-vec2(${JERSEY.originX.toFixed(1)},${JERSEY.originZ.toFixed(1)}))/20000.).rgb;
+ vec4 cover=texture2D(coverMap,(worldP.xz-vec2(${JERSEY.originX.toFixed(1)},${JERSEY.originZ.toFixed(1)}))/20000.);
  vec3 cropColour=mix(vec3(.19,.29,.075),vec3(.46,.42,.19),cover.r);
  diffuseColor.rgb=mix(diffuseColor.rgb,cropColour,step(.1,cover.r)*.7);
- diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.13,.22,.075),cover.g*.7);
+ float meadow=smoothstep(.15,.3,cover.g)*(1.-smoothstep(.55,.8,cover.g));
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.25,.35,.12),meadow*.72);
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.13,.22,.075),smoothstep(.65,.9,cover.g)*.7);
+ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.10,.17,.055),(1.-cover.a)*.6);
  diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.62,.53,.36),cover.b*.9);
  float detailFade=1.-smoothstep(.15,.6,length(fwidth(worldP.xz*.11)));
  diffuseColor.rgb*=mix(.975,.80+.35*noise(worldP.xz*.11),detailFade);
@@ -903,6 +921,13 @@ void main(){
     };
     const geometry = crossed();
     const random = mulberry32(31337);
+    const habitats=LANDCOVER.filter(a=>/^(meadow|grassland|scrub|heath|farmland)$/.test(a.kind)).map(a=>{
+      const xs=a.points.map(p=>p[0]),zs=a.points.map(p=>p[1]);
+      return {...a,x0:Math.min(...xs),x1:Math.max(...xs),z0:Math.min(...zs),z1:Math.max(...zs)};
+    });
+    const contains=(x,z,p)=>{let inside=false;for(let i=0,j=p.length-1;i<p.length;j=i++){
+      const a=p[i],b=p[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+    }return inside;};
     const scatter = (count, stem, height, tint) => {
       if (this.tier === 'mobile') count = Math.round(count / 2);
       const map = this.library.texture(stem);
@@ -928,14 +953,25 @@ void main(){
       let attempts = 0;
       while (placed < count && attempts < count * 12) {
         attempts++;
-        // Denser near the airfield, thinning out to 1.8 km.
+        // Keep some runway detail, then distribute the same instance budget across mapped fields.
         const angle = random() * Math.PI * 2;
         const radius = 1800 * Math.pow(random(), 0.62);
-        const x = Math.cos(angle) * radius;
-        const z = -1100 + Math.sin(angle) * radius;
+        let x = Math.cos(angle) * radius;
+        let z = -1100 + Math.sin(angle) * radius;
+        if(habitats.length && random()>.25){
+          const area=habitats[Math.floor(random()*habitats.length)];
+          x=area.x0+random()*(area.x1-area.x0);z=area.z0+random()*(area.z1-area.z0);
+          if(stem==='gorse'||area.kind==='farmland'){
+            const i=Math.floor(random()*(area.points.length-1)),a=area.points[i],b=area.points[i+1],t=random();
+            x=a[0]+(b[0]-a[0])*t+(random()-.5)*5;z=a[1]+(b[1]-a[1])*t+(random()-.5)*5;
+          }
+          if(!contains(x,z,area.points))continue;
+        }
         if (onPavement(x, z)) continue;
         const y = terrainHeight(x, z);
-        if (y < -1.5) continue; // no grass on the shore or in the sea
+        if (y < JERSEY.seaLevel+5) continue; // no grass on the shore or in the sea
+        const slope=Math.hypot(terrainHeight(x+4,z)-terrainHeight(x-4,z),terrainHeight(x,z+4)-terrainHeight(x,z-4))/8;
+        if(slope>.65)continue;
         const s = height * (0.7 + random() * 0.7);
         quaternion.setFromAxisAngle(V3(0, 1, 0), random() * Math.PI);
         scale.set(s, s * (0.8 + random() * 0.5), s);
@@ -1059,7 +1095,7 @@ void main(){
     }, 0x6b7a88, 0.9);
   }
 
-  // The far shore's town, forty lamps sitting three metres above the ground.
+  // Small distant lamps sampled from the actual settlement geometry, never an offshore rectangle.
   buildTownLights() {
     const random = mulberry32(4242);
     const material = new THREE.ShaderMaterial({
@@ -1068,13 +1104,21 @@ void main(){
       vertexShader: `varying vec2 uvp;void main(){uvp=position.xy+.5;vec4 centre=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.);float size=instanceMatrix[0].x;gl_Position=projectionMatrix*(centre+vec4(position.xy*size,0.,0.));}`,
       fragmentShader: `varying vec2 uvp;uniform vec3 colour;void main(){float d=length(uvp-.5)*2.;gl_FragColor=vec4(colour,pow(max(0.,1.-d),2.6)*.7);}`,
     });
-    const mesh = new THREE.InstancedMesh(this.quadGeometry, material, 40);
+    const buildings=Object.keys(this.library.manifest.assets).filter(name=>name.startsWith('settlement_'));
+    const lamps=[];
+    for(let attempt=0;attempt<800&&lamps.length<40&&buildings.length;attempt++){
+      const name=buildings[Math.floor(random()*buildings.length)],parts=this.library.parts(name);
+      if(!parts.length)continue;
+      const p=parts[Math.floor(random()*parts.length)].geometry.attributes.position;
+      const i=Math.floor(random()*p.count),x=p.getX(i),z=p.getZ(i),ground=terrainHeight(x,z);
+      if(ground<JERSEY.seaLevel+2.8)continue;
+      lamps.push([x,Math.max(ground+3,p.getY(i)+1),z]);
+    }
+    const mesh = new THREE.InstancedMesh(this.quadGeometry, material, lamps.length);
     const matrix = new THREE.Matrix4();
-    for (let i = 0; i < 40; i++) {
-      const x = 4700 + random() * 1800;
-      const z = -6000 + random() * 4000;
-      matrix.makeScale(26, 26, 26);
-      matrix.setPosition(x, terrainHeight(x, z) + 3, z);
+    for (let i = 0; i < lamps.length; i++) {
+      matrix.makeScale(8, 8, 8);
+      matrix.setPosition(...lamps[i]);
       mesh.setMatrixAt(i, matrix);
     }
     mesh.computeBoundingSphere();

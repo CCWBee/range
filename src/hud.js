@@ -5,7 +5,7 @@
 // Every element is an instrument with a job. Nothing here is a badge, a pill or a decorative dot.
 import * as THREE from '../vendor/three.module.js';
 import { bombStep } from '../physics.js';
-import { clearSight, guidedBombStep } from './engagement.js';
+import { clearSight, predictBombImpact } from './engagement.js';
 import { JERSEY } from './jersey.js';
 
 const $ = (id) => document.getElementById(id);
@@ -179,8 +179,8 @@ export class Hud {
         ? 'Down. Hold Ctrl to idle, then keep holding it for the wheel brakes.'
         : 'Sortie complete, aircraft recovered. Press R to fly it again.';
     } else if (flight.onGround && !flight.landed) {
-      if (speed < 3) hint = 'Line up on 08. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
-      else if (knots < 130) hint = 'Accelerating. Keep the nose wheel straight with Q and E.';
+      if (speed < 3) hint = flight.airframe==='wyvern' ? 'Hold Shift for full power. Use Q and E to keep straight.' : 'Line up on 08. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
+      else if (knots < 130) hint = 'Accelerating. Keep straight with Q and E.';
       else if (knots < 145) hint = 'Rotate at 260 km/h: raise the circle above the centre and hold it there.';
       else hint = 'Airborne shortly. Press G once the wheels are clear.';
     } else if (flight.gear && flight.position.y > 60) {
@@ -256,21 +256,17 @@ export class Hud {
 
     // Prediction uses the same guidance and ballistics as a released store.
     let diamond = null;
-    if (!flight.onGround && flight.bombs > 0 && flight.position.y < 1600 && !flight.crashed) {
-      if (!this.bombPrediction || performance.now() - this.bombPredictionTime > 100) {
+    if (flight.airframe !== 'wyvern' && !flight.onGround && flight.bombs > 0 && flight.position.y < 1600 && !flight.crashed) {
+      if (this.bombPredictionTime === undefined || performance.now() - this.bombPredictionTime > 100) {
       const predicted = {
         position: flight.position.clone().addScaledVector(flight.basis().up, -0.7),
         velocity: flight.velocity.clone().addScaledVector(flight.basis().up, -2),
         guided: true, age: 0,
       };
-      // 1200 steps (20 s) bounds the loop: guidedBombStep returns true at impact, so a real drop
-      // from the y<1600 window breaks well before this (about 925 steps from the ceiling); the cap
-      // only limits a laser-guided glide that never reaches the ground.
-      for (let i = 0; i < 1200; i++) if (guidedBombStep(predicted, effects.engagement?.laser, 1 / 60)) break;
-      this.bombPrediction = predicted.position;
+      this.bombPrediction = predictBombImpact(predicted.position, predicted.velocity, effects.engagement?.laser);
       this.bombPredictionTime = performance.now();
       }
-      diamond = this.project(this.bombPrediction, camera);
+      if (this.bombPrediction) diamond = this.project(this.bombPrediction, camera);
     }
     // Touch only: the bottom band carries the hint and the three readouts, and #markers has no
     // backdrop of its own to hide behind, so the diamond is hidden below the coaming rather than

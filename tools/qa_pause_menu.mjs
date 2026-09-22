@@ -27,6 +27,18 @@ for (const mobile of [false, true]) {
     assert.deepEqual(menu, { shown: true, aircraft: 'wyvern', running: false, gun: false });
     await page.eval(`document.getElementById('start').click()`);
     assert(await page.eval(`range.input.running && range.flight.airframe==='wyvern' && document.getElementById('intro').classList.contains('hidden')`), 'Restart in chosen aircraft');
+    if(mobile){
+      const power=await page.eval(`(()=>{
+        range.touch.throttle=1.12;range.touch.maxThrottle=undefined;range.touch.update(0,range.flight);
+        range.touch.renderThrottle();
+        return {max:document.getElementById('quadrant').getAttribute('aria-valuemax'),power:range.flight.throttle,
+          label:document.querySelector('#quadrant .gate.mil').textContent,
+          reheat:document.getElementById('quadrant').classList.contains('reheat')};
+      })()`);
+      assert.deepEqual(power,{max:'100',power:1,label:'MAX',reheat:false});
+    }
+    await page.eval(`range.stage('cloud');range.renderOnce(0)`);
+    assert(await page.eval(`document.getElementById('bombAim').getAttribute('visibility')==='hidden'`),'No misleading Paveway predictor on the Wyvern');
     const errors = page.logs.filter(l => l.startsWith('EXC') || l.startsWith('error'));
     assert.equal(errors.length, 0, errors.join('\n'));
     console.log('PASS pause, clean HUD, menu, aircraft switch and restart', mobile ? 'mobile' : 'desktop');

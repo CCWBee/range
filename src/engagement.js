@@ -3,6 +3,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { groundHeight, bombStep } from '../physics.js';
 import { TRAFFIC, trafficPose } from './traffic.js';
+import { JERSEY } from './jersey.js';
 
 const V3=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const clamp=THREE.MathUtils.clamp;
@@ -69,7 +70,7 @@ export function missileStep(m, target, dt) {
   m.velocity.y-=9.81*dt;
   m.position.addScaledVector(m.velocity,dt);
   // Detonate at the sea surface, not the DEM sea floor 12 m below it, as rockets and bombs do.
-  return m.age>AAM.life || m.position.y<Math.max(-82.6,groundHeight(m.position.x,m.position.z));
+  return m.age>AAM.life || m.position.y<Math.max(JERSEY.seaLevel,groundHeight(m.position.x,m.position.z));
 }
 
 export function guidedBombStep(b, laser, dt) {
@@ -89,6 +90,14 @@ export function guidedBombStep(b, laser, dt) {
     }
   }
   return bombStep(b,dt);
+}
+
+// Use a bounded prediction, but never label an airborne timeout as an impact. A climbing release
+// can stay aloft far longer than a level drop at the same altitude.
+export function predictBombImpact(position, velocity, laser) {
+  const b = { position: position.clone(), velocity: velocity.clone(), guided: true, age: 0 };
+  for (let i = 0; i < 1200; i++) if (guidedBombStep(b, laser, 1 / 30)) return b.position;
+  return null;
 }
 
 export class Engagement {

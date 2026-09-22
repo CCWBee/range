@@ -5,7 +5,7 @@ import { Flight, bombStep } from '../physics.js';
 import { Instructor } from '../control.js';
 import { Input } from '../src/input.js';
 import { ChaseCamera, MunitionCamera } from '../src/camera.js';
-import { AAM, Engagement, heatSignature, missileStep, guidedBombStep, proximityPass } from '../src/engagement.js';
+import { AAM, Engagement, heatSignature, missileStep, guidedBombStep, predictBombImpact, proximityPass } from '../src/engagement.js';
 import { Effects } from '../src/effects.js';
 import { Hud } from '../src/hud.js';
 import { Aircraft } from '../src/aircraft.js';
@@ -288,5 +288,19 @@ delete globalThis.window;delete globalThis.document;
   assert.equal(chimes,3);
   fx.reset();assert.equal(fx.killEvents.length,0);
   pass('one confirmation per destroyed air, ground and naval target, cleared on restart');
+}
+{
+  for (const vy of [0, 80]) {
+    const position=V3(6000,1590,-4000),velocity=V3(0,vy,-200);
+    const impact=predictBombImpact(position,velocity,null);
+    const actual={position:position.clone(),velocity:velocity.clone(),guided:true,age:0};
+    let landed=false;
+    for(let i=0;i<7200;i++) if(guidedBombStep(actual,null,1/120)){landed=true;break;}
+    assert(landed && impact && impact.y < -82,'prediction must reach the sea');
+    assert(impact.distanceTo(actual.position)<12,'bounded prediction agrees with flight integration');
+    assert.equal(position.y,1590,'predictor must not mutate the aircraft');
+  }
+  assert.equal(predictBombImpact(V3(6000,1590,-4000),V3(0,600,-200),null),null,'hide a prediction that times out');
+  pass('climbing bomb prediction reaches impact or hides, never marks a point in the air');
 }
 console.log('ALL ENGAGEMENT CHECKS PASS');

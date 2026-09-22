@@ -315,6 +315,13 @@ export class Touch {
   // Before input.aim() each frame: tilt into the saved aim, the slider into the throttle.
   update(dt, flight) {
     if (!this.active) return;
+    const maxThrottle=flight.airframe==='wyvern'?1:1.12;
+    if(this.maxThrottle!==maxThrottle){
+      this.maxThrottle=maxThrottle;this.throttle=Math.min(this.throttle,maxThrottle);this.renderThrottle();
+      this.el.track.classList.toggle('propeller',maxThrottle===1);
+      this.el.track.setAttribute('aria-valuemax',Math.round(maxThrottle*100));
+      this.el.track.querySelector('.gate.mil').textContent=maxThrottle===1?'MAX':'MIL';
+    }
     // main.js calls frame() on every animation frame whatever stepSim is, so this runs while
     // paused and the release actually happens.
     this.syncWakeLock(this.input.paused);
@@ -376,10 +383,10 @@ export class Touch {
   }
 
   renderThrottle() {
-    const pct = this.throttle / 1.12 * 100;
+    const pct = this.throttle / (this.maxThrottle || 1.12) * 100;
     this.el.fill.style.height = `${pct}%`;
     this.el.lever.style.bottom = `${pct}%`;
-    this.el.track.classList.toggle('reheat', this.throttle > 1.0);
+    this.el.track.classList.toggle('reheat', this.maxThrottle!==1 && this.throttle > 1.0);
     this.el.track.setAttribute('aria-valuenow', Math.round(this.throttle * 100));
     // The commanded power, 0 to 112, shown only while a finger is on the lever. aria-valuenow above
     // still carries the exact figure for tests and assistive technology.
@@ -463,7 +470,7 @@ export class Touch {
     // end.
     const setThrottle = (event) => {
       const r = el.slot.getBoundingClientRect();
-      this.throttle = (1 - clamp((event.clientY - r.top) / Math.max(1, r.height), 0, 1)) * 1.12;
+      this.throttle = (1 - clamp((event.clientY - r.top) / Math.max(1, r.height), 0, 1)) * (this.maxThrottle || 1.12);
       this.renderThrottle();
     };
     let sliding = null;

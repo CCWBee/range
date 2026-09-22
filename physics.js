@@ -221,7 +221,7 @@ export class Flight {
     };
   }
 
-  setThrottle(value) { this.throttle = clamp(value, 0, 1.12); }
+  setThrottle(value) { this.throttle = clamp(value, 0, this.airframe==='wyvern'?1:1.12); }
 
   crash(reason) {
     if (this.crashed) return;
@@ -238,10 +238,10 @@ export class Flight {
     this.elapsed += dt;
 
     // Engine: throttle integrates from the key, spool lags it, reheat lights after the spool.
-    this.throttle = clamp(this.throttle + (cmd.throttle || 0) * dt * 0.40, 0, 1.12);
+    this.setThrottle(this.throttle + (cmd.throttle || 0) * dt * 0.40);
     const spoolTau = this.throttle > this.spool ? (this.spool < 0.5 ? 2.4 : 1.6) : 1.0;
     this.spool += (this.throttle - this.spool) * (1 - Math.exp(-dt / spoolTau));
-    const reheatTarget = this.spool > 1 ? clamp((this.spool - 1) / 0.12, 0, 1) : 0;
+    const reheatTarget = this.airframe!=='wyvern' && this.spool > 1 ? clamp((this.spool - 1) / 0.12, 0, 1) : 0;
     this.reheat += (reheatTarget - this.reheat) * (1 - Math.exp(-dt / 0.6));
 
     // Gear and brakes. The gear cannot be commanded with a wheel on the ground: that rule is applied
