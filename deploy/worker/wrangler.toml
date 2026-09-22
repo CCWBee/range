@@ -1,0 +1,11 @@
+name = "range-charlesbee"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+workers_dev = false
+
+# range.charlesbee.org fronts the GitHub Pages build (see worker.js for why it is a
+# proxy rather than an assets Worker). wrangler attaches the custom domain on deploy
+# and provisions the DNS record and certificate on the charlesbee.org zone.
+routes = [
+  { pattern = "range.charlesbee.org", custom_domain = true },
+]

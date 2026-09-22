@@ -4,11 +4,12 @@ One Eurofighter Typhoon over Jersey at a wet dusk. A self-contained three.js fli
 from Jersey Airport, fly the coast, gun and Paveway the practice range, chase a MiG with a
 Sidewinder, bring it home. One HTML file, no external assets.
 
-**Play it:** https://ccwbee.github.io/range/ on a desktop (mouse aim and keyboard). On a phone the
-same address opens the tilt-to-fly version (https://ccwbee.github.io/range/mobile.html): hold the
-phone sideways, tilt to steer, a slider for the throttle, three keys for the weapons. The offline
-file is https://ccwbee.github.io/range/RANGE.zip (`RANGE.html` plus the three.js licence); it runs
-from disk in any browser with hardware acceleration.
+**Play it:** https://range.charlesbee.org on a desktop (mouse aim and keyboard); the same build is
+at https://ccwbee.github.io/range/. On a phone the same address opens the tilt-to-fly version
+(https://range.charlesbee.org/mobile.html): hold the phone sideways, tilt to steer, a slider for
+the throttle, three keys for the weapons. The offline file is https://range.charlesbee.org/RANGE.zip
+(`RANGE.html` plus the three.js licence); it runs from disk in any browser with hardware
+acceleration.
 
 ## Controls
 

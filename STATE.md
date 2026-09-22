@@ -2,6 +2,27 @@
 
 ## Where it stands
 
+22 September 2026, hosting only (no demo code touched): RANGE is live at
+https://range.charlesbee.org through the `range-charlesbee` proxy Worker (`deploy/worker/`,
+`MAINTENANCE.md`) and listed on the charlesbee.org hub. The working tree then held nine modified
+files nobody had recorded here (`index.html`, `physics.js`, `src/engagement.js`, `src/hud.js`,
+`src/touch.js`, `src/world.js` and three tools tests); they were left as found and are not in the
+live build.
+
+22 September 2026. IN FLIGHT (ultracode): UI consistency pass (Liquid Glass plus cockpit
+"military-spec" language across both tiers, anchored on the phone throttle quadrant and weapon
+caps; switches toggle on tap instead of sliding), performance, random black screens (root cause
+unknown at start), windsock orange. Also in the tree, uncommitted, from 17 Sep 12:48 to 13:19 (after
+the 02:02 push): Codex work taking the Wyvern to 100% max with no reheat, a bounded bomb predictor
+(`predictBombImpact`, hidden on the Wyvern), a water depth channel, hedge lines, meadow/farmland
+split, island-wide clutter and town lights sampled from real buildings. 70 PASS on that tree;
+render and contrast not yet verified. Plan: verify and commit that first, then a read-only audit
+workflow (black screen by rendering and lifecycle lenses with adversarial verification, GPU and
+load-time performance, UI consistency), then implement serially and push once. Audit run id
+`wf_132e2bd8-6ae`; resume with `Workflow({scriptPath:
+"C:\Users\Charles\.claude\projects\E--claude-projects-range\251677ae-ebd9-40d2-965d-abfd5ddd11ca\workflows\scripts\range-ui-perf-blackscreen-audit-wf_132e2bd8-6ae.js",
+resumeFromRunId: "wf_132e2bd8-6ae"})`.
+
 17 September 2026. A performance, correctness, water and visual polish pass landed on top of
 `0f09752`, seven commits, all verified and pushed (see "Done (polish pass)"). It was guided by a
 read-only audit fan-out (run `wf_f0887a38-50f`; the simplify dimension failed on an Opus content

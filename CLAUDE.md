@@ -8,8 +8,10 @@ MiG-15, a Tu-95 and a Mi-24 on scripted loops (`src/traffic.js`), all of which r
 is authored in Blender, textures are generated or baked, and the deliverable is one HTML file with
 no external assets. Started
 5 September 2026 in the Codex app, moved here on 6 September 2026. Public at
-https://ccwbee.github.io/range/ (Pages deploys on every push to master); the phone version is
-`mobile.html` beside it. The specs live in `docs/specs/`: `2026-09-06-range-v2.md` is the base,
+https://range.charlesbee.org and https://ccwbee.github.io/range/ (Pages deploys on every push to
+master; the charlesbee.org address is the proxy Worker in `deploy/worker/`, because the bundle is
+over Cloudflare's 25 MiB per-file cap, see `MAINTENANCE.md`); the phone version is `mobile.html`
+beside it. Listed on the charlesbee.org hub. The specs live in `docs/specs/`: `2026-09-06-range-v2.md` is the base,
 `2026-09-10-range-mobile.md` the tilt-to-fly touch version; `docs/DESIGN.md` holds the design
 thesis, tokens and the primitive registry.
 

@@ -18,3 +18,4 @@ screenshots/qa-*/
 !screenshots/qa-before/
 screenshots/qa-before/*
 !screenshots/qa-before/contrast.md
+deploy/worker/.wrangler/
