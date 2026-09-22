@@ -118,13 +118,16 @@ export class Hud {
     el.gear.textContent = flight.gearPosition > 0.01 && flight.gearPosition < 0.99
       ? 'GEAR IN TRANSIT' : flight.gear ? 'GEAR DOWN' : 'GEAR UP';
     const engagement=effects.engagement;
-    el.weapons.textContent = flight.airframe==='wyvern' ? `20 MM ${flight.rounds} · TORPEDO ${flight.bombs} · RP-3 ${engagement?.rocketsRemaining ?? 16}` : `27 MM ${flight.rounds} · PAVEWAY ${flight.bombs} · IR MISSILE ${engagement?.remaining ?? 0}`;
+    // A spent store shows its reload in place of its count, under its own name, so the line never
+    // grows or wraps: "PAVEWAY RELOAD 23 S", not a "BOMBS 23s" suffix at the end.
+    const count = (n, reload, total) => n > 0 ? n : `RELOAD ${Math.max(0, Math.ceil(total - (reload || 0)))} S`;
+    const reload = effects.reload || {};
+    el.weapons.textContent = flight.airframe==='wyvern'
+      ? `20 MM ${count(flight.rounds, reload.rounds, 12)} · TORPEDO ${count(flight.bombs, reload.bombs, 25)} · RP-3 ${count(engagement?.rocketsRemaining ?? 16, engagement?.rocketReload, 20)}`
+      : `27 MM ${count(flight.rounds, reload.rounds, 12)} · PAVEWAY ${count(flight.bombs, reload.bombs, 25)} · IR MISSILE ${count(engagement?.remaining ?? 2, engagement?.reloadTime, 20)}`;
     const stallWarning = !flight.onGround && !flight.crashed && (flight.stall || instructor.state.stallGuard > .3);
     el.instructor.textContent = stallWarning ? 'STALL · LOWER NOSE' : '';
     el.instructor.classList.toggle('stall-warning',stallWarning);
-    if (flight.bombs === 0) el.weapons.textContent += ` · BOMBS ${Math.ceil(25-(effects.reload?.bombs||0))}s`;
-    if (flight.rounds === 0) el.weapons.textContent += ` · GUN ${Math.ceil(12-(effects.reload?.rounds||0))}s`;
-    if (engagement?.remaining === 0) el.weapons.textContent += ` · MISSILES ${Math.ceil(20-(engagement.reloadTime||0))}s`;
 
     el.objective.textContent = '';
     this.updateHint(flight, input, effects, options);
@@ -167,34 +170,55 @@ export class Hud {
   // return, gear again, threshold, flare, brakes.
   updateHint(flight, input, effects, options) {
     const speed = flight.velocity.length();
-    const knots = flight.ias * 1.94384;
     const rangeDistance = flight.position.distanceTo(
       this.scratch.copy(RANGE_CENTRE).setY(flight.position.y));
+    const wyvern = flight.airframe === 'wyvern';
+    // Where a place is from the nose, in words and kilometres: the desktop shows no heading, so a
+    // bearing in degrees gave the player nothing to steer by (and two of the old ones were wrong).
+    const where = (point) => {
+      const { forward } = flight.basis();
+      const dx = point.x - flight.position.x, dz = point.z - flight.position.z;
+      let a = (Math.atan2(dx, -dz) - Math.atan2(forward.x, -forward.z)) * 180 / Math.PI;
+      a = ((a + 540) % 360) - 180;
+      const side = a < 0 ? 'left' : 'right', off = Math.abs(a);
+      const km = `${Math.max(1, Math.round(Math.hypot(dx, dz) / 1000))} km`;
+      if (off < 25) return `${km} ahead`;
+      if (off < 70) return `${km} ahead and to the ${side}`;
+      if (off < 115) return `${km} to the ${side}`;
+      if (off < 155) return `${km} behind and to the ${side}`;
+      return `${km} behind`;
+    };
+    // The instructor rotates at 1.12 times the stall speed, which follows the aircraft's mass: 260
+    // km/h for the Typhoon, about 215 for the Wyvern with its torpedo.
+    const vr = 1.12 * flight.stallSpeed;
     let hint;
     if (options.paused) {
       hint = 'Click to take the controls back.';
     } else if (!input.locked) {
       hint = 'Click the view to take the controls. The aircraft flies towards the circle.';
     } else if (flight.crashed) {
-      hint = 'Press R to fly the sortie again.';
+      // The status block already says it; one instruction in one place, as on touch.
+      hint = '';
     } else if (flight.landed && flight.onGround) {
       hint = speed > 4
         ? 'Down. Hold Ctrl to idle, then keep holding it for the wheel brakes.'
         : 'Sortie complete, aircraft recovered. Press R to fly it again.';
     } else if (flight.onGround && !flight.landed) {
-      if (speed < 3) hint = flight.airframe==='wyvern' ? 'Hold Shift for full power. Use Q and E to keep straight.' : 'Line up on 08. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
-      else if (knots < 130) hint = 'Accelerating. Keep straight with Q and E.';
-      else if (knots < 145) hint = 'Rotate at 260 km/h: raise the circle above the centre and hold it there.';
+      if (speed < 3) hint = wyvern ? 'Hold Shift for full power. Use Q and E to keep straight.' : 'Line up on 08. Hold Shift to advance the throttle; reheat lights past 100 per cent.';
+      else if (flight.ias < vr * 0.93) hint = 'Accelerating. Keep straight with Q and E.';
+      else if (flight.ias < vr * 1.04) hint = `Rotate at ${Math.round(vr * 3.6 / 10) * 10} km/h: raise the circle above the centre and hold it there.`;
       else hint = 'Airborne shortly. Press G once the wheels are clear.';
     } else if (flight.gear && flight.position.y > 60) {
       hint = 'Press G to raise the gear, then climb away on the runway heading.';
     } else if (flight.stall || flight.alpha > 0.28) {
       hint = 'High angle of attack. Lower the circle and let the speed build.';
+    } else if (rangeDistance < 2600 && wyvern) {
+      hint = 'Over the range. Space fires the cannon; 5 or Alt + X fires a rocket.';
     } else if (rangeDistance < 2600 && flight.bombs > 0) {
       hint = 'Range ahead. End selects a target; L designates it. Press 2 to release a Paveway.';
     } else if (rangeDistance < 2600) {
-      hint = 'Bombs gone. Turn back to the airfield on 180.';
-    } else if (effects && (effects.rangeHit > 0 || flight.bombs === 0)) {
+      hint = `Bombs gone. The airfield is ${where(AIRFIELD_CENTRE)}.`;
+    } else if (effects && (effects.rangeHit > 0 || (!wyvern && flight.bombs === 0))) {
       const height = flight.position.y;
       if (!flight.gear && height < 700) hint = 'Gear down at 335 km/h with G, then hold the threshold in the circle.';
       else if (flight.gear && height < 60) hint = 'Flare: bring the circle to the horizon and let the speed decay onto the runway.';
@@ -202,7 +226,9 @@ export class Hud {
     } else if (flight.position.x > 900) {
       hint = 'Following the coast. Bank with the mouse or hold A and D.';
     } else {
-      hint = 'Fly the circle. The range is south-west; the impact diamond shows where a bomb lands.';
+      hint = wyvern
+        ? `Fly the circle. The range is ${where(RANGE_CENTRE)}; drop the torpedo low and level towards the coaster.`
+        : `Fly the circle. The range is ${where(RANGE_CENTRE)}; the impact diamond shows where a bomb lands.`;
     }
     if (Math.abs(flight.position.x) > 11000 || Math.abs(flight.position.z) > 12000) {
       hint = 'Leaving the coastal box. Turn back towards the airfield.';
@@ -304,12 +330,12 @@ export class Hud {
   updateEngagement(flight,camera,input,e,detachedView=false,munition=null){
     const svg=this.el.markers,ns='http://www.w3.org/2000/svg';
     const anchorV=(this._anchor||(this._anchor=V3())),sightV=(this._sight||(this._sight=V3()));
-    const now=performance.now();
+    const now=performance.now(),labelled=[];
     for(const t of [...e.effects.targets,...e.airTargets]){
       let g=this.targetMarks.get(t);
       if(!g){
         g=document.createElementNS(ns,'g');g.setAttribute('class','target-mark');
-        g.innerHTML='<path d="M-8,-14 H8"/><text y="-23" text-anchor="middle"></text><text y="1" text-anchor="middle" class="target-distance"></text>';
+        g.innerHTML='<path d="M-8,-14 H8"/><text y="-23" text-anchor="middle"></text><text y="17" text-anchor="middle" class="target-distance"></text>';
         svg.appendChild(g);this.targetMarks.set(t,g);
       }
       // Anchor at the rendered object's world origin. Keep the label's gap in screen pixels:
@@ -327,7 +353,20 @@ export class Hud {
         visible=t._sight;
       }
       this.place(g,p,!!visible);
-      if(visible){g.children[0].setAttribute('d',`M-${8*t.hp/t.maxHp},-14 H${8*t.hp/t.maxHp}`);g.children[1].textContent=t.name;g.children[2].textContent=`${(distance/1000).toFixed(2)} KM`;g.setAttribute('opacity',t===e.selected?'1':'.64');}
+      if(visible){g.children[0].setAttribute('d',`M-${8*t.hp/t.maxHp},-14 H${8*t.hp/t.maxHp}`);g.children[1].textContent=t.name;g.children[2].textContent=`${(distance/1000).toFixed(2)} KM`;g.setAttribute('opacity',t===e.selected?'1':'.64');
+        labelled.push({g,p,distance,selected:t===e.selected,width:Math.max(t.name.length,7)*7+10});}
+    }
+    // The range's six pads stand 200 m apart and the MiG loops over them, so their labels used to
+    // print on top of each other. The selected target first, then the nearest, and a name and
+    // distance show only where they clear every label already placed; a mark that gives way keeps
+    // its hp tick.
+    labelled.sort((a,b)=>(b.selected-a.selected)||(a.distance-b.distance));
+    const placed=[];
+    for(const l of labelled){
+      const r={x0:l.p.x-l.width/2,x1:l.p.x+l.width/2,y0:l.p.y-35,y1:l.p.y+22};
+      const clear=!placed.some((o)=>r.x0<o.x1&&r.x1>o.x0&&r.y0<o.y1&&r.y1>o.y0);
+      if(clear)placed.push(r);
+      for(const text of [l.g.children[1],l.g.children[2]]){if(clear)text.removeAttribute('display');else text.setAttribute('display','none');}
     }
     const s=e.seeker,nose=this.project(flight.position.clone().addScaledVector(flight.basis().forward,1000),camera);
     this.place($('seekerEnvelope'),nose,!!nose&&s.enabled&&!input.freeLook&&!detachedView);

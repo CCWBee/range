@@ -116,7 +116,10 @@ export class Input {
     document.addEventListener('pointerlockerror', () => { this.setPaused(true); });
 
     window.addEventListener('keydown', (event) => {
-      if (HELD.has(event.code) || ACTIONS[event.code] || event.code === 'Tab' || event.altKey) event.preventDefault();
+      // Keys are the aircraft's only while it flies: on the intro and the stop screens Tab must move
+      // focus and Space must press the focused control.
+      const flying = this.running && !this.paused && this.locked;
+      if (flying && (HELD.has(event.code) || ACTIONS[event.code] || event.code === 'Tab' || event.altKey)) event.preventDefault();
       if (HELD.has(event.code)) this.keys.add(event.code);
       if (event.repeat) return;
       if (!this.running) { if (event.code === 'Enter') this.fire('start'); return; }

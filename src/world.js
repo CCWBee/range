@@ -593,6 +593,10 @@ void main(){
   // ------------------------------------------------------------------------- pavement and markings
 
   buildPavement() {
+    // The painted markings stand 14 mm over the pavement, which the depth buffer cannot separate
+    // from 2 km out; pull them forward like the tyre marks. Only the markings use this material.
+    const marking = this.library.materials.airport_marking;
+    if (marking) Object.assign(marking, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
     const concrete = tiled(this.library.texture('concrete'), this.renderer);
     const concreteNormal = tiled(this.library.texture('concrete_normal'), this.renderer, false);
     const tarmac = tiled(this.library.texture('tarmac'), this.renderer);
@@ -1173,23 +1177,28 @@ void main(){
     const material = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       uniforms: { colour: { value: new THREE.Color(0xffd9a0) } },
-      vertexShader: `varying vec2 uvp;void main(){uvp=position.xy+.5;vec4 centre=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.);float size=instanceMatrix[0].x;gl_Position=projectionMatrix*(centre+vec4(position.xy*size,0.,0.));}`,
-      fragmentShader: `varying vec2 uvp;uniform vec3 colour;void main(){float d=length(uvp-.5)*2.;gl_FragColor=vec4(colour,pow(max(0.,1.-d),2.6)*.7);}`,
+      // Faded in with distance: the lamps are a twinkle seen from altitude, and at full strength
+      // over the rooftops they read as blobs.
+      vertexShader: `varying vec2 uvp;varying float fade;void main(){uvp=position.xy+.5;vec4 centre=modelViewMatrix*instanceMatrix*vec4(0.,0.,0.,1.);fade=smoothstep(150.,700.,-centre.z);float size=instanceMatrix[0].x;gl_Position=projectionMatrix*(centre+vec4(position.xy*size,0.,0.));}`,
+      fragmentShader: `varying vec2 uvp;varying float fade;uniform vec3 colour;void main(){float d=length(uvp-.5)*2.;gl_FragColor=vec4(colour,pow(max(0.,1.-d),2.6)*.7*fade);}`,
     });
     const buildings=Object.keys(this.library.manifest.assets).filter(name=>name.startsWith('settlement_'));
     const lamps=[];
     for(let attempt=0;attempt<800&&lamps.length<40&&buildings.length;attempt++){
       const name=buildings[Math.floor(random()*buildings.length)],parts=this.library.parts(name);
       if(!parts.length)continue;
-      const p=parts[Math.floor(random()*parts.length)].geometry.attributes.position;
-      const i=Math.floor(random()*p.count),x=p.getX(i),z=p.getZ(i),ground=terrainHeight(x,z);
+      const {position:p,normal:n}=parts[Math.floor(random()*parts.length)].geometry.attributes;
+      // Out from the wall along the vertex normal and down at street height, so the glow is not
+      // cut by the roof or wall it was sampled from.
+      const i=Math.floor(random()*p.count),nx=n?n.getX(i):0,nz=n?n.getZ(i):0,nl=Math.hypot(nx,nz)||1;
+      const x=p.getX(i)+nx/nl*6,z=p.getZ(i)+nz/nl*6,ground=terrainHeight(x,z);
       if(ground<JERSEY.seaLevel+2.8)continue;
-      lamps.push([x,Math.max(ground+3,p.getY(i)+1),z]);
+      lamps.push([x,ground+5,z]);
     }
     const mesh = new THREE.InstancedMesh(this.quadGeometry, material, lamps.length);
     const matrix = new THREE.Matrix4();
     for (let i = 0; i < lamps.length; i++) {
-      matrix.makeScale(8, 8, 8);
+      matrix.makeScale(5, 5, 5);
       matrix.setPosition(...lamps[i]);
       mesh.setMatrixAt(i, matrix);
     }

@@ -123,6 +123,7 @@ const post = new Post(renderer, world.quadGeometry, { samples: MOBILE ? 2 : 4, b
 // The touch layer exists only on a coarse-pointer device or under ?touch=1; the class on body
 // switches the intro copy and the HUD layout before the sortie starts.
 const touch = touchWanted ? new Touch(input, canvas) : null;
+engagement.touch = !!touch;
 if (touch) document.body.classList.add('touch');
 
 const scene = world.scene;
@@ -298,6 +299,7 @@ function setAircraft(type) {
   $('bombHelp').textContent = type === 'wyvern' ? 'Release torpedo, low and level over water' : 'Release Paveway';
   $('seekerHelp').textContent = type === 'wyvern' ? 'Fire RP-3 rocket' : 'Heat-seeking missile sensor on / off';
   $('missileHelp').textContent = type === 'wyvern' ? 'Fire RP-3 rocket, no lock needed' : 'Launch locked heat-seeking missile';
+  for (const id of ['laserKeys', 'laserHelp']) $(id).hidden = type === 'wyvern';
   return true;
 }
 
@@ -820,7 +822,7 @@ requestAnimationFrame(loop);
 window.range = {
   flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch, post,
   targets: effects.targets, bombs: effects.bombs,
-  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft, tick, bootTimes,
+  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft, tick, bootTimes, returnToMenu,
   dropBomb: () => effects.dropBomb(flight, aircraft),
   fireGun: () => effects.fireGun(flight),
   explosion: (position, strength) => effects.explosion(position, strength),

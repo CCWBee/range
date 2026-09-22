@@ -99,18 +99,23 @@ transparency to .88 and .80, with the blur off and the grain kept.
 
 ## States
 
-- Lock: colour. Stall: colour and flash. Paused or lost: centred status text. Reloading: a countdown
-  in the label. Press, touch only: the tint deepens and the label brightens. Loading: the gauge names
+- Lock: colour. Stall: colour and flash. Paused or lost: centred status text. Reloading: the store's
+  count gives way to `RELOAD n S` in place on the desktop weapons line, and on touch the cap dims
+  with the amber countdown, for every store including the Wyvern's rockets. Press, touch only: the tint deepens and the label brightens. Loading: the gauge names
   the stage and ENTER stays dim until the textures are uploaded, every shader is compiled and the
   first frame is drawn, so nothing freezes after it lights.
 
 ## Copy
 
 - British English, no em dashes, middle dots as separators. Hints are one sentence, imperative, dry.
-- On touch the hint line is empty while the sortie is paused or the aircraft is lost: `#status`
-  already carries `Tap to continue.` and `Tap to fly again.`, and printing either a second time on
-  the hint line is two treatments for one fact on a 375 px screen. It is a deliberate departure from
-  the two paused and crashed rows of the spec's copy table.
+- The hint line is empty while the sortie is paused or the aircraft is lost, on both tiers: `#status`
+  already carries the instruction, and printing it a second time on the hint line is two treatments
+  for one fact. On touch it is a deliberate departure from the two paused and crashed rows of the
+  spec's copy table.
+- Aircraft notices are capitals on both tiers and say what the tier can do: `HOLD U TO FOLLOW` on
+  a keyboard, `HOLD THE CAP TO FOLLOW` on the phone. A hint gives directions from the nose in words
+  and kilometres (`The range is 4 km ahead and to the left`), never a bearing the screen does not
+  show. Air targets are named in capitals like every other label (`MIG-15`, `TU-95 BEAR`).
 
 ## Per-screen module order
 
@@ -129,7 +134,7 @@ transparency to .88 and .80, with the blur off and the grain kept.
 | primitive | where | notes |
 | --- | --- | --- |
 | corner text block | `#telemetry`, `#flightstate`, `#systems` | label, numeral, unit |
-| marker | `#markers` SVG groups | one job each |
+| marker | `#markers` SVG groups | one job each; a target label is its name above the object and its distance below it, never over it, and it gives way to any label already placed (the selected target first, then the nearest), keeping its hp tick |
 | kill confirmation | `#killConfirmation` | top centre, white lettering over a slightly larger red outline; names air, ground or naval destruction for 2.4 seconds; queued once per target, paired with a short metallic cue through the existing mute control |
 | status text | `#status` | paused, lost, a graphics reset; its one control (CHANGE AIRCRAFT, RELOAD) is a cap, `#status .key`; on touch the stop veil is `#hud`'s own background colour, so it dims the render under the HUD's text and under everything `#touch` draws rather than over them |
 | plain text control | `#buttons button`, `#touch .text` | no border, no background |
@@ -140,4 +145,4 @@ transparency to .88 and .80, with the blur off and the grain kept.
 | HUD halo | `#hud` text-shadow, `#markers` drop-shadow | both tiers; the tight dark halo every HUD text block and marker stroke stands on; no band, no box |
 | lit legend | `.lit`, `.locked` | a legend that glows: core colour, 1 px fringe, soft bloom, a wash on the cap behind it; never a dot |
 | load gauge | `#loading` | both tiers, intro only, until ENTER lights; the switch slot's material laid flat (slot tint, inset shade, lip, cut edge), 220 x 8 px (180 on touch), radius 4, etched every tenth like the throttle quadrant, with a `--metal` bar advancing in it; above it a 10 to 11 px legend naming the stage (`LOADING · DATA`, `BUILDING · TERRAIN`, `COMPILING · SHADERS`, `PREPARING · FIRST FRAME`); monochrome, since loading is not a live system; `role="progressbar"`; one writer, the `load-gauge` script in `index.html`, which only moves forwards |
-| toggle switch | `.switch`: `#aircraftSwitch`, `#skinSwitch` | both tiers, intro only; a 60 x 26 slot with a 26 px `--metal` knob at one end and a legend either side; monochrome, the knob's position is the state; a tap anywhere on the row outside the legends toggles it, committed on release, and a drag past 6 px follows the pointer and snaps to the end it crosses; the first legend is 68 px wide so stacked switches share one slot column; never a native select, which is what the aircraft choice first shipped as |
+| toggle switch | `.switch`: `#aircraftSwitch`, `#skinSwitch` | both tiers, intro only; a 60 x 26 slot with a 26 px `--metal` knob at one end and a legend either side; monochrome, the knob's position is the state; a tap anywhere on the row outside the legends toggles it, committed on release, and a drag past 6 px follows the pointer and snaps to the end it crosses; the first legend is 68 px wide so stacked switches share one slot column; never a native select, which is what the aircraft choice first shipped as; unavailable until ENTER lights, as ENTER is: the knob darkens, the legends keep their ink, the row takes no input |

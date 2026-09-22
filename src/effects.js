@@ -7,6 +7,7 @@
 import * as THREE from '../vendor/three.module.js';
 import { bombStep, terrainHeight, groundHeight } from '../physics.js';
 import { NOISE_GLSL } from './world.js';
+import { JERSEY } from './jersey.js';
 import { guidedBombStep } from './engagement.js';
 
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -205,7 +206,9 @@ void main(){float n=spriteNoise(uvp*8.);float d=length((uvp-.5)*2.);
   }
 
   addCrater(position, size) {
-    if (this.craterCount >= 32) return;
+    // No crater on water: the sea bed is below a surface that writes no depth, so a disc there
+    // showed through the sea as a permanent dark blot.
+    if (this.craterCount >= 32 || terrainHeight(position.x, position.z) < JERSEY.seaLevel + 0.2) return;
     const matrix = new THREE.Matrix4();
     matrix.makeScale(size, 1, size);
     matrix.setPosition(position.x, terrainHeight(position.x, position.z) + 0.05, position.z);
@@ -318,7 +321,7 @@ void main(){float n=spriteNoise(uvp*8.);float d=length((uvp-.5)*2.);
       guided: !torpedo, torpedo, age: 0,
     });
     this.lastMunition = this.bombs[this.bombs.length-1];
-    this.engagement?.message(torpedo?'TORPEDO AWAY · drop low and level towards a ship':'PAVEWAY AWAY · hold U to follow · L controls the laser');
+    this.engagement?.message(torpedo?'TORPEDO AWAY':`PAVEWAY AWAY · ${this.engagement.followHint()} · L FOR THE LASER`);
     return true;
   }
 

@@ -42,7 +42,8 @@ h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.22em;margin:0
 #instructor.stall-warning{color:var(--lock);animation:stall-flash .7s steps(2,end) infinite}
 @keyframes stall-flash{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#instructor.stall-warning{animation:none}}
-#hint{position:absolute;bottom:157px;left:34px;font-size:15px;color:var(--ink);max-width:620px;line-height:1.6}
+/* Never wider than the room left of #systems (380 px at the right inset, plus a 20 px gap). */
+#hint{position:absolute;bottom:157px;left:34px;font-size:15px;color:var(--ink);max-width:min(620px,calc(100vw - 468px));line-height:1.6}
 /* The aircraft's voice on the desktop too: notices in capitals and the advisory amber, the
    instructor in sentence-case ink (DESIGN.md: capitals are the aircraft). */
 #hint.notice{font-size:12px;font-weight:500;letter-spacing:.13em;color:var(--advisory)}
@@ -112,7 +113,7 @@ body:not(.touch):has(#status:not(:empty)) #hud{background:var(--stop-veil)}
 #telemetry{gap:12px;left:18px;bottom:22px}#telemetry b{font-size:21px}#telemetry div{min-width:52px}
 #systems{right:18px;bottom:22px;font-size:10px}#brand,#objective{left:18px}
 #flightstate{left:18px;bottom:96px;gap:14px;font-size:10px}
-#hint{left:18px;bottom:132px;width:80%;font-size:12px}
+#hint{left:18px;bottom:132px;width:80%;max-width:80%;font-size:12px}
 #location{font-size:10px;right:18px}#help{right:18px}#buttons{right:18px}}
 /* touch:start */
 /* Barlow Condensed, SIL Open Font License 1.1. Copyright 2017 The Barlow Project Authors
@@ -395,6 +396,11 @@ body.touch .switch+.switch{margin-top:-8px}
 .switch.held .switchKnob{
  box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
   inset 0 -1px 0 var(--metal-shade),0 3px 7px var(--metal-drop-held)}
+/* Until ENTER lights the switches have nothing to switch (they bind once the island is built), so
+   they are unavailable the way ENTER is: the knob darkens, the legends keep their ink, the row
+   takes no input. */
+#intro:has(#start:disabled) .switch{pointer-events:none}
+#intro:has(#start:disabled) .switchKnob{filter:brightness(.55)}
 
 /* ---- the material. The gradient is the one light, not a decorative sheen: five per cent lift over
    the top third, ten per cent shade at the bottom. Elevation is tight because a panel sits in the
@@ -530,6 +536,8 @@ body.touch .switch+.switch{margin-top:-8px}
 #quadrant .gate.mil{bottom:calc(89.29% - 14.93px)}
 #quadrant .gate.idle{bottom:19px}
 #quadrant.propeller #throttleReheat,#quadrant.propeller #throttleTick{display:none}
+/* The Wyvern's slot spans 0 to 100 per cent, not the Typhoon's 0 to 112, so its ticks are tenths. */
+#quadrant.propeller #throttleTicks{background:repeating-linear-gradient(to top,var(--etch-dark) 0 1px,var(--etch-light) 1px 2px,transparent 2px 10%)}
 #quadrant.propeller .gate.mil{bottom:calc(100% - 19px)}
 /* The commanded power, transient: it appears only while a finger is on the lever, where MAX used to
    be. The end of the track already labels the end of the track. */
@@ -640,7 +648,7 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
 <div id="systems">
  <div id="weaponState">WEAPONS READY</div>
  <div id="gear">GEAR DOWN</div>
- <div id="weapons">GUN 150 · BOMBS 4</div>
+ <div id="weapons"></div>
  <div id="instructor"></div>
  <div id="laserState" hidden></div>
  <div id="fps"></div>
@@ -668,7 +676,7 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
 <dt>G</dt><dd>Landing gear</dd>
 <dt>B</dt><dd>Airbrake, wheel brakes</dd>
 <dt>End / 6 / T</dt><dd>Select target near aim</dd>
-<dt>L / Num Lock / Delete</dt><dd>Laser on / off</dd>
+<dt id="laserKeys">L / Num Lock / Delete</dt><dd id="laserHelp">Laser on / off</dd>
 <dt>Alt + X</dt><dd id="seekerHelp">Heat-seeking missile sensor on / off</dd>
 <dt>5 or /</dt><dd id="missileHelp">Launch locked heat-seeking missile</dd>
 <dt>Hold U</dt><dd>Follow last released munition</dd>

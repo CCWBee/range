@@ -130,6 +130,9 @@ export class Engagement {
   }
 
   message(text){this.notice=text;this.noticeTime=3;}
+  // How to follow a munition on this tier: hold U on a keyboard, keep holding the cap on the phone.
+  // main.js sets touch when the phone layer exists; notices are upper case on both tiers.
+  followHint(){return this.touch?'HOLD THE CAP TO FOLLOW':'HOLD U TO FOLLOW';}
   toggleSeeker(){const s=this.seeker;s.enabled=!s.enabled;s.warm=0;s.dwell=0;s.target=null;s.locked=false;this.message(s.enabled?'SEEKER WARMING':'SEEKER OFF');}
   select(flight,aim){
     const axis=aim?.direction||flight.basis().forward;
@@ -138,6 +141,7 @@ export class Engagement {
     this.selected=choices[0]||null;this.message(this.selected?`${this.selected.name} SELECTED`:'NO VISIBLE TARGET');
   }
   designate(flight,aim){
+    if(flight.airframe==='wyvern'){this.laser.active=false;this.message('NO DESIGNATOR ON THE WYVERN');return;}
     if(this.laser.active){this.laser.active=false;this.message('LASER OFF');return;}
     const axis=aim?.direction||flight.basis().forward;
     let target=this.selected?.kind==='ground'&&!this.selected.destroyed?this.selected:null;
@@ -157,7 +161,7 @@ export class Engagement {
     this.missiles.push({mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,30),target:s.target,age:0,trail:0});
     this.effects.lastMunition=this.missiles[this.missiles.length-1];
     this.effects.missileLaunch?.(position,flight.velocity,flight.basis().forward);
-    this.remaining--;s.locked=false;s.dwell=0;this.message('MISSILE AWAY · hold U to follow');return true;
+    this.remaining--;s.locked=false;s.dwell=0;this.message(`MISSILE AWAY · ${this.followHint()}`);return true;
   }
   launchRocket(flight){
     if(flight.onGround||flight.crashed||this.rocketsRemaining<=0)return false;
@@ -166,7 +170,7 @@ export class Engagement {
     const rocket={mesh,position:mesh.position,velocity:flight.velocity.clone().addScaledVector(flight.basis().forward,25),age:0,rocket:true,trail:0};
     this.missiles.push(rocket);this.effects.lastMunition=rocket;this.rocketsRemaining--;
     this.effects.missileLaunch?.(rocket.position,rocket.velocity,flight.basis().forward);
-    this.message('ROCKET AWAY · hold U to follow');return true;
+    this.message(`ROCKET AWAY · ${this.followHint()}`);return true;
   }
   hitAir(target,damage,point){
     if(target.destroyed)return;
@@ -200,12 +204,16 @@ export class Engagement {
         if (!target.impacted) {
           target.fall.y-=9.81*dt;target.fall.multiplyScalar(Math.exp(-dt*.04));
           target.position.addScaledVector(target.fall,dt);target.mesh.rotateZ(dt*.65);target.mesh.rotateX(dt*.24);
-          if(target.position.y<=groundHeight(target.position.x,target.position.z)+2){
-            target.position.y=groundHeight(target.position.x,target.position.z)+2;target.impacted=true;
-            this.effects.explosion(target.position,1.1);this.effects.addCrater(target.position,13);target.fall.set(0,0,0);
+          // Over the sea the wreck stops at the surface and goes under after its splash, rather
+          // than settling on the sea bed where it drew, still burning, through the water.
+          const ground=groundHeight(target.position.x,target.position.z),sea=ground<JERSEY.seaLevel;
+          if(target.position.y<=(sea?JERSEY.seaLevel:ground+2)){
+            target.position.y=sea?JERSEY.seaLevel:ground+2;target.impacted=true;target.fall.set(0,0,0);
+            this.effects.explosion(target.position,1.1);
+            if(sea)target.mesh.visible=false;else this.effects.addCrater(target.position,13);
           }
         }
-        this.effects.burningTrail(target,target.fall,dt);
+        if(target.mesh.visible)this.effects.burningTrail(target,target.fall,dt);
         continue;
       }
       trafficPose(target,this.elapsed);

@@ -361,7 +361,8 @@ export class Touch {
     const set = (key, element, text) => { if (this.labels[key] !== text) { this.labels[key] = text; element.textContent = text; } };
     set('gun', this.el.gunValue, flight.rounds > 0 ? String(flight.rounds) : countdown(12, effects.reload?.rounds));
     set('bomb', this.el.bombValue, flight.bombs > 0 ? String(flight.bombs) : countdown(25, effects.reload?.bombs));
-    const seeker = flight.airframe==='wyvern' ? {legend:'ROCKET',value:engagement.rocketsRemaining>0?String(engagement.rocketsRemaining):countdown(20,engagement.rocketReload),state:'resting'} : seekerParts(engagement.seeker, engagement.remaining, engagement.reloadTime || 0);
+    // The rocket cap reloads like every other store: dimmed, with the amber countdown.
+    const seeker = flight.airframe==='wyvern' ? {legend:'ROCKET',value:engagement.rocketsRemaining>0?String(engagement.rocketsRemaining):countdown(20,engagement.rocketReload),state:engagement.rocketsRemaining>0?'resting':'dim'} : seekerParts(engagement.seeker, engagement.remaining, engagement.reloadTime || 0);
     this.el.bomb.querySelector('.name').textContent=flight.airframe==='wyvern'?'TORPEDO':'BOMB';
     set('seekerName', this.el.seekerName, seeker.legend);
     set('seekerValue', this.el.seekerValue, seeker.value);
@@ -374,7 +375,8 @@ export class Touch {
     this.el.seeker.classList.toggle('lit', seeker.state === 'lit' || seeker.state === 'warming');
     this.el.seeker.classList.toggle('warming', seeker.state === 'warming');
     this.el.seeker.classList.toggle('locked', locked);
-    this.el.seeker.classList.toggle('dim', seeker.state === 'dim' || inhibited);
+    // Rockets refuse on the ground, so the Wyvern's cap is dim there, as the bomb cap is.
+    this.el.seeker.classList.toggle('dim', seeker.state === 'dim' || inhibited || (flight.airframe === 'wyvern' && flight.onGround));
     // The gun is the one cap that lights: a system that is live and powered, only while it fires.
     this.el.gun.classList.toggle('lit', !!this.input.gunHeld && flight.rounds > 0);
     this.el.gun.classList.toggle('dim', flight.rounds <= 0);
@@ -420,7 +422,8 @@ export class Touch {
     }
     if (flight.onGround) {
       if (speed < 3) return coach('Slide the throttle up.');
-      if (knots < 130) return coach('Tilt to keep it straight.');
+      // Rotation at 1.12 times the stall speed, which follows the mass (the Wyvern's is lower).
+      if (flight.ias < 1.12 * flight.stallSpeed * 0.93) return coach('Tilt to keep it straight.');
       return coach('Pull the phone towards you.');
     }
     if (!this.sensors && this.fallbackNoted && flight.airborneTime < 8) return say('NO SENSORS · DRAG TO AIM', 'notice');
@@ -429,6 +432,7 @@ export class Touch {
     if (flight.stall || flight.alpha > 0.28) return say('HIGH ALPHA · PUSH THE PHONE AWAY', 'warning');
     if (Math.abs(flight.position.x) > 11000 || Math.abs(flight.position.z) > 12000) return say('Turn back towards the airfield.');
     const range = flight.position.distanceTo(V3(RANGE_CENTRE.x, flight.position.y, RANGE_CENTRE.z));
+    if (range < RANGE_LEG_RADIUS && flight.airframe === 'wyvern') return say('Tap ROCKET over the targets.');
     if (range < RANGE_LEG_RADIUS && flight.bombs > 0) return say('Tap BOMB over the target.');
     if (range < RANGE_LEG_RADIUS) return say('Turn back to the airfield.');
     if (returnLeg(flight, effects)) {
