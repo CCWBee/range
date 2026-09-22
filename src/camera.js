@@ -55,6 +55,14 @@ export class ChaseCamera {
     const { forward, up } = flight.basis();
     const speed = flight.velocity.length();
     const s = this.scratch;
+    // The smoothed state feeds itself, and the zero-length guards below are false for NaN, so one
+    // bad frame would otherwise latch a NaN camera (a black view) until a reset. Snap back instead.
+    const state = this.smoothForward.x + this.viewForward.x + this.localOffset.x + this.localVelocity.x;
+    if (!Number.isFinite(state)) {
+      this.smoothForward.set(0, 0, -1); this.viewForward.set(0, 0, -1);
+      this.localOffset.set(0, 6.5, 24); this.localVelocity.set(0, 0, 0);
+      snap = true;
+    }
 
     // Smoothed path direction: the velocity above 40 m/s, the nose below it.
     const target = speed >= 40 ? flight.velocity.clone().divideScalar(speed) : forward.clone();

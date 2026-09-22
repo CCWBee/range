@@ -21,10 +21,26 @@ import { AIRPORT } from './airport.js';
 const $ = (id) => document.getElementById(id);
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const STEP = 1 / 120;
+const SHOW_FPS = new URLSearchParams(location.search).has('fps');
 const munitionCamera = new MunitionCamera();
 let touchFollow = null;
 
 const canvas = $('view');
+// A failure while loading or building the world must say so, rather than leave the intro up with a
+// disabled ENTER for ever: a module that throws before its last line never hides #loading. After
+// start-up the same events only reach the console.
+let started = false;
+function showStartFailure(message) {
+  if (started) return;
+  $('loading')?.classList.add('hidden');
+  const box = $('error');
+  box.classList.remove('hidden');
+  box.innerHTML = '<p>RANGE could not start.</p><p class="detail"></p><button type="button" class="key" id="reloadPage">RELOAD</button>';
+  box.querySelector('.detail').textContent = message;
+  $('reloadPage').onclick = () => location.reload();
+}
+addEventListener('error', (event) => showStartFailure(event.message || 'A script error stopped the loader.'));
+addEventListener('unhandledrejection', (event) => showStartFailure(event.reason?.message || String(event.reason)));
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
@@ -41,7 +57,9 @@ const MOBILE = touchWanted || new URLSearchParams(location.search).get('tier') =
 // of the pixels on a screen whose physical pixels are a quarter the size.
 const basePixelRatio = () => Math.min(devicePixelRatio, MOBILE ? 2 : 1.5);
 renderer.setPixelRatio(basePixelRatio());
-renderer.setSize(innerWidth, innerHeight);
+// updateStyle false throughout: the stylesheet sizes the canvas at 100%, and the inline pixel size
+// setSize would otherwise write goes stale on the next resize and uncovers a band of the page.
+renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.86;
@@ -83,6 +101,34 @@ if (touch) document.body.classList.add('touch');
 const scene = world.scene;
 const camera = chase.camera;
 
+// A lost WebGL context (a phone backgrounded under memory pressure, a driver reset) leaves three.js
+// skipping every render: before this the canvas went black under a live HUD while the sortie flew
+// on unseen. Pause, say so, and on restore rebuild the one GPU resource three cannot re-upload by
+// itself, the sky's environment capture, then resize the post targets.
+let contextLost = false, contextTimer = 0;
+canvas.addEventListener('webglcontextlost', (event) => {
+  event.preventDefault();
+  contextLost = true;
+  if (running) input.setPaused(true);
+  hud.setStatus('GRAPHICS RESET<small>Restoring the view.</small>');
+  clearTimeout(contextTimer);
+  contextTimer = setTimeout(() => {
+    if (!contextLost) return;
+    hud.setStatus('GRAPHICS LOST<small>The browser did not restore the view.</small><button type="button" class="key" id="reloadView">RELOAD</button>');
+    $('reloadView').onclick = () => location.reload();
+  }, 5000);
+}, false);
+canvas.addEventListener('webglcontextrestored', () => {
+  contextLost = false;
+  clearTimeout(contextTimer);
+  world.captureEnvironment();
+  post.resize();
+  // setPauseUi returns early on the intro, so the reset line is cleared here first; mid-sortie it
+  // then puts the paused screen back, since the loss paused the sortie.
+  hud.setStatus('');
+  setPauseUi(input.paused);
+}, false);
+
 let running = false;
 let elapsed = 0;
 let accumulator = 0;
@@ -93,6 +139,7 @@ let stressed = false;
 // A staged frame is held: nothing steps, so a staged weapon state survives to the screenshot.
 // Any genuine pause or resume clears it, because setPauseUi is the one place the state changes.
 let staged = false;
+let frameErrors = 0;
 const frameTimes = [];
 
 // Adaptive resolution: every two seconds of play the pixel ratio steps by 0.1 towards whatever
@@ -101,16 +148,20 @@ const frameTimes = [];
 // while paused. The thresholds are measured against the window's own median, not against absolute
 // milliseconds: a 60 Hz phone can never report a p95 under 9 ms, so the old recovery branch was
 // unreachable and the first rough patch took the phone to 0.6 for the rest of the sortie.
-let pixelRatio = basePixelRatio(), ratioTimer = 0;
+let pixelRatio = basePixelRatio(), ratioTimer = 0, ratioLean = 0;
 function adaptResolution(dt) {
   ratioTimer += dt;
   if (stressed || ratioTimer < 2 || frameTimes.length < 60) return;
   ratioTimer = 0;
   const next = nextPixelRatio(frameTimes.slice(-120), pixelRatio, basePixelRatio(), MOBILE ? 1 : 0.6);
-  if (next === pixelRatio) return;
+  const lean = Math.sign(next - pixelRatio);
+  // Two decisions in a row the same way before a step, so a window sitting on a threshold does not
+  // ping-pong the ratio: every step reallocates the MSAA scene target and both bloom targets.
+  if (!lean || lean !== ratioLean) { ratioLean = lean; return; }
+  ratioLean = 0;
   pixelRatio = next;
   renderer.setPixelRatio(pixelRatio);
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth, innerHeight, false);
   post.resize();
 }
 
@@ -152,7 +203,7 @@ function setPauseUi(paused) {
   audio.update(flight,paused);
   if(paused)audio.seeker(false,false,false);
   const resume = touch?.active ? 'Tap to continue.' : 'Click the view to take the controls back.';
-  hud.setStatus(paused && !flight.crashed ? `PAUSED<small>${resume}</small><button id="returnMenu" type="button">Back to aircraft selection</button>` : '');
+  hud.setStatus(paused && !flight.crashed ? `PAUSED<small>${resume}</small><button id="returnMenu" type="button" class="key">CHANGE AIRCRAFT</button>` : '');
   if ($('returnMenu')) $('returnMenu').onclick = returnToMenu;
   if (flight.crashed) hud.crashShown = false;
 }
@@ -174,7 +225,7 @@ function returnToMenu() {
   $('hud').classList.add('hidden');
   $('touch').classList.add('hidden');
   $('buttons').classList.add('hidden');
-  $('help').classList.add('hidden');
+  hud.toggleHelp(false);
   $('intro').classList.remove('hidden');
   $('veil').classList.remove('hidden');
   $('start').focus();
@@ -245,25 +296,36 @@ function bindSwitch(id, trackId, legends, set) {
     const r = track.getBoundingClientRect();
     return clientX < r.left + r.width / 2 ? legends[0][1] : legends[1][1];
   };
-  let sliding = null;
+  // A tap anywhere on the row outside the legends toggles, committed on release as a hardware toggle
+  // is. The knob always sits at the current end, so the old press-resolves-to-nearest-end rule made a
+  // tap on the knob, the natural target, do nothing. A drag past a 6 px dead zone still follows the
+  // pointer and snaps to the end it crosses into; jitter under that cannot snap the knob back.
+  let press = null;
   root.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
   root.addEventListener('pointerdown', (event) => {
     if (event.target.closest('.switchLegend')) return;   // the legend's own click handles it
     event.preventDefault();
-    sliding = event.pointerId;
+    press = { id: event.pointerId, x: event.clientX, slid: false };
+    root.classList.add('held');
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (!press || event.pointerId !== press.id) return;
+    if (!press.slid && Math.abs(event.clientX - press.x) < 6) return;
+    press.slid = true;
     root.classList.add('sliding');
     set(nearest(event.clientX));
   });
-  window.addEventListener('pointermove', (event) => {
-    if (sliding !== null && event.pointerId === sliding) set(nearest(event.clientX));
-  });
-  const endSlide = (event) => {
-    if (event.pointerId !== sliding) return;
-    sliding = null;
-    root.classList.remove('sliding');
+  const endPress = (event) => {
+    if (!press || event.pointerId !== press.id) return;
+    const tap = !press.slid && event.type === 'pointerup';
+    press = null;
+    root.classList.remove('held', 'sliding');
+    // Only setSwitch writes the `on` class, so it reads the state; the setter's own guard handles
+    // the rest (setAircraft refuses once a sortie is running).
+    if (tap) set(legends[root.classList.contains('on') ? 0 : 1][1]);
   };
-  window.addEventListener('pointerup', endSlide);
-  window.addEventListener('pointercancel', endSlide);
+  window.addEventListener('pointerup', endPress);
+  window.addEventListener('pointercancel', endPress);
   for (const [legendId, value] of legends) $(legendId).onclick = () => set(value);
   // The radiogroup pattern rather than a re-invention of it: focus follows the selection.
   root.addEventListener('keydown', (event) => {
@@ -312,7 +374,10 @@ $('sound').onclick = () => { $('sound').textContent = audio.toggleMute() ? 'SOUN
 $('skinChoice').onchange = (event) => setSkin(event.target.value);
 
 window.addEventListener('resize', () => {
-  renderer.setSize(innerWidth, innerHeight);
+  // A collapsed or mid-rotation viewport can report zero: an aspect of Infinity or NaN would blank
+  // every frame until the next good resize, and a 0 x 0 scene target is an incomplete framebuffer.
+  if (!(innerWidth > 0 && innerHeight > 0)) return;
+  renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   post.resize();
@@ -401,6 +466,13 @@ function hudOptions(paused = staged ? false : input.paused) {
 
 function loop(now) {
   requestAnimationFrame(loop);
+  tick(now);
+}
+
+// One animation frame's work, apart from scheduling the next. Separate so tools/qa_black_frames.mjs
+// can drive the real per-frame order with synthetic timestamps: headless Chrome throttles
+// requestAnimationFrame to about once a second, too slow for the adaptive ratio ever to decide.
+function tick(now) {
   const raw = (now - lastFrame) / 1000;
   lastFrame = now;
   frameTimes.push(raw * 1000);
@@ -409,12 +481,24 @@ function loop(now) {
   // The simulation runs only while the pointer is locked to the canvas, which is what makes the
   // pause state and the lock state impossible to disagree.
   const stepSim = running && !input.paused && input.locked;
-  frame(dt, stepSim);
+  // Resize before drawing, never after. Resizing a WebGL canvas clears its drawing buffer, so the
+  // old order (draw, then adapt the ratio) handed the compositor a cleared buffer for that frame:
+  // one black frame every time the ratio stepped, which is what the random black flashes were.
+  // The decision reads the previous frames' times, so the order changes nothing else.
   if (stepSim) adaptResolution(dt);
+  try { frame(dt, stepSim); frameErrors = 0; }
+  catch (error) {
+    // Logged once, not sixty times a second; a run of failures says so on screen.
+    if (frameErrors++ === 0) console.error(error);
+    if (frameErrors === 120) hud.setStatus('RANGE STOPPED<small>Reload the page to fly again.</small>');
+  }
+  // The frame rate is a developer readout, not an instrument: shown with ?fps=1 or in the map camera.
   if (running && hudTimer < 0.02 && frameTimes.length > 8) {
-    const window90 = frameTimes.slice(-90);
-    const mean = window90.reduce((a, b) => a + b, 0) / window90.length;
-    hud.setFps(`${Math.round(1000 / mean)} FPS`);
+    if (SHOW_FPS || input.devCamera) {
+      const window90 = frameTimes.slice(-90);
+      const mean = window90.reduce((a, b) => a + b, 0) / window90.length;
+      hud.setFps(`${Math.round(1000 / mean)} FPS`);
+    } else hud.setFps('');
   }
   canvas.classList.toggle('unlocked', !input.locked);
 }
@@ -573,7 +657,7 @@ function stress(on = true) {
   stressed = !!on;
   pixelRatio = stressed ? 2 : basePixelRatio();
   renderer.setPixelRatio(pixelRatio);
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth, innerHeight, false);
   post.resize();
   return renderer.getPixelRatio();
 }
@@ -641,14 +725,17 @@ aircraft.update(0.016, flight, camera, 0);
 world.update(0.016, flight, camera, 0);
 $('loading').classList.add('hidden');
 $('start').disabled = false;
+started = true;
+// Reaching this line means nothing that fired during loading was fatal, so clear any failure box.
+$('error').classList.add('hidden');
 requestAnimationFrame(loop);
 
 // Assigned last, once every await has settled, so a headless --eval that runs the moment the page
 // loads either finds the whole object or none of it.
 window.range = {
-  flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch,
+  flight, instructor, renderer, scene, camera, world, aircraft, effects, input, hud, engagement, touch, post,
   targets: effects.targets, bombs: effects.bombs,
-  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft,
+  start, reset, stage, metrics, renderOnce, benchmark, stress, setAim, touchDemo, setSkin, setAircraft, tick,
   dropBomb: () => effects.dropBomb(flight, aircraft),
   fireGun: () => effects.fireGun(flight),
   explosion: (position, strength) => effects.explosion(position, strength),

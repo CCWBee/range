@@ -32,7 +32,11 @@ float fbm(vec2 p){float f=0.;float a=.5;for(int i=0;i<5;i++){f+=a*noise(p);p=mat
 vec3 atmosphere(vec3 d){
  float h=max(d.y,0.);vec3 top=vec3(.09,.24,.43);vec3 horizon=vec3(.48,.62,.73);
  vec3 col=mix(horizon,top,smoothstep(0.,.7,h));
- float warm=exp(-pow((d.y-.025)*17.,2.))*pow(max(0.,dot(normalize(d.xz),normalize(vec2(-.35,-1.)))),7.);
+ // Squares are written as products: GLSL ES leaves pow() undefined for a negative base, and a
+ // driver that evaluates it as exp2(y*log2(x)) returns NaN. The xz epsilon keeps normalize away
+ // from a zero vector at the zenith.
+ float warmY=(d.y-.025)*17.;
+ float warm=exp(-warmY*warmY)*pow(max(0.,dot(normalize(d.xz+vec2(1e-5,0.)),normalize(vec2(-.35,-1.)))),7.);
  col+=vec3(.30,.195,.085)*warm;
  return col;
 }
@@ -229,16 +233,30 @@ void main(){vec3 d=normalize(direction);
     this.sky.receiveShadow = false;
     this.scene.add(this.sky);
 
-    // The same sky, captured to a cube map, gives the aircraft and the puddles their reflections.
+    this.skyGeometry = skyGeometry;
+    this.captureEnvironment();
+  }
+
+  // The same sky, captured to a cube map, gives the aircraft and the puddles their reflections. A
+  // method, not inline in buildSky, because it is a render-target texture: after a lost WebGL context
+  // three.js cannot re-upload it, so main.js calls this again on restore. The capture cube and the
+  // PMREM generator's scratch target are disposed once the environment is made (together about
+  // 44 MB of GPU memory that was otherwise held for the whole session), and the phone captures at
+  // 256, a quarter of the memory, for reflections that are blurred by roughness anyway.
+  captureEnvironment() {
     const environmentScene = new THREE.Scene();
-    const environmentSky = new THREE.Mesh(skyGeometry, this.skyMaterial);
+    const environmentSky = new THREE.Mesh(this.skyGeometry, this.skyMaterial);
     environmentSky.scale.setScalar(100);
     environmentScene.add(environmentSky);
-    const target = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType });
-    const cubeCamera = new THREE.CubeCamera(0.1, 200, target);
-    cubeCamera.update(this.renderer, environmentScene);
+    const target = new THREE.WebGLCubeRenderTarget(this.tier === 'mobile' ? 256 : 512, { type: THREE.HalfFloatType });
+    new THREE.CubeCamera(0.1, 200, target).update(this.renderer, environmentScene);
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.scene.environment = pmrem.fromCubemap(target.texture).texture;
+    const environment = pmrem.fromCubemap(target.texture);
+    this.environmentTarget?.dispose();
+    this.environmentTarget = environment;
+    this.scene.environment = environment.texture;
+    target.dispose();
+    pmrem.dispose();
   }
 
   // ------------------------------------------------------------------------- lighting and shadows
@@ -328,7 +346,8 @@ void main(){
  float aft=-dot(offset,waterDirection);
  float across=dot(offset,vec2(-waterDirection.y,waterDirection.x));
  float spread=5.+max(0.,aft)*.10;
- float envelope=exp(-pow(across/spread,2.))*smoothstep(-8.,6.,aft)*(1.-smoothstep(12.,110.,aft))*aircraftWater.z;
+ float acrossQ=across/spread;
+ float envelope=exp(-acrossQ*acrossQ)*smoothstep(-8.,6.,aft)*(1.-smoothstep(12.,110.,aft))*aircraftWater.z;
  if(envelope>.001){
   float ripple=sin(across*.7+aft*.12-time*5.+noise(worldP.xz*.13)*4.);
   normal.xz+=vec2(-waterDirection.y,waterDirection.x)*ripple*envelope*.025;
@@ -515,7 +534,9 @@ void main(){
  float shore=1.-smoothstep(${(JERSEY.seaLevel+1).toFixed(2)},${(JERSEY.seaLevel+9).toFixed(2)},worldP.y);
  diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.42,.37,.27),shore*.55);
  // Geological colour follows world position; steep faces expose granite rather than grass.
- vec3 faceNormal=normalize(cross(dFdx(worldP),dFdy(worldP)));
+ // A degenerate or underflowed derivative pair would normalise a zero vector into NaN.
+ vec3 faceCross=cross(dFdx(worldP),dFdy(worldP));
+ vec3 faceNormal=dot(faceCross,faceCross)>1e-12?normalize(faceCross):vec3(0.,1.,0.);
  float exposed=smoothstep(.22,.72,1.-abs(faceNormal.y)+noise(worldP.xz*.028)*.14);
  float north=clamp((-worldP.x+1000.)/5000.,0.,1.);
  vec3 granite=mix(vec3(.50,.32,.24),vec3(.46,.36,.32),north);
@@ -523,7 +544,8 @@ void main(){
  granite*=.72+.48*strata;
  diffuseColor.rgb=mix(diffuseColor.rgb,granite,exposed);
  // Drainage ditches down both sides of the runway at 45 m.
- float ditch=exp(-pow((abs(worldP.x)-45.)*.5,2.))*step(-2560.,worldP.z)*step(worldP.z,360.);
+ float ditchQ=(abs(worldP.x)-45.)*.5;
+ float ditch=exp(-ditchQ*ditchQ)*step(-2560.,worldP.z)*step(worldP.z,360.);
  diffuseColor.rgb*=1.-ditch*.55;`);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
@@ -648,7 +670,8 @@ void main(){
       shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 streakUv;')
         .replace('#include <color_fragment>', `#include <color_fragment>
  float fade=pow(max(0.,sin(streakUv.y*3.14159)),2.)*pow(max(0.,sin(streakUv.x*3.14159)),4.);
- float wear=.35+.65*pow(sin(streakUv.x*65.),2.);
+ float wearS=sin(streakUv.x*65.);
+ float wear=.35+.65*wearS*wearS;
  diffuseColor.a*=fade*wear;`);
     };
     const geometry = new THREE.PlaneGeometry(1, 1);
@@ -747,7 +770,14 @@ void main(){
       const tall = entry.tall || (bounds && bounds.max.y > 3);
       for (const part of this.library.parts(entry.asset)) {
         if (entry.asset.includes('hangar') || entry.asset === 'has') part.material.side = THREE.DoubleSide;
-        const mesh = new THREE.InstancedMesh(part.geometry, part.material, entry.places.length);
+        // The packed windsock shares the white runway 'marking' material. Give the sock alone
+        // aviation orange here; tools/model_range.py now authors it as 'windsock_orange', so a
+        // re-export arrives orange and this swap becomes a no-op.
+        const material = entry.asset === 'windsock' && part.material.name === 'marking'
+          ? (this.windsockMaterial ||= Object.assign(part.material.clone(), { name: 'windsock_orange', roughness: .85, metalness: 0 }))
+          : part.material;
+        if (material !== part.material) material.color.set(0xf2651d);
+        const mesh = new THREE.InstancedMesh(part.geometry, material, entry.places.length);
         const matrix = new THREE.Matrix4();
         const quaternion = new THREE.Quaternion();
         const scale = V3(1, 1, 1);
@@ -942,7 +972,7 @@ void main(){
           .replace('#include <begin_vertex>',`#include <begin_vertex>
  vec2 centre=instanceMatrix[3].xz;float tip=position.y*position.y;
  transformed.x+=sin(windTime*1.8+centre.x*.04+centre.y*.02)*.12*tip;
- float dist=length(centre-blastImpulse.xy);float wave=exp(-pow((dist-blastImpulse.z*55.)/12.,2.))*exp(-blastImpulse.z*.5)*step(dist,blastImpulse.w*2.);
+ float dist=length(centre-blastImpulse.xy);float waveQ=(dist-blastImpulse.z*55.)/12.;float wave=exp(-waveQ*waveQ)*exp(-blastImpulse.z*.5)*step(dist,blastImpulse.w*2.);
  transformed.xz+=normalize(centre-blastImpulse.xy+vec2(.001))*wave*.8*tip;`);
       };
       const matrix = new THREE.Matrix4();

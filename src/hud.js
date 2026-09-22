@@ -50,9 +50,12 @@ export class Hud {
 
   show() { this.el.hud.classList.remove('hidden'); }
 
-  toggleHelp() {
-    const hidden = this.el.help.classList.toggle('hidden');
-    $('helpToggle').textContent = hidden ? 'I to show controls' : 'I to hide controls';
+  // show: true or false to set the sheet, omitted to toggle it. The legend follows the pause
+  // control's register (PAUSE · P): the action first, the key after a middle dot.
+  toggleHelp(show) {
+    const hidden = this.el.help.classList.toggle('hidden', show === undefined ? undefined : !show);
+    $('helpToggle').textContent = hidden ? 'CONTROLS · I' : 'HIDE CONTROLS · I';
+    $('helpToggle').setAttribute('aria-expanded', String(!hidden));
   }
 
   setStatus(html) { this.el.status.innerHTML = html || ''; }
@@ -208,12 +211,15 @@ export class Hud {
     // instructor is sentence case in the ink, the aircraft is upper case in the advisory amber,
     // the stall flashes. One writer for the class and the string, so they cannot disagree.
     if (options.hint !== undefined) hint = options.hint;
-    if (options.touch) this.el.hint.className = options.hintVoice || '';
+    // One writer for the class and the string on both tiers: the instructor speaks in sentence case
+    // in the ink, the aircraft in capitals in the advisory amber (the notice voice).
+    this.el.hint.className = options.touch ? options.hintVoice || '' : '';
     this.el.hint.textContent = hint;
-    if(effects.engagement?.noticeTime>0){this.el.hint.textContent=effects.engagement.notice;if(options.touch)this.el.hint.className='notice';}
-    else if(input.freeLook&&!options.touch)this.el.hint.textContent='FREE LOOK · release C to return to the flight view';
-    if(input.keys.has('KeyU')&&effects.lastMunition)this.el.hint.textContent='MUNITION VIEW · release U to return · instructor remains active';
-    if(input.devCamera)this.el.hint.textContent='MAP CAMERA · WASD move · Q/E down/up · Shift faster · ` return';
+    const notice = (text) => { this.el.hint.textContent = text; this.el.hint.className = 'notice'; };
+    if(effects.engagement?.noticeTime>0) notice(effects.engagement.notice);
+    else if(input.freeLook&&!options.touch) notice('FREE LOOK · RELEASE C TO RETURN');
+    if(input.keys.has('KeyU')&&effects.lastMunition) notice('MUNITION VIEW · RELEASE U TO RETURN');
+    if(input.devCamera) notice('MAP CAMERA · WASD MOVE · Q/E DOWN/UP · SHIFT FASTER · ` RETURN');
   }
 
   updateMarkers(flight, camera, input, effects, detachedView = false) {

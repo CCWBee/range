@@ -30,7 +30,7 @@ void main(){
    float radius=.31*(1.-t*.6);
    float r=length(s.xy)/radius;
    float turbulence=1.+.10*sin(t*63.+s.x*26.-time*43.)+.07*cos(s.y*29.+t*81.+time*31.);
-   float density=exp(-r*r*5.)*pow(1.-t,.8)*turbulence;
+   float density=exp(-r*r*5.)*pow(max(0.,1.-t),.8)*turbulence;
    // The shock diamonds are softened at the cone edge so the plume has no hard rim.
    float shock=pow(max(0.,cos(t*31.)),16.)*.65*smoothstep(1.35,.7,r);
    vec3 colour=mix(vec3(.7,.8,2.5),vec3(3.4,.86,.16),smoothstep(.035,.16,t));

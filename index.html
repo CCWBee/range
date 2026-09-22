@@ -6,86 +6,95 @@
 <link rel="icon" type="image/svg+xml" href="assets/icon/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="assets/icon/apple-touch-icon.png">
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#141b20;color:#eceded;font-family:Arial,Helvetica,sans-serif}
+/* One family on both tiers: Barlow Condensed, the face the phone cockpit was built in and which both
+   bundles already embed, so the desktop no longer reads as a second product in Arial and Bahnschrift. */
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#141b20;color:#eceded;font-family:'Barlow Condensed','Roboto Condensed','Arial Narrow',Arial,sans-serif}
 canvas{display:block;width:100%;height:100%;cursor:none}
 canvas.unlocked{cursor:crosshair}
 button{font:inherit;color:inherit;cursor:pointer}
-button:focus-visible{outline:2px solid #d7e5ed;outline-offset:5px}
-select:focus-visible{outline:2px solid #d7e5ed;outline-offset:3px}
-#skinControl{display:flex;align-items:center;gap:8px;font-size:12px;color:#c4cfd6;margin-top:18px}
-#skinChoice{font:inherit;color:#eceded;background:#18232b;border:1px solid #64727a;padding:5px 8px}
-#buttons #skinControl{margin:0}
+button:focus-visible{outline:2px solid var(--focus);outline-offset:5px}
 .hidden{display:none!important}
 #veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,var(--veil-intro),var(--veil-clear) 58%)}
 #intro{position:absolute;top:12%;left:6%;width:min(400px,85vw)}
-h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.17em;margin:0 0 22px;line-height:1;color:var(--ink)}
-#intro p{font-size:16px;line-height:1.6;color:var(--ink);max-width:330px;margin:0 0 4px}
+h1{font-weight:400;font-size:clamp(64px,8vw,112px);letter-spacing:.22em;margin:0 0 22px;line-height:1;color:var(--ink)}
+#intro p{font-size:17px;line-height:1.6;color:var(--ink);max-width:330px;margin:0 0 4px}
 /* ENTER takes the shared cap material from the .key rule below; the desktop side sizes it for the
    mouse and adds a hover lift, one of the affordances the phone build has no use for. */
-#start{display:inline-flex;align-items:center;justify-content:center;margin:26px 0 0;padding:0 26px;min-height:46px;font-size:14px;font-weight:500;letter-spacing:.14em}
-#start:hover:not(:disabled){transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),0 0 0 1px var(--cut),0 2px 3px var(--panel-contact),0 10px 22px var(--cap-glass-drop)}
-#intro small{display:block;margin-top:22px;font-size:12px;line-height:1.7;letter-spacing:.04em;color:var(--ink);opacity:.82}
+#start{display:inline-flex;align-items:center;justify-content:center;margin:26px 0 0;padding:0 26px;min-height:46px;font-size:14px;font-weight:500;letter-spacing:.16em}
+#start:hover:not(:disabled),#status .key:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),0 0 0 1px var(--cut),0 2px 3px var(--panel-contact),0 10px 22px var(--cap-glass-drop)}
+#intro small{display:block;margin-top:22px;font-size:10px;font-weight:500;line-height:1.5;letter-spacing:.14em;color:var(--ink)}
 /* The HUD shares the touch build's ink, halo and state ramp so the two read as one product; the
    desktop side keeps its screen-edge vignette (below) and its fuller layout, showing the secondary
    readouts the phone hides. */
 #hud{position:absolute;inset:0;pointer-events:none;text-shadow:var(--halo);font-variant-numeric:tabular-nums;color:var(--ink)}
 #brand{position:absolute;top:28px;left:34px;font-size:18px;letter-spacing:.3em;color:var(--ink)}
-#location{position:absolute;top:32px;right:32px;font-size:12px;letter-spacing:.13em;color:var(--ink);opacity:.82}
-#objective{position:absolute;top:77px;left:34px;font-size:12px;letter-spacing:.06em;color:var(--ink);opacity:.82}
+#location{position:absolute;top:32px;right:32px;font-size:12px;letter-spacing:.13em;color:var(--ink-2)}
+#objective{position:absolute;top:77px;left:34px;font-size:12px;letter-spacing:.06em;color:var(--ink-2)}
 #telemetry{position:absolute;bottom:34px;left:34px;display:flex;gap:32px}
 #telemetry div{min-width:70px}
-#telemetry label{display:block;font-size:11px;letter-spacing:.18em;margin-bottom:8px;color:var(--ink);opacity:.72}
+#telemetry label{display:block;font-size:11px;font-weight:500;letter-spacing:.18em;margin-bottom:8px;color:var(--ink-3)}
 #telemetry b{font-size:26px;font-weight:400;color:var(--ink)}
-#telemetry span{font-size:11px;margin-left:5px;color:var(--ink);opacity:.78}
-#flightstate{position:absolute;bottom:116px;left:34px;display:flex;gap:26px;font-size:12px;letter-spacing:.1em;color:var(--ink);opacity:.9}
-#flightstate i{font-style:normal;color:var(--ink);opacity:.62;margin-right:7px}
+#telemetry b+span{font-size:11px;margin-left:5px;color:var(--ink-3)}
+#flightstate{position:absolute;bottom:116px;left:34px;display:flex;gap:26px;font-size:12px;letter-spacing:.1em;color:var(--ink)}
+#flightstate i{font-style:normal;font-weight:500;color:var(--ink-3);margin-right:7px}
 #systems{position:absolute;bottom:36px;right:34px;font-size:12px;line-height:1.9;text-align:right;letter-spacing:.05em;color:var(--ink)}
 #instructor{color:var(--advisory)}
 #instructor.stall-warning{color:var(--lock);animation:stall-flash .7s steps(2,end) infinite}
 @keyframes stall-flash{50%{opacity:.35}}
 @media(prefers-reduced-motion:reduce){#instructor.stall-warning{animation:none}}
-#hint{position:absolute;bottom:157px;left:34px;font-size:14px;color:var(--ink);max-width:620px;line-height:1.6}
+#hint{position:absolute;bottom:157px;left:34px;font-size:15px;color:var(--ink);max-width:620px;line-height:1.6}
+/* The aircraft's voice on the desktop too: notices in capitals and the advisory amber, the
+   instructor in sentence-case ink (DESIGN.md: capitals are the aircraft). */
+#hint.notice{font-size:12px;font-weight:500;letter-spacing:.13em;color:var(--advisory)}
 #markers{position:absolute;inset:0;pointer-events:none}
-#help{position:absolute;top:80px;right:30px;width:320px;padding:22px;font-size:14px;line-height:1.8}
-#help p{margin:0 0 14px;color:var(--ink);opacity:.82}
+#help{position:absolute;top:100px;right:30px;width:320px;padding:22px;font-size:14px;line-height:1.8}
+#help p{margin:0 0 14px;color:var(--ink-2)}
 #help dl{display:grid;grid-template-columns:128px 1fr;margin:0;gap:6px}
 #help dd{margin:0}
 #help dt{color:var(--advisory)}
 #help details{margin-top:10px}
-#help summary{color:var(--ink);opacity:.7;cursor:pointer}
+#help summary{color:var(--ink-3);cursor:pointer}
 #buttons{position:absolute;top:60px;right:32px;display:flex;gap:10px}
 /* Plain ink legends on the canopy, the same treatment as the touch build's RECENTRE and PAUSE, with
    a mouse hover the phone has no use for. */
-#buttons button{border:0;background:transparent;font-size:11px;font-weight:500;letter-spacing:.13em;padding:8px 6px;color:var(--ink);opacity:.82;text-shadow:var(--halo)}
-#buttons button:hover{opacity:1}
+#buttons button{border:0;background:transparent;font-size:12px;font-weight:500;letter-spacing:.13em;padding:8px 6px;color:var(--ink);text-shadow:var(--halo)}
+#buttons button:hover{color:var(--ink-pressed)}
 #status{position:absolute;top:29%;left:50%;transform:translateX(-50%);text-align:center;font-size:28px;letter-spacing:.08em;line-height:1.6;pointer-events:none;color:var(--ink)}
-#status small{display:block;font-size:14px;letter-spacing:.02em;color:var(--ink);opacity:.82}
-#status button{display:block;margin:14px auto 0;min-height:44px;padding:8px 14px;background:var(--stop-veil);color:var(--ink);border:1px solid currentColor;font:inherit;font-size:14px;pointer-events:auto;cursor:pointer}
-#status button:focus-visible{outline:2px solid var(--ink);outline-offset:4px}
+#status small{display:block;font-size:15px;letter-spacing:.02em;color:var(--ink-2)}
+/* The stop screens' one control (CHANGE AIRCRAFT, RELOAD) is a cap, the sibling of ENTER AIRCRAFT:
+   the .key material, the cap legend register, the shared press and focus. A hairline box on the
+   stop veil was the one control on either tier outside the material. */
+#status .key{display:inline-flex;align-items:center;justify-content:center;margin:22px 0 0;padding:0 18px;
+ min-height:44px;font-size:13px;font-weight:500;letter-spacing:.16em;line-height:1;pointer-events:auto}
 body:has(#returnMenu) #markers,body:has(#returnMenu) #hint{display:none}
 /* Paused, the whole screen dims to the stop veil, as it does on the touch build: the veil is #hud's
    own background so the render dims while the HUD text and the status line stay lit. */
 body:not(.touch):has(#status:not(:empty)) #hud{background:var(--stop-veil)}
 #loading{position:absolute;bottom:30px;left:6%;font-size:14px}
-#error{position:absolute;inset:20%;background:#18232b;padding:30px;line-height:1.6}
-#fps{color:#b7c5c8}
+/* The start-up failure box: the panel material, not an opaque square outside it. */
+#error{position:absolute;left:50%;top:30%;transform:translateX(-50%);width:min(420px,calc(100vw - 36px));
+ padding:24px;line-height:1.5;font-size:15px;color:var(--ink);border-radius:15px;background:var(--light-panel),var(--panel-tint-opaque);
+ box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),0 0 0 1px var(--cut),0 18px 44px var(--panel-drop)}
+#error p{margin:0 0 10px}#error .detail{color:var(--ink-2);font-size:13px}
+#error .key{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;margin-top:6px;font-size:13px;font-weight:500;letter-spacing:.16em}
+#fps{color:var(--ink-3)}
 .target-mark{fill:#ec8874;stroke:#ec8874;stroke-width:2}
 .target-mark text{stroke:none;font-size:11px;letter-spacing:.10em}
 .target-mark .target-distance{font-size:10px;letter-spacing:.03em}
 #weaponState{color:var(--advisory);letter-spacing:.13em;font-size:11px;margin-bottom:4px}
 #weaponState.locked{color:var(--lock)}
-#laserState{color:var(--ink);opacity:.7;font-size:10px}
+#laserState{color:var(--ink-3);font-size:10px}
 #hud{background:linear-gradient(0deg,rgba(7,14,19,.43),transparent 22%,transparent 87%,rgba(7,14,19,.21))}
 #brand{font-size:15px;letter-spacing:.22em}
-#telemetry{gap:38px}#telemetry b{font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;font-size:30px;font-weight:300}
-#telemetry label{font-size:10px;color:var(--ink);opacity:.72;letter-spacing:.12em}
-#systems{max-width:380px;font-size:11px;line-height:2}
+#telemetry{gap:38px}#telemetry b{font-size:30px;font-weight:400}
+#telemetry label{font-size:11px;color:var(--ink-3);letter-spacing:.14em}
+#systems{max-width:380px;font-size:12px;line-height:2}
 /* The controls sheet is a glass panel, the same material as the touch cockpit's, sized wider on the
    desktop it lives on. */
-#help{width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 120px);overflow:auto;border-radius:15px;
+#help{width:min(390px,calc(100vw - 36px));max-height:calc(100vh - 140px);overflow:auto;border-radius:15px;
  background:var(--light-panel),var(--panel-tint);
  box-shadow:inset 0 1px 0 var(--rim-top),inset 1px 0 0 var(--rim-left),inset 0 -1px 0 var(--rim-bottom),0 0 0 1px var(--cut),0 1px 1px var(--panel-contact),0 18px 44px var(--panel-drop);
- font-size:12px;line-height:1.4;padding:20px;scrollbar-width:thin;color:var(--ink)}
+ font-size:13px;line-height:1.4;padding:20px;scrollbar-width:thin;color:var(--ink)}
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
  #help{-webkit-backdrop-filter:var(--panel-backdrop);backdrop-filter:var(--panel-backdrop)}}
 #help dl{grid-template-columns:140px 1fr;gap:5px}
@@ -102,9 +111,7 @@ body:not(.touch):has(#status:not(:empty)) #hud{background:var(--stop-veil)}
  src:url(assets/fonts/BarlowCondensed-Regular.woff2) format('woff2')}
 @font-face{font-family:'Barlow Condensed';font-style:normal;font-weight:500;font-display:block;
  src:url(assets/fonts/BarlowCondensed-Medium.woff2) format('woff2')}
-body.touch{font-family:'Barlow Condensed','Roboto Condensed','Arial Narrow',Arial,sans-serif}
-body.touch #telemetry b,body.touch .key .value,body.touch #throttleValue{
- font-family:inherit;font-variant-numeric:tabular-nums}
+#telemetry b,.key .value,#throttleValue{font-family:inherit;font-variant-numeric:tabular-nums}
 /* Touch cockpit (spec docs/specs/2026-09-10-range-touch-cockpit.md sections 1 to 11, docs/DESIGN.md
    "Touch material"): one instrument panel let into the frame, the throttle quadrant at the left
    edge, and three equal caps in single file down the right edge. The panel and each cap are glass of
@@ -168,6 +175,8 @@ body.touch #telemetry b,body.touch .key .value,body.touch #throttleValue{
  --veil-clear:rgba(6,12,16,0);
  --ink:#eceded;
  --ink-pressed:#f6fafb;
+ --ink-2:#c4cfd6;
+ --ink-3:#adbdc7;
  --ink-shadow:rgba(0,0,0,.85);
  --halo:0 0 1px #000,0 0 3px #000,0 1px 2px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.75);
  --focus:#d7e5ed;
@@ -297,7 +306,7 @@ body.touch #hint.notice{font-size:10px;font-weight:500;letter-spacing:.14em;colo
 body.touch #hint.warning{font-size:10px;font-weight:500;letter-spacing:.14em;color:var(--lock-core);animation:stall-flash-touch .7s steps(2,end) infinite}
 /* The markers are the one thing that must stay on the bare image, so they take a halo rather than a
    backdrop: a 1 px stroke over bright cloud is under 2:1 against the 3:1 floor for a graphic. */
-body.touch #markers{filter:drop-shadow(0 0 2px var(--marker-halo))}
+#markers{filter:drop-shadow(0 0 2px var(--marker-halo))}
 /* The sim has stopped, so the frame stops being a live instrument and becomes a poster. The veil is
    the whole screen rather than a box around the text, which would be a fifth dark rectangle. */
 /* Full width with no transform, so the status line centres without becoming a containing block for
@@ -367,8 +376,12 @@ body.touch .switch+.switch{margin-top:-8px}
  background:var(--knurl)}
 .switch.on .switchKnob{left:30px}
 /* The shadow deepens from two stops to three while a finger is on it, which is the lift a lever
-   takes when it is held. A metal lever under a thumb does not change colour and does not shrink. */
-.switch.sliding .switchKnob{transition:none;
+   takes when it is held. A metal lever under a thumb does not change colour and does not shrink.
+   Held and sliding are separate: a tap holds and then plays the 120 ms travel; only a drag, which
+   the knob follows directly, turns the travel off. */
+.switchTrack{cursor:pointer}
+.switch.sliding .switchKnob{transition:none}
+.switch.held .switchKnob{
  box-shadow:0 0 0 1px var(--metal-contour),inset 0 1px 0 var(--metal-spec),
   inset 0 -1px 0 var(--metal-shade),0 3px 7px var(--metal-drop-held)}
 
@@ -428,7 +441,7 @@ body.touch .switch+.switch{margin-top:-8px}
    surface under the same light. The cut edge stays, or a pressed cap loses its outline over bright
    cloud. scale(.985), not .96: a four per cent shrink on a 62 px cap is a 2.5 px jump that reads as a
    web button. */
-.key.pressed,#start:active{background:var(--light-cap-press),var(--cap-glass-press);
+.key.pressed,#start:active,#status .key:active{background:var(--light-cap-press),var(--cap-glass-press);
  box-shadow:inset 0 2px 3px var(--slot-shade),inset 0 -1px 0 var(--slot-lip),0 0 0 1px var(--cut);
  transform:translateY(1px) scale(.985)}
 .key.pressed .name{color:var(--ink-pressed)}
@@ -534,8 +547,11 @@ body.touch .switch+.switch{margin-top:-8px}
 /* ---- the one surface allowed to go nearly opaque, because nothing behind it is playable, and the
    aircraft refusing to fly rather than the instructor advising, so it is set as a legend. */
 #rotate{display:none;position:absolute;inset:0;background:var(--rotate-veil);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
- align-items:center;justify-content:center;text-align:center}
+ flex-direction:column;align-items:center;justify-content:center;text-align:center}
 #rotate p{margin:0;font-size:13px;font-weight:500;letter-spacing:.18em;color:var(--ink)}
+/* The second line names the usual reason turning the phone does nothing: a portrait lock. It is the
+   instructor's sentence-case voice, as the hint line is. */
+#rotate p.detail{margin-top:10px;font-size:12px;font-weight:400;letter-spacing:.01em}
 @media (orientation:portrait){body.touch #rotate{display:flex}}
 
 /* ---- fallbacks. Contrast goes up in every one of them, never down. The caps now carry a blur of
@@ -547,24 +563,27 @@ body.touch .switch+.switch{margin-top:-8px}
  :root{--panel-tint:var(--panel-tint-opaque);--cap-glass:var(--cap-glass-opaque);
   --cap-glass-dim:var(--cap-glass-dim-opaque);--cap-glass-press:var(--cap-glass-press-opaque)}
  .panel{-webkit-backdrop-filter:none;backdrop-filter:none}
- .key,body.touch #start{-webkit-backdrop-filter:none;backdrop-filter:none}}
+ .key,#start,#help{-webkit-backdrop-filter:none;backdrop-filter:none}}
 /* The press transform and every transition go; the film deepening and the rim inversion stay, so
    press feedback survives without movement. */
 @media (prefers-reduced-motion:reduce){
  .key{transition:none}
  .key.pressed{transform:none}
  #throttleValue{transition:none}
- body.touch .switchKnob{transition:none}
+ .switchKnob{transition:none}
+ #start,#status .key{transition:none}
+ #start:hover,#start:active,#status .key:hover,#status .key:active{transform:none}
  body.touch #hint.warning{animation:none}}
 /* touch:end */
-#killConfirmation{position:absolute;top:clamp(76px,18vh,150px);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 36px);text-align:center;font-size:clamp(18px,2.5vw,26px);font-weight:600;letter-spacing:.06em;color:#fff;line-height:1.2;isolation:isolate;pointer-events:none;text-shadow:0 1px 3px #100503}
+#killConfirmation{position:absolute;top:clamp(76px,18vh,150px);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100% - 36px);text-align:center;font-size:clamp(20px,2.7vw,28px);font-weight:500;letter-spacing:.06em;color:#fff;line-height:1.2;isolation:isolate;pointer-events:none;text-shadow:0 1px 3px #100503}
 #killConfirmation::before{content:attr(data-text);position:absolute;inset:0;z-index:-1;color:#af332b;-webkit-text-stroke:4px #af332b;paint-order:stroke fill;text-shadow:0 1px 5px #160705}
 body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-weight:500}
 </style></head>
 <body>
+<script>/* touch-predicate: must agree with Touch.wanted() */(()=>{const q=new URLSearchParams(location.search).get('touch');if(q==='1'||(q!=='0'&&matchMedia('(pointer: coarse)').matches&&!matchMedia('(hover: hover)').matches))document.body.classList.add('touch')})()</script>
 <canvas id="view" aria-label="RANGE flight simulation"></canvas>
 <div id="veil"></div>
-<div id="intro"><h1>RANGE</h1><p><span class="long">Fly around Jersey.<br>See the sights.<br>Blow up the targets.</span><span class="short">Fly around, see Jersey, blow up the targets.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="aircraftSwitch" class="switch" role="radiogroup" aria-label="Aircraft"><button type="button" id="aircraftTyphoon" class="switchLegend" role="radio" aria-checked="true" tabindex="0">TYPHOON</button><span id="aircraftTrack" class="switchTrack" aria-hidden="true"><span id="aircraftKnob" class="switchKnob"></span></span><button type="button" id="aircraftWyvern" class="switchLegend" role="radio" aria-checked="false" tabindex="-1">WYVERN</button></div><div id="skinSwitch" class="switch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="switchLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" class="switchTrack" aria-hidden="true"><span id="skinKnob" class="switchKnob"></span></span><button type="button" id="skinHeritage" class="switchLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">Fly towards the mouse · Third-person view<br>Headphones recommended</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
+<div id="intro"><h1>RANGE</h1><p><span class="long">Fly around Jersey.<br>See the sights.<br>Blow up the targets.</span><span class="short">Fly around, see Jersey, blow up the targets.</span></p><button id="start" disabled>ENTER AIRCRAFT</button><label id="skinControl" for="skinChoice">Skin <select id="skinChoice"><option value="grey">RAF grey</option><option value="heritage">WWII heritage</option></select></label><div id="aircraftSwitch" class="switch" role="radiogroup" aria-label="Aircraft"><button type="button" id="aircraftTyphoon" class="switchLegend" role="radio" aria-checked="true" tabindex="0">TYPHOON</button><span id="aircraftTrack" class="switchTrack" aria-hidden="true"><span id="aircraftKnob" class="switchKnob"></span></span><button type="button" id="aircraftWyvern" class="switchLegend" role="radio" aria-checked="false" tabindex="-1">WYVERN</button></div><div id="skinSwitch" class="switch" role="radiogroup" aria-label="Skin"><button type="button" id="skinGrey" class="switchLegend" role="radio" aria-checked="true" tabindex="0">RAF GREY</button><span id="skinTrack" class="switchTrack" aria-hidden="true"><span id="skinKnob" class="switchKnob"></span></span><button type="button" id="skinHeritage" class="switchLegend" role="radio" aria-checked="false" tabindex="-1">HERITAGE</button></div><small id="introKeys">FLY TOWARDS THE MOUSE · HEADPHONES</small><small id="introTouch">TILT TO FLY · HEADPHONES</small></div>
 <div id="hud" class="hidden">
 <div id="brand">RANGE</div>
 <div id="location">JERSEY · CHANNEL ISLANDS</div>
@@ -617,7 +636,7 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
 </div>
 <div id="hint">Click to take the controls. The aircraft flies towards the circle.</div>
 </div>
-<div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle">I to show controls</button><button id="pauseButton">PAUSE · P</button></div>
+<div id="buttons" class="hidden"><button id="sound">SOUND ON</button><button id="helpToggle" aria-expanded="false">CONTROLS · I</button><button id="pauseButton">PAUSE · P</button></div>
 <div id="touch" class="hidden">
 <div id="quadrant" class="panel" role="slider" aria-label="Throttle" aria-valuemin="0" aria-valuemax="112" aria-valuenow="0" tabindex="0"><div id="throttleSlot"><div id="throttleTicks"></div><div id="throttleReheat"></div><div id="throttleFill"></div><div id="throttleTick"></div><div id="throttleLever"></div></div><span class="gate mil">MIL</span><span id="throttleLabel" class="gate idle">IDLE</span><span id="throttleValue">0</span></div>
 <div id="touchWeapons"><button id="seekerButton" class="key"><span class="name">SEEKER</span><span class="value">2</span></button><button id="bombButton" class="key"><span class="name">BOMB</span><span class="value">4</span></button><button id="gunButton" class="key"><span class="name">GUN</span><span class="value">150</span></button></div>
@@ -655,7 +674,7 @@ body.touch #killConfirmation{font-size:22px;top:calc(var(--sat) + 76px);font-wei
      sideways" line on the grounds that this veil says it in the only situation where it is needed,
      and inside a display:none ancestor it never painted on the intro at all. Last but for the error
      box, so nothing paints over the one surface allowed to go nearly opaque. -->
-<div id="rotate"><p>TURN THE PHONE SIDEWAYS</p></div>
+<div id="rotate"><p>TURN THE PHONE SIDEWAYS</p><p class="detail">Portrait lock on? Switch it off, then turn the phone.</p></div>
 <div id="error" class="hidden"></div>
 <script type="module" src="src/main.js"></script>
 </body></html>

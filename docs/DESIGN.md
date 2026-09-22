@@ -55,7 +55,9 @@ transparency to .88 and .80, with the blur off and the grain kept.
 
 ## Colour semantics
 
-- Ink `#eceded`; secondary `#c4cfd6` and `#c7d1d6`; tertiary `#adbdc7` and `#8f9ea7`.
+- Ink `#eceded`; on the desktop, secondary `--ink-2` `#c4cfd6` and tertiary `--ink-3` `#adbdc7`,
+  as colours. Hierarchy is never an `opacity` step: opacity also fades a text's halo, and a desktop
+  rule's opacity leaked onto the phone's one-ink layer before 22 September 2026.
 - Lit `#bdf6d4` over an `rgba(74,214,132,.95)` fringe and an `rgba(53,196,106,.50)` bloom, with an
   `rgba(53,196,106,.10)` wash on the cap behind it: a system that is live and powered. It is applied
   to the glyphs of a legend and never to a dot, and only to the gun while it is
@@ -77,13 +79,16 @@ transparency to .88 and .80, with the blur off and the grain kept.
 
 ## Type
 
-- Desktop: Arial or Helvetica; numerals in Bahnschrift or Segoe UI at weight 300. Labels 10 to
-  12 px, upper case, letter-spacing .1 to .3 em. Numerals 26 to 30 px (21 px small).
-- Touch: Barlow Condensed (SIL OFL 1.1, no Reserved Font Name), embedded as a woff2 subset at
+- One family on both tiers since 22 September 2026 (Charles: one cockpit language across
+  platforms; this replaces the earlier Arial and Bahnschrift desktop): Barlow Condensed (SIL OFL
+  1.1, no Reserved Font Name), embedded in both bundles as a woff2 subset at
   weights 400 and 500, with the tabular figures baked into `cmap` rather than left to a feature
   setting. Legends 8 to 14 px, upper case, letter-spacing .08 to .26 em, weight 500. Numerals
-  15 to 22 px, weight 400. The hint is the one sentence-case line on the screen at 12 px weight 400:
-  capitals are the aircraft, sentence case is the instructor.
+  15 to 22 px on touch, 30 px on the desktop, weight 400. The hint is the one sentence-case line
+  (12 px touch, 15 px desktop): capitals are the aircraft, sentence case is the instructor, and
+  aircraft notices take the capitals and the advisory amber on both tiers. The condensed face runs
+  at about 60 per cent of Arial's width, so desktop text that is read rather than glanced at steps
+  up one size (intro copy 17, hint 15, systems 12, the control row 12).
 - Tabular numerals everywhere a number changes.
 
 ## Motion
@@ -122,12 +127,12 @@ transparency to .88 and .80, with the blur off and the grain kept.
 | corner text block | `#telemetry`, `#flightstate`, `#systems` | label, numeral, unit |
 | marker | `#markers` SVG groups | one job each |
 | kill confirmation | `#killConfirmation` | top centre, white lettering over a slightly larger red outline; names air, ground or naval destruction for 2.4 seconds; queued once per target, paired with a short metallic cue through the existing mute control |
-| status text | `#status` | paused, lost; on touch the stop veil is `#hud`'s own background colour, so it dims the render under the HUD's text and under everything `#touch` draws rather than over them |
+| status text | `#status` | paused, lost, a graphics reset; its one control (CHANGE AIRCRAFT, RELOAD) is a cap, `#status .key`; on touch the stop veil is `#hud`'s own background colour, so it dims the render under the HUD's text and under everything `#touch` draws rather than over them |
 | plain text control | `#buttons button`, `#touch .text` | no border, no background |
 | panel | `#quadrant` | touch only; a .72 film over a 14 px blur; radius 15 |
-| switch cap | `#touchWeapons .key`, `body.touch #start` | touch only; 62 x 62, radius 10, its own .52 film over an 8 px blur; a column of three, SEEKER, BOMB, GUN; legend line and numeral line; states resting, lit, locked, dim, reloading (the amber numeral), pressed |
+| switch cap | `#touchWeapons .key`, `#start`, `#status .key`, `#error .key` | the caps are touch only; ENTER and the stop-screen and failure caps are the same `.key` material on both tiers; 62 x 62 on touch, radius 10, its own .52 film over an 8 px blur; a column of three, SEEKER, BOMB, GUN; legend line and numeral line; states resting, lit, locked, dim, reloading (the amber numeral), pressed |
 | gate legend | `#quadrant .gate` | touch only; 8 px, etched on the panel beside the slot; monochrome, because the string is the signal and never a lit legend |
 | throttle quadrant | `#quadrant.panel` | touch only; a 26 px slot cut into a panel, with etched ticks, the MIL detent, the reheat hatch, the fill and a metal lever |
-| HUD halo | `body.touch #hud` text-shadow | touch only; the tight dark halo every HUD text block stands on; no band, no box |
+| HUD halo | `#hud` text-shadow, `#markers` drop-shadow | both tiers; the tight dark halo every HUD text block and marker stroke stands on; no band, no box |
 | lit legend | `.lit`, `.locked` | a legend that glows: core colour, 1 px fringe, soft bloom, a wash on the cap behind it; never a dot |
-| toggle switch | `.switch`: `#aircraftSwitch`, `#skinSwitch` | both tiers, intro only; a 60 x 26 slot with a 26 px `--metal` knob at one end and a legend either side; monochrome, the knob's position is the state; the first legend is 68 px wide so stacked switches share one slot column; never a native select, which is what the aircraft choice first shipped as |
+| toggle switch | `.switch`: `#aircraftSwitch`, `#skinSwitch` | both tiers, intro only; a 60 x 26 slot with a 26 px `--metal` knob at one end and a legend either side; monochrome, the knob's position is the state; a tap anywhere on the row outside the legends toggles it, committed on release, and a drag past 6 px follows the pointer and snaps to the end it crosses; the first legend is 68 px wide so stacked switches share one slot column; never a native select, which is what the aircraft choice first shipped as |

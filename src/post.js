@@ -12,15 +12,30 @@ void main() {
   gl_Position = vec4(position.xy * 2.0, 0.0, 1.0);
 }`;
 
+// One overflowing or NaN pixel must not become a black square. A half-float target stores +Inf
+// above 65504 (an explosion light a metre from glossy paint gets there), the blur spreads it over
+// 17 x 17 bloom texels, and the tone map turns Inf/Inf into NaN, which prints as black. So every
+// read is scrubbed first: NaN to zero where the language can test for it (GLSL ES 3.00; older
+// compilers skip the test and still get the clamp), and the value clamped to a finite 64, which the
+// tone map already renders as full white, so nothing visible changes below it.
+const SCRUB_GLSL = `
+vec3 scrub(vec3 c) {
+#if __VERSION__ >= 300
+  c = mix(c, vec3(0.0), isnan(c)); // the bvec form selects; a float weight would give NaN * 0 = NaN
+#endif
+  return clamp(c, 0.0, 64.0);
+}`;
+
 const BLUR_FRAGMENT = `
 varying vec2 uvp;
 uniform sampler2D image;
 uniform vec2 direction;
 uniform float threshold;
+${SCRUB_GLSL}
 void main() {
   vec3 col = vec3(0.0);
   for (int i = -4; i <= 4; i++) {
-    vec3 c = texture2D(image, uvp + direction * float(i) * 2.0).rgb;
+    vec3 c = scrub(texture2D(image, uvp + direction * float(i) * 2.0).rgb);
     c = max(vec3(0.0), c - vec3(threshold));
     col += c * (1.0 - abs(float(i)) * 0.16);
   }
@@ -33,8 +48,9 @@ uniform sampler2D image;
 uniform sampler2D bloom;
 uniform float time;
 uniform float flash;
+${SCRUB_GLSL}
 void main() {
-  vec3 col = texture2D(image, uvp).rgb + texture2D(bloom, uvp).rgb * 0.4;
+  vec3 col = scrub(texture2D(image, uvp).rgb) + scrub(texture2D(bloom, uvp).rgb) * 0.4;
   col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), 0.12);
   // Dusk split-tone: warm the shadows and midtones toward the low sun and leave the highlights
   // slightly cool, instead of a flat cool lift, so the golden-hour cast carries across the frame.
@@ -51,7 +67,7 @@ void main() {
 }`;
 
 export class Post {
-  // options: samples (MSAA on the scene target, 4 on desktop, 0 on the mobile tier) and
+  // options: samples (MSAA on the scene target, 4 on desktop, 2 on the mobile tier) and
   // bloomDivisor (the bloom runs at a third on desktop, a quarter on the mobile tier).
   constructor(renderer, quadGeometry, options = {}) {
     this.renderer = renderer;
@@ -95,7 +111,7 @@ export class Post {
   // Called on resize and whenever the pixel ratio changes, so the buffers always match the canvas.
   resize() {
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    this.sceneTarget.setSize(size.x, size.y);
+    this.sceneTarget.setSize(Math.max(1, size.x), Math.max(1, size.y));
     const w = Math.max(1, Math.floor(size.x / this.divisor));
     const h = Math.max(1, Math.floor(size.y / this.divisor));
     this.bloomA.setSize(w, h);

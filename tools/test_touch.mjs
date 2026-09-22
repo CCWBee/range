@@ -344,4 +344,28 @@ globalThis.document ||= new EventTarget();
   pass('the adaptive pixel ratio recovers on every refresh rate');
 }
 
+// The phone class is set twice: by an inline script at the top of <body>, so the first paint is
+// already the phone layout, and by main.js through Touch.wanted(). Both writers must agree on every
+// case, or a phone paints one layout and runs another.
+{
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const script = html.match(/<script>\/\* touch-predicate[^]*?<\/script>/);
+  assert(script, 'the inline touch predicate is present at the top of <body>');
+  const body = script[0].replace(/^<script>/, '').replace(/<\/script>$/, '');
+  const saved = { location: globalThis.location, matchMedia: globalThis.matchMedia, document: globalThis.document };
+  const cases = [];
+  for (const query of ['', '?touch=1', '?touch=0'])
+    for (const [coarse, hover] of [[true, false], [true, true], [false, true], [false, false]]) {
+      globalThis.location = { search: query };
+      globalThis.matchMedia = (q) => ({ matches: q === '(pointer: coarse)' ? coarse : q === '(hover: hover)' ? hover : false });
+      const classes = new Set();
+      globalThis.document = { body: { classList: { add: (c) => classes.add(c) } } };
+      new Function(body)();
+      const inline = classes.has('touch'), wanted = Touch.wanted();
+      assert.equal(inline, wanted, `inline predicate and Touch.wanted() disagree for ${query || 'no query'} coarse=${coarse} hover=${hover}`);
+      cases.push(inline);
+    }
+  for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
+  pass('the inline touch predicate agrees with Touch.wanted()', { cases: cases.length, touch: cases.filter(Boolean).length });
+}
 console.log('ALL TOUCH CHECKS PASS');

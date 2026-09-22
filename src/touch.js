@@ -245,7 +245,16 @@ export class Touch {
         this.wakeLock = lock;
         // The browser drops the lock itself when the page hides; without this the instance still
         // holds a dead handle and the re-request on resume does nothing.
-        lock.addEventListener?.('release', () => { if (this.wakeLock === lock) this.wakeLock = null; });
+        lock.addEventListener?.('release', () => {
+          if (this.wakeLock !== lock) return;
+          this.wakeLock = null;
+          // The system can drop a lock while the page stays visible (battery saver, a timer). Ask
+          // again while the sortie still wants one: tilt-only flight never touches the screen, so
+          // without the lock the display times out to black mid-sortie.
+          if (this.wakeWanted && document.visibilityState === 'visible') setTimeout(() => {
+            if (this.wakeWanted && !this.wakeLock && !this.wakePending && document.visibilityState === 'visible') this.requestWakeLock();
+          }, 1000);
+        });
         return lock;
       }).catch(() => null);
       // A settled request must clear the flag whichever way it went, or a refusal locks the layer

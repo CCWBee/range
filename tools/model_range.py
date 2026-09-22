@@ -610,6 +610,8 @@ def section_materials():
     build_canopy()
     material('edge', (.23, .27, .30), .6, .37)
     material('marking', (.63, .66, .65), .05, .65)
+    # Windsock fabric: aviation orange, its own material so the runway markings stay white.
+    material('windsock_orange', (.89, .13, .012), 0, .85)
     material('roundel_red', (.27, .052, .04), .1, .6)
     material('roundel_blue', (.055, .095, .14), .1, .5)
     material('metal', (.30, .32, .33), .8, .42)
@@ -1495,7 +1497,7 @@ def section_details():
     for y in (.6,1.4,2.2): box('Fence wire',(0,y,6),(.025,.025,12),m)
     save_asset('fence_post')
     cylinder('Windsock mast',(0,4,0),.08,8,m,(math.pi/2,0,0),8)
-    cylinder('Windsock',(0,7.8,1.2),.42,2.4,mat('marking'),vertices=16,radius2=.16)
+    cylinder('Windsock',(0,7.8,1.2),.42,2.4,mat('windsock_orange'),vertices=16,radius2=.16)
     save_asset('windsock')
     for x in range(-24,25,3): box('Blast panel',(x,1.8,0),(2.9,3.6,.22),h,.06,rotation=(.3,0,0))
     save_asset('blast_fence')
