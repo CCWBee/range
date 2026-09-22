@@ -5,8 +5,11 @@
 22 September 2026. RANGE is live at https://range.charlesbee.org through the `range-charlesbee`
 proxy Worker (`deploy/worker/`, `MAINTENANCE.md`) and listed on the charlesbee.org hub. A pass on UI
 consistency, the random black screens, performance and a loading screen is committed on top of
-`ac51c8a` (detail under "Done (22 September pass)"). PUSH PENDING until the browser QA chain is
-green; replace this sentence with the pushed hash. An earlier hosting note here called nine modified
+`ac51c8a` (detail under "Done (22 September pass)"). PUSH PENDING until the browser QA is green:
+`qa_ui`, `qa_black_frames` (desktop), `qa_pause_menu` and `qa_fleet` pass; `qa_black_frames --tier
+mobile`, `qa_hud_feedback` and the three contrast gates are rerunning after the process exited
+mid-chain (a first run under a saturated CPU lost the WebGL context in the intro cells, which is
+what failed there). Replace this sentence with the pushed hash. An earlier hosting note here called nine modified
 files unrecorded and not live: they were Codex's 17 September work, verified and committed as
 `2412d91`, and ship in this build.
 
@@ -45,16 +48,19 @@ loading screen because the page sat frozen while it loaded.
    still follow a drag past 6 px. The windsock is orange (`tools/model_range.py` and a material
    swap in `world.js`). Harness: `tools/qa_ui.mjs`. Contrast gates: 27 cells (480 boxes), intro
    (48) and Wyvern intro (18), 0 failures.
-4. **Hosting (`8b4ff86`, `0aa9b19`)**, from the charlesbee.org session: the Worker forwards
-   conditional and Range headers, and MAINTENANCE.md describes it.
+4. **Hosting (`8b4ff86`, `0aa9b19`, `05c502a`)**, from the charlesbee.org session: the Worker
+   forwards `If-None-Match` and `If-Modified-Since`, so a revisit is a 304. It forwarded `Range` too
+   until `05c502a`: GitHub cut the range from its gzip stream and a resumed download got compressed
+   bytes under a wrong total. MAINTENANCE.md describes it.
 5. **Performance.** Exact terrain-query cuts: a bounding box ahead of the pavement tests, numeric
    shore bucket keys with a shared result, and `MAX_GROUND` (the highest ground anywhere) letting
    `clearSight` and `bombStep` skip samples above it. A guided bomb prediction, run ten times a
    second for the whole sortie, is about four times faster (53.7 to 16.9 ms, then 30.9 to 7.3 ms
    in Node) with identical impact points over 300 guided and 300 unguided drops; terrain and ground
    heights are identical to `ac51c8a` at 600,000 points. The water depth bake reuses its shore
-   sample (identical bytes, twice as fast). On the phone: a cheaper sky shader (`SKY_LO`) and sprite
-   noise (`SPRITE_LO`), half the cloud sprites, fully transparent cloud fragments discarded, one sun
+   sample (identical bytes, twice as fast). On the phone: a cheaper sky shader (`SKY_LO`), sprite
+   noise from three of the fbm's five octaves (`SPRITE_LO`; two taps of unrotated value noise were
+   tried first and drew the lattice as visible squares, `_archive/ui-qa/mobile-smoke.png`), half the cloud sprites, fully transparent cloud fragments discarded, one sun
    at 1.5 instead of a shadowed and an unshadowed copy, one blast light, no tree shadow pass. Both
    tiers: idle sprite pools neither draw nor upload, the canvas has no depth or stencil buffer, the
    terrain roughness reuses the wet term instead of a second fbm.
@@ -78,7 +84,9 @@ and wrecks floored at the sea surface; the Wyvern's rotation speed from its stal
 state and countdown for the rocket reload and "RELOAD n S" in place on the weapons line; the
 duplicate crash text; one casing for air-target names; `polygonOffset` on `airport_marking`; the
 town-light glow faded with distance; the Wyvern's throttle ticks; the hint's width on a narrow
-window. Also owed: an on-device phone check of all of this, including `range.bootTimes` on a real
+window; the intro switches do nothing while the load gauge is up, because they bind after the
+build (bind them before `world.build()` or dim them until ENTER lights). Also owed: an on-device
+phone check of all of this, including `range.bootTimes` on a real
 handset.
 
 ## Done (polish pass, 17 September 2026)

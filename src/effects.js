@@ -102,12 +102,15 @@ export class Effects {
     this.buildTracers();
     this.buildCraters();
     // Smoke, spray, fire and dust ran a five-octave fbm per fragment, layered deep in a smoke column.
-    // The phone gets two taps of value noise instead, which reads the same at sprite size.
-    // The define gets a line of its own: SPRITE_NOISE follows a declaration on the same line.
+    // The phone keeps the same fbm's first three octaves, rotation and all, rescaled to its range:
+    // the two dropped octaves are finer than a pixel at sprite size. (Two taps of unrotated value
+    // noise were tried first and drew the lattice as visible squares.) The define gets a line of
+    // its own: SPRITE_NOISE follows a declaration on the same line.
     const SPRITE_NOISE = `${this.tier === 'mobile' ? '\n#define SPRITE_LO\n' : ''}${NOISE_GLSL}
 float spriteNoise(vec2 p){
 #ifdef SPRITE_LO
- return noise(p)*.6+noise(p*2.1+3.7)*.4;
+ float f=0.;float a=.5;for(int i=0;i<3;i++){f+=a*noise(p);p=mat2(1.6,1.2,-1.2,1.6)*p+13.4;a*=.5;}
+ return f*1.1071; // .96875/.875, the five-octave sum over the three-octave one
 #else
  return fbm(p);
 #endif
