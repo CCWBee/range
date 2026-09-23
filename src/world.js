@@ -349,11 +349,12 @@ float seaNoise1(vec2 p,uvec2 seed){vec2 i=floor(p);return seaNoised(p-i,uvec2(iv
 // The directional spectrum: plane waves on deep-water dispersion. SEA_K row: xy the wavevector in
 // cycles per metre (direction over wavelength), z the frequency in hertz, w the slope amplitude times
 // the wavelength, so xy*w is the slope. Directions spread about a wind of 52 degrees from +X and none
-// lies on a world axis; wavelengths step by uneven ratios (97 m to 1.3 m, the phone 88 m to 2.3 m), so
-// no two waves share a lattice. SEA_J row: x a phase offset, y how many cycles the patch field bends
-// the crests, z and w the rate and offset of the envelope that makes each wave rise and fade in its
-// own patches of sea. The phone's two shortest waves stand 69 degrees apart at four fifths of their
-// first strength, so they do not cross into a clean corduroy up close.
+// lies on a world axis; wavelengths step by uneven ratios (97 m to 1.3 m), so no two waves share a
+// lattice. SEA_J row: x a phase offset, y how many cycles the patch field bends the crests, z and w
+// the rate and offset of the envelope that makes each wave rise and fade in its own patches of sea.
+// The phone runs first (Charles, 23 September: "it needs to run"): four randomly oriented waves (88,
+// 20, 9 and 4.4 m, strengthened to keep the same slope and glitter), envelopes from the cheap value
+// noise, no crest bending and no foam, which is about the cost of the old two crossed sines.
 #ifdef OCEAN_HI
 #define SEA_N 10
 const vec4 SEA_K[10]=vec4[10](
@@ -379,31 +380,28 @@ const vec4 SEA_J[10]=vec4[10](
  vec4(.47,1.45,2.47,.36),
  vec4(.21,-1.55,1.77,.91));
 #else
-#define SEA_N 6
-const vec4 SEA_K[6]=vec4[6](
- vec4(.00585,.00973,.1331,2.7493),
- vec4(.02223,.00898,.1935,1.5257),
- vec4(.00710,.05052,.2822,.7593),
- vec4(.08943,.06032,.4104,.3591),
- vec4(-.09986,.20475,.5964,.1235),
- vec4(.32788,.35161,.8664,.0534));
-const vec4 SEA_J[6]=vec4[6](
- vec4(.13,.55,1.31,.17),
- vec4(.71,-.70,1.87,.62),
- vec4(.38,.85,2.29,.41),
- vec4(.94,-1.10,1.53,.88),
- vec4(.27,1.30,2.71,.29),
- vec4(.59,-1.50,1.69,.73));
+#define SEA_N 4
+const vec4 SEA_K[4]=vec4[4](
+ vec4(.00585,.00973,.1331,3.2717),
+ vec4(.00710,.05052,.2822,.9036),
+ vec4(.08943,.06032,.4104,.4273),
+ vec4(-.09986,.20475,.5964,.1470));
+const vec4 SEA_J[4]=vec4[4](
+ vec4(.13,0.,1.31,.17),
+ vec4(.38,0.,2.29,.41),
+ vec4(.94,0.,1.53,.88),
+ vec4(.27,0.,2.71,.29));
 #endif
 // The slope field at p. Each wave fades by its own cycles per pixel along both screen axes, so it is
 // gone before it can alias (anisotropic: at a grazing angle a wave running towards the camera goes
-// first), and nothing fades at a fixed distance. Phases wrap in whole cycles before the cosine, so
-// 60 km and a long session stay exact.
+// first), and nothing fades at a fixed distance; a wave already faded skips its cosine. Phases wrap
+// in whole cycles before the cosine, so 60 km and a long session stay exact.
 vec2 seaSlope(vec2 p,vec2 dx,vec2 dy,float t,float j){
  vec2 g=vec2(0.);
  for(int i=0;i<SEA_N;i++){
   vec4 k=SEA_K[i];vec4 q=SEA_J[i];
   float att=1.-smoothstep(.08,.3,abs(dot(k.xy,dx))+abs(dot(k.xy,dy)));
+  if(att<=0.)continue;
   float u=abs(fract(j*q.z+q.w)*2.-1.);
   float ph=fract(dot(k.xy,p))-fract(k.z*t)+q.x+q.y*j;
   g+=k.xy*(k.w*att*(.45+1.1*u*u*(3.-2.*u))*cos(6.2831853*ph));
@@ -452,7 +450,11 @@ void main(){
  // pattern holds over more than a few hundred metres.
  vec2 dpx=dFdx(worldP.xz),dpy=dFdy(worldP.xz);
  float fp=max(length(dpx),length(dpy));
+ #ifdef OCEAN_HI
  float seaPatch=clamp(.5+.75*seaNoise1(mat2(.8,.6,-.6,.8)*worldP.xz*.0041,uvec2(0u)),0.,1.);
+ #else
+ float seaPatch=noise(mat2(.8,.6,-.6,.8)*worldP.xz*.0041);
+ #endif
  vec2 slope=seaSlope(worldP.xz,dpx,dpy,time,seaPatch);
  #ifdef OCEAN_HI
  // Calmer and rougher stretches (cat's paws) at about 430 m, desktop only; they also gate the foam.
@@ -494,14 +496,12 @@ void main(){
  c+=vec3(.5,.36,.2)*pow(ndh,26.)*.12;
  #endif
  // Foam sparkle on gradient noise in rotated 10 m cells, whose maxima do not sit on a lattice;
- // widened by its own derivative and gone once a pixel covers 1.5 to 4 m of sea.
+ // widened by its own derivative and gone once a pixel covers 1.5 to 4 m of sea. Desktop only.
+ #ifdef OCEAN_HI
  float foam=.5+.75*seaNoise1(mat2(.6,.8,-.8,.6)*worldP.xz*.1+vec2(time*.1,0.),uvec2(4099u,2311u));
  float foamAA=max(fwidth(foam),1e-4);
- float foamLit=smoothstep(.72-foamAA,.92+foamAA,foam)*(1.-smoothstep(1.5,4.,fp));
- #ifdef OCEAN_HI
- foamLit*=.4+.6*rough;
+ c+=vec3(.03)*smoothstep(.72-foamAA,.92+foamAA,foam)*(1.-smoothstep(1.5,4.,fp))*(.4+.6*rough);
  #endif
- c+=vec3(.03)*foamLit;
  if(envelope>.001)c+=vec3(.09,.11,.12)*envelope*smoothstep(.35,.8,fbm(worldP.xz*.43+time*.4));
  // Shoreline, from the baked signed coast distance: a shallow turquoise shelf near land, and on the
  // desktop tier a soft animated breaker on the seaward side.

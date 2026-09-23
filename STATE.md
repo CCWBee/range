@@ -28,8 +28,11 @@ noise, gradient-noise foam, and cat's-paw roughness on the desktop. Chosen by a 
 built on the directional spectrum). Verified in Brave at the fixed poses of `tools/check_water.js`
 on both tiers, before and after in `_archive/water-qa/`: no lattice at 80, 350 or 1,000 m or on the
 coastal pass, the glitter track intact and breaking into sparkle, both programs linked with empty
-logs and no console errors. The phone's sea pass costs more (the panel measured about 1.7 times on
-the RTX for the spectrum alone, before the gradient noise); judge it in the on-device check.
+logs and no console errors. Then, at Charles's word that the phone "needs to run", the phone path
+went lean: four randomly oriented waves, value-noise envelopes, no crest bending, no foam. Timed in
+Brave as a full-screen 1080p sea pass on the RTX (median of 11 interleaved rounds): old sines 0.038
+ms, the first spectrum 0.073 ms, lean 0.050 ms; four fixed waves with no patch field cost 0.038 ms but
+brought back long regular bands (`_archive/water-qa/rejected-bare-*`), so the patch field stays.
 
 Next action: an on-device phone check of the live build (`range.bootTimes` in the console: a
 `compileWait` above 0 and a small `firstFrame` mean the parallel-compile path ran, which nothing
