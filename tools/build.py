@@ -193,6 +193,16 @@ def check_preview(html):
     assert found,'og:image must appear as an absolute https URL within the first 4096 bytes'
     assert (root/'social'/found.group(1).rsplit('/',1)[1]).is_file(),'og:image names a file that is not in social/'
 
+def credits_notice(root):
+    """NOTICE.txt for the zip: the README's "Credits and licences" section as it stands, so the
+    attributions (OpenStreetMap ODbL, terrain, three.js) travel with the file."""
+    text=(root/'README.md').read_text(encoding='utf-8')
+    match=re.search(r'^## Credits and licences[ \t]*\n(.*?)(?=^## |\Z)',text,re.S|re.M)
+    assert match,'README.md has no "Credits and licences" section'
+    body=match.group(1).strip()
+    assert body,'the "Credits and licences" section of README.md is empty'
+    return 'RANGE: credits and licences\n\n'+body+'\n'
+
 def build(tier):
     manifest,binary=library()
     assets=read_v3(manifest,binary)
@@ -255,6 +265,7 @@ def build(tier):
     if tier=='desktop':
         with zipfile.ZipFile(root/'RANGE.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
             archive.write(out,'RANGE.html');archive.write(root/'vendor/THREE-LICENSE.txt','THREE-LICENSE.txt')
+            archive.writestr('NOTICE.txt',credits_notice(root))
         with zipfile.ZipFile(root/'RANGE.zip') as archive:assert archive.testzip() is None
     print(json.dumps({'status':'built','tier':tier,'file':str(out.relative_to(root)),'bytes':out.stat().st_size,'networkAssets':0,'modules':order}))
 

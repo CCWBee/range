@@ -11,25 +11,44 @@ RANGE, the self-contained three.js flight demo over Jersey, as a live site.
 
 ## Stack & hosting
 
-- GitHub Pages is the host. `.github/workflows/pages.yml` runs `node tools/test_flight.mjs`, then
-  `python tools/build.py`, and publishes `dist/` (plus `RANGE.zip`) on every push to `master`. It
+- GitHub Pages is the host. `.github/workflows/pages.yml` installs `tools/requirements.txt`, runs
+  `node tools/test_flight.mjs`, then `python tools/build.py`, and publishes `dist/` (plus `RANGE.zip`) on every push to `master`. It
   only runs while the repo variable `PAGES_ENABLED` is `true`.
 - `range.charlesbee.org` is the Cloudflare Worker `range-charlesbee` (source `deploy/worker/`), a
   thin proxy that fetches `https://ccwbee.github.io/range/<path>` and streams it back. It exists
-  because `dist/index.html` is about 29.6 MB, over the 25 MiB per-file cap on Workers assets and
-  Pages, so Cloudflare cannot host the file directly. It 301s http to https, allows GET and HEAD
-  only, forwards `If-None-Match` and `If-Modified-Since` (so a revisit is a 304 rather than the
+  because `dist/index.html` is 29,672,355 bytes (28.3 MiB; `dist/mobile.html` is about 11.1 MB), over
+  the 25 MiB per-file cap on Workers assets and Pages, so Cloudflare cannot host the file directly.
+  It 301s http to https, answers only `/`, `/index.html`, `/mobile.html`, `/mobile`,
+  `/apple-touch-icon.png`, `/RANGE.zip`, `/og.png` and anything under `/social/` (reserved for the
+  og:video pass; every other path is the local 404 page with no upstream fetch), allows GET and HEAD
+  only (anything else is a 405 with `Allow: GET, HEAD`), forwards `If-None-Match` and `If-Modified-Since` (so a revisit is a 304 rather than the
   whole file again; `Range` is deliberately not forwarded, because GitHub cut ranges from its gzip
   stream and the client got compressed bytes under a wrong total, so a range request gets the
   full 200), keys the upstream on the path only (the query is read in
   the browser), rewrites GitHub's `Location` headers onto the charlesbee.org host, drops GitHub's
-  edge headers but keeps `Age`, sets HSTS `max-age=0` (the charlesbee.org guardrail), serves a
-  plain RANGE 404 instead of GitHub's branded page, and holds 2xx responses at the edge for 600 s,
-  matching Pages' own `max-age=600`. The zone's Browser Cache TTL raises non-HTML files (the zip,
+  edge headers but keeps `Age`, sets HSTS `max-age=0` (the charlesbee.org guardrail), sets the
+  security headers below, serves a plain RANGE 404 instead of GitHub's branded page, and caches the
+  HTML at the edge for 600 s, matching Pages' own `max-age=600` (`cacheEverything: true`, because
+  Cloudflare treats `.html` as uncacheable by default: before this a visit fetched the whole file
+  from GitHub again, and a second request is now `CF-Cache-Status: HIT`). The zone's Browser Cache TTL raises non-HTML files (the zip,
   the touch icon) to `max-age=14400` in the browser; HTML keeps 600.
 - The Worker is on the same Cloudflare account and `charlesbee.org` zone as the hub and Caesar.
   `custom_domain = true` in `deploy/worker/wrangler.toml` makes wrangler own the DNS record and
   the certificate.
+
+## Security headers
+
+The Worker sends the set in `E:\claude-projects\_tools\security-headers.md` on every response it
+makes (pages, 301, 404 and 405): `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` and
+`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(self), gyroscope=(self)`.
+The two sensors are the exception to the standard value: the phone version flies by tilt.
+
+There is deliberately no `Content-Security-Policy` from the Worker, which is an exception to that
+file. The single-file bundle inlines its textures and code as `data:` and `blob:` URLs, so a policy
+tight enough to mean anything would block them and leave a blank page, and a loose one buys nothing.
+The page carries its own `<meta>` policy with `connect-src 'none'`. If a Worker policy is ever added,
+check it in Brave with the console open before deploying.
 
 ## Deploy
 
@@ -43,7 +62,10 @@ npx wrangler deploy
 ```
 
 - Check: `curl.exe -sI https://range.charlesbee.org/` returns 200, `text/html`,
-  `Strict-Transport-Security: max-age=0`; `curl.exe -s -o NUL -w "%{size_download}" https://range.charlesbee.org/`
+  `Strict-Transport-Security: max-age=0` and the security headers above, and a second request shows
+  `CF-Cache-Status: HIT`; `curl.exe -s -o NUL -w "%{http_code}" https://range.charlesbee.org/anything-else`
+  returns 404 and a POST returns 405; `node deploy/worker/test-worker.mjs` runs the same behaviour
+  offline against a stubbed upstream; `curl.exe -s -o NUL -w "%{size_download}" https://range.charlesbee.org/`
   matches the same for `https://ccwbee.github.io/range/`; the same request with
   `-H "If-Modified-Since: <its Last-Modified>"` returns 304 and 0 bytes.
 
@@ -55,7 +77,9 @@ npx wrangler deploy
 | Cloudflare Workers | range.charlesbee.org proxy, DNS and TLS | Charles's Cloudflare account (the `charlesbee.org` zone) | Free tier |
 | Git LFS | `assets/RANGE.blend` | GitHub CCWBee | Free quota |
 
-No secrets, no APIs, no analytics. The page's CSP is `connect-src 'none'`.
+No secrets, no APIs, no analytics. The page's own CSP is `connect-src 'none'`. CI installs the
+Python build dependencies from `tools/requirements.txt` (exact Pillow and numpy versions), so a
+rebuild does not drift with PyPI; bump the pins deliberately.
 
 ## Known fragilities & gotchas
 
