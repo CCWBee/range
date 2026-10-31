@@ -19,12 +19,12 @@ RANGE, the self-contained three.js flight demo over Jersey, as a live site.
   because `dist/index.html` is 29,672,355 bytes (28.3 MiB; `dist/mobile.html` is about 11.1 MB), over
   the 25 MiB per-file cap on Workers assets and Pages, so Cloudflare cannot host the file directly.
   It 301s http to https, answers only `/`, `/index.html`, `/mobile.html`, `/mobile`,
-  `/apple-touch-icon.png`, `/RANGE.zip`, `/og.png` and anything under `/social/` (reserved for the
-  og:video pass; every other path is the local 404 page with no upstream fetch), allows GET and HEAD
+  `/apple-touch-icon.png`, `/RANGE.zip` and anything under `/social/` (the og:video and its poster;
+  every other path is the local 404 page with no upstream fetch), allows GET and HEAD
   only (anything else is a 405 with `Allow: GET, HEAD`), forwards `If-None-Match` and `If-Modified-Since` (so a revisit is a 304 rather than the
   whole file again; `Range` is deliberately not forwarded, because GitHub cut ranges from its gzip
-  stream and the client got compressed bytes under a wrong total, so a range request gets the
-  full 200), keys the upstream on the path only (the query is read in
+  stream and the client got compressed bytes under a wrong total, so a range request for a page gets the
+  full 200; for the mp4 under `/social/` the Worker fetches the whole file and cuts the 206 itself), keys the upstream on the path only (the query is read in
   the browser), rewrites GitHub's `Location` headers onto the charlesbee.org host, drops GitHub's
   edge headers but keeps `Age`, sets HSTS `max-age=0` (the charlesbee.org guardrail), sets the
   security headers below, serves a plain RANGE 404 instead of GitHub's branded page, and caches the
@@ -36,10 +36,22 @@ RANGE, the self-contained three.js flight demo over Jersey, as a live site.
   `custom_domain = true` in `deploy/worker/wrangler.toml` makes wrangler own the DNS record and
   the certificate.
 
+## Link preview (og:video)
+
+`index.html` carries the `og:` and `twitter:` tags for both bundles; the media live in `social/` and
+publish to `/social/` through `tools/build.py`. Every `/social/*` response below 400, and a 416, carries
+`Cache-Control: public, max-age=31536000, immutable` and `Access-Control-Allow-Origin: *` (a 404 or
+an upstream error does not, so a miss is never pinned for a year), and the edge holds a file for a year, so a file is never changed under its name: add a new dated name and change
+the URLs in `index.html`. The mp4 is answered with byte ranges by `serveRange`, which Safari and
+Messages need; it is the shared copy from `do-less\deploy\worker.js` (guard:
+`node E:\claude-projects\_tools\check-serve-range.mjs`). Check after a deploy:
+`curl.exe -s -o NUL -w "%{http_code} %{size_download}" -H "Range: bytes=0-1" https://range.charlesbee.org/social/og-range-card-2026-11-04.mp4`
+returns `206 2`.
+
 ## Security headers
 
 The Worker sends the set in `E:\claude-projects\_tools\security-headers.md` on every response it
-makes (pages, 301, 404 and 405): `X-Content-Type-Options: nosniff`,
+makes (pages, media, 301, 404 and 405): `X-Content-Type-Options: nosniff`,
 `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` and
 `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(self), gyroscope=(self)`.
 The two sensors are the exception to the standard value: the phone version flies by tilt.

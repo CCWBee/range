@@ -185,13 +185,14 @@ class DependencyCheck(HTMLParser):
             assert not(name in ('src','href') and value and not value.startswith(('data:','#')) and value not in self.ALLOWED),f'External dependency: {value}'
 
 def check_preview(html):
-    """The link-preview tags: og:image as an absolute https URL inside the first 4,096 bytes, naming a
+    """The link-preview tags: og:image and og:video as an absolute https URL inside the first 4,096 bytes, naming a
     file in social/. Facebook reads only the first 1 MB of a page and WhatsApp the first 300 KB, and the
     desktop bundle is about 30 MB."""
     head=html.encode()[:4096].decode(errors='ignore')
-    found=re.search(r'<meta property="og:image" content="(https://[^"]+)">',head)
-    assert found,'og:image must appear as an absolute https URL within the first 4096 bytes'
-    assert (root/'social'/found.group(1).rsplit('/',1)[1]).is_file(),'og:image names a file that is not in social/'
+    for prop in ('og:image','og:video'):
+        found=re.search(r'<meta property="'+prop+r'" content="(https://[^"]+)">',head)
+        assert found,f'{prop} must appear as an absolute https URL within the first 4096 bytes'
+        assert (root/'social'/found.group(1).rsplit('/',1)[1]).is_file(),f'{prop} names a file that is not in social/'
 
 def credits_notice(root):
     """NOTICE.txt for the zip: the README's "Credits and licences" section as it stands, so the

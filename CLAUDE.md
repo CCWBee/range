@@ -34,6 +34,18 @@ thesis, tokens and the primitive registry.
   `tools/textures_fallback.py` writes procedural stand-ins for any that are missing.
 - `concepts/`: the five concept frames the demo is matched against. `screenshots/`: the matching
   staged renders and `frame-timings.json`.
+- `social/`: the link-preview media, `og-range-card-2026-11-02.jpg` (og:image, title card 1) and
+  `og-range-card-2026-11-04.mp4` (og:video, a 6 s loop whose frame 0 is that card, made by
+  `tools/thumb/loop.py` on branch `look`), both 1200 × 630.
+  `index.html` names them in its `og:` and `twitter:` tags, directly after the meta description so
+  they sit inside the first 4,096 bytes of the 29.7 MB desktop bundle; `tools/build.py` asserts that
+  for both bundles and copies the folder to `dist/social/`. To replace them, add new files with a new
+  dated name (the Worker caches `/social/*` for a year as immutable, so a name is never reused),
+  change the URLs and the alt text in `index.html`, and leave the old files until the new ones
+  are live. The Worker cuts the mp4 into byte ranges itself (`serveRange`, copied unchanged from
+  `do-less\deploy\worker.js`; `node E:\claude-projects\_tools\check-serve-range.mjs` guards the copy).
+  Nothing claims a client plays the video until the link has been sent in Messages, Discord,
+  WhatsApp, Slack, Signal, X and LinkedIn and the result recorded.
 - `vendor/three.module.js`: three.js r160, the only runtime dependency, bundled by `tools/build.py`.
 
 ## Conventions
