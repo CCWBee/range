@@ -34,6 +34,10 @@ The history of every earlier pass, with its numbers and run ids, is in `docs/not
 - **Harnesses not run to completion**: `tools/qa_hud_feedback.mjs` and the phone run of
   `tools/qa_black_frames.mjs` (their last headless runs failed to start Chrome under a saturated
   CPU). Run them only if Charles asks for the headless harnesses.
+- **og:video link preview, held on branch `og-video`** (`f43274b`, 31 October 2026): the museum
+  Typhoon's loop and poster in `social/`, the og and twitter tags early in both bundles, byte ranges
+  for `/social/*.mp4` in the proxy. Kept off `master` because Pages publishes `master` on every push
+  and the media show the Typhoon adaptation: merge it only after the licence decision below.
 - **Typhoon licence decision** (owner): whether the Crown-copyright adaptation may stay in a public
   repo, and a licence file for the rest.
 - **Favicon redraw** and the **look pass**: both in progress on 31 October, each on its own page.
