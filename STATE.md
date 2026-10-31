@@ -12,9 +12,9 @@ power) shipped and is verified.
 
 The audit fixes of 31 October (spec `docs/specs/2026-10-31-audit-fixes.md`: an allowlist, method
 limits, edge caching and security headers on the proxy Worker, pinned CI dependencies, a
-`NOTICE.txt` in `RANGE.zip`, this file and `MAINTENANCE.md`) are written and uncommitted. A push
-redeploys Pages and the Worker needs `npx wrangler deploy` from `deploy/worker/`; neither is done,
-both wait for Charles.
+`NOTICE.txt` in `RANGE.zip`, this file and `MAINTENANCE.md`) are committed (`acbd2d1`) but not
+pushed. A push redeploys Pages and the Worker needs `npx wrangler deploy` from `deploy/worker/`;
+neither is done, both wait for Charles.
 
 Verification: `node tools/test_flight.mjs`, `node deploy/worker/test-worker.mjs` and
 `python tools/build.py` pass. Visual checks run in Brave (OPERATING_RULES, 22 September 2026):
@@ -40,7 +40,15 @@ The history of every earlier pass, with its numbers and run ids, is in `docs/not
   and the media show the Typhoon adaptation: merge it only after the licence decision below.
 - **Typhoon licence decision** (owner): whether the Crown-copyright adaptation may stay in a public
   repo, and a licence file for the rest.
-- **Favicon redraw** and the **look pass**: both in progress on 31 October, each on its own page.
+- **Favicon, look pass and thumbnail** (Charles's ask of 31 October: the thumbnail "looks like crap",
+  the sim is "a bit ugly looking we can do better", the favicon's silhouette more correct and its green
+  closer to a cockpit HUD without blowing out). On branch `look` (a worktree in the session scratchpad,
+  off `7caa09c`; nothing on `master` changes until he approves): the favicon as candidate c1 (HUD hue
+  `#20984F`, the planform corrected from the Inductiveload top view, 27 of 32 tall), and a read-only
+  look audit to `docs/specs/2026-10-31-look-pass.md`. The look fixes themselves need the sim seen in a
+  browser: Brave on this PC, or Charles's yes to the capped headless harness. The thumbnail and share
+  card are a Cycles render of the jet over the south-west coast at dusk, private until the licence
+  decision.
 - **Parked backlog**, not shipped by `2412d91` and kept in `docs/notes/state-history.md` ("Backlog" and the
   17 September "Deferred" paragraph): Wyvern fidelity (borrowed Typhoon aero and three-leg gear model,
   IAS ceiling near 135 m/s against the real 616 km/h, rockets with no hp model), the `landmark_granite`
