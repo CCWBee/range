@@ -184,6 +184,15 @@ class DependencyCheck(HTMLParser):
         for name,value in attrs:
             assert not(name in ('src','href') and value and not value.startswith(('data:','#')) and value not in self.ALLOWED),f'External dependency: {value}'
 
+def check_preview(html):
+    """The link-preview tags: og:image as an absolute https URL inside the first 4,096 bytes, naming a
+    file in social/. Facebook reads only the first 1 MB of a page and WhatsApp the first 300 KB, and the
+    desktop bundle is about 30 MB."""
+    head=html.encode()[:4096].decode(errors='ignore')
+    found=re.search(r'<meta property="og:image" content="(https://[^"]+)">',head)
+    assert found,'og:image must appear as an absolute https URL within the first 4096 bytes'
+    assert (root/'social'/found.group(1).rsplit('/',1)[1]).is_file(),'og:image names a file that is not in social/'
+
 def build(tier):
     manifest,binary=library()
     assets=read_v3(manifest,binary)
@@ -229,6 +238,7 @@ def build(tier):
     assert html.count('data:font/woff2;base64,')==2,'expected both Barlow Condensed faces inlined'
     assert 'Barlow Project Authors' in html,'the SIL OFL notice must travel with the faces'
     DependencyCheck().feed(html)
+    check_preview(html)
     size=len(html.encode());budget=MOBILE_BUDGET if tier=='mobile' else DESKTOP_BUDGET
     print(f'{tier}: library {len(binary)} bytes, textures {texture_bytes} bytes, page {size} bytes')
     if tier=='mobile':
@@ -240,6 +250,8 @@ def build(tier):
     out=root/('dist/mobile.html' if tier=='mobile' else 'dist/index.html');out.parent.mkdir(exist_ok=True)
     out.write_text(html,encoding='utf-8',newline='\n')
     shutil.copyfile(root/'assets/icon/apple-touch-icon.png',out.parent/'apple-touch-icon.png')
+    # The link-preview picture, which Pages publishes beside the bundles (dist/social/).
+    shutil.copytree(root/'social',out.parent/'social',dirs_exist_ok=True)
     if tier=='desktop':
         with zipfile.ZipFile(root/'RANGE.zip','w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
             archive.write(out,'RANGE.html');archive.write(root/'vendor/THREE-LICENSE.txt','THREE-LICENSE.txt')
